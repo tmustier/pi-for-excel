@@ -82,7 +82,7 @@ Any other failure shows "Backup command failed: {message}" (from the Backups dia
 
 Copies are files in the Files workspace, visible in the [Files dialog](../files/the-files-workspace.md) under `manual-backups/full-workbook/v1/`, tagged with their workbook. Where the Files workspace keeps them depends on its storage: a folder on disk if the user connected one, otherwise the browser's private storage for the add-in. If neither is available, the workspace keeps files in memory only and the copies are lost when the taskpane closes.
 
-There is no size or count limit beyond what the storage allows; copies are never cleared automatically, including when the workbook is saved. They do not count against the 120 automatic backups.
+There is no size or count limit beyond what the storage allows; copies are never cleared automatically, including when the workbook is saved. They do not count against the automatic-history 512 MiB ceiling introduced by [#809](https://github.com/tmustier/pi-for-excel/pull/809).
 
 ## The confirmation for clear
 
@@ -122,7 +122,7 @@ After any interrupt the current workbook is unchanged: `/backup` never writes to
 
 **Persistence.** Copies persist in the Files workspace independently of sessions and of automatic backups. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
-**Workbook changes and recovery.** Manual backups never change the workbook. They complement automatic backups: use them before large or structural work, or before saving if the automatic backups will be needed later.
+**Workbook changes and recovery.** Manual backups never change the workbook. They complement automatic backups: use them before large or structural work that automatic history cannot fully capture. Saving does not clear automatic backups.
 
 **Other tabs and sessions.** All tabs share the same copies. Pi can read the files through its files tool like any workspace file, but has no tool to create or restore manual backups.
 

@@ -2,7 +2,7 @@
 
 ## Summary
 
-Backups let the user take back changes Pi made to the workbook. Before most [mutations](../glossary.md#the-workbook), Pi saves a snapshot of what it is about to change (what is captured, when none is taken, and when they are cleared is owned by [the workbook](../foundations/the-workbook.md#backups)). The user sees and uses them in three places: the **Backups** dialog, which lists the current workbook's backups with search, filter, sort, restore and delete; **`/revert`**, which restores the latest backup in one step; and Pi itself, which can list and restore backups with its `workbook_history` tool when asked. Restoring a backup is a *revert*: the cells, formats or structure it covers go back to how they were before that mutation, and a new backup of what the revert overwrote is saved so the revert can itself be reverted. The Backups dialog opens from the [utilities menu](../ui/the-utilities-menu.md) ("Backups"), from the Backups row in [Settings](../setup/settings.md), or with `/history`; `/history` works while Pi is busy, `/revert` does not. None of it needs a provider. The dialog carries the warning "Backups will be cleared when this workbook is saved in Excel.", which is the single most important thing to know about it.
+Backups let the user take back changes Pi made to the workbook. Before most [mutations](../glossary.md#the-workbook), Pi captures what it is about to change and saves the snapshot once the change succeeds. What is captured is owned by [the workbook](../foundations/the-workbook.md#backups). The user sees and uses backups in three places: the **Backups** dialog, which pages through the current workbook's history with search, filter, sort, restore and delete; **`/revert`**, which restores the latest backup; and Pi's `workbook_history` tool. A restore puts captured cells, formats or structure back and, when possible, saves a new backup of what it overwrote. The dialog opens from the [utilities menu](../ui/the-utilities-menu.md), [Settings](../setup/settings.md), or `/history`; `/history` works while Pi is busy, `/revert` does not. These user commands need no provider. Backups survive saves and reloads, but remain local, best-effort storage, not a durable copy of the workbook.
 
 ## The simple case
 
@@ -10,7 +10,7 @@ Pi has written a block of numbers into Sheet1!B2:D20 and the user does not like 
 
 For anything other than the latest change, the user opens the gear menu and chooses "Backups". The dialog lists the workbook's backups, newest first, each as "{action} · {address}" with how long ago it was taken and how many cells it covers, for example "Format cells · Sheet1!A1:F1", "3 changes · #5d2c0a1e9b4f". The user clicks "Restore" on the one they want; the toast says "Reverted Sheet1!A1:F1", and a new entry "Restore · Sheet1!A1:F1" with "Restored from #5d2c0a1e9b4f" appears at the top of the list.
 
-On Excel desktop, when the user saves the workbook, all of these disappear within a few seconds. On Excel on the web saving never clears them, but reopening or reloading the taskpane does (confirmed in Excel on the web; see [the workbook](../foundations/the-workbook.md#backups)).
+Saving, AutoSave and reloading the taskpane do not clear backups, on desktop or the web. Save As moves the open workbook's history to its new identity rather than wiping or copying it. The warning explains the remaining risk: "Backups stay on this computer through saves and Save As. The oldest are removed only above 512 MiB. Browser or Excel cache clearing and storage eviction can erase backups, chats, sign-ins and settings. Download a full backup for durable recovery."
 
 ## The interaction, event by event
 
@@ -21,7 +21,9 @@ stateDiagram-v2
     loading --> empty : no backups ("No backups yet")
     loading --> list : backups found
     list --> list : search, filter, sort (nothing saved)
-    list --> restoring : "Restore" (no confirm)
+    list --> confirming : "Restore" with later edits or destructive scope
+    list --> restoring : "Restore" without a warning
+    confirming --> restoring : restore confirmed
     restoring --> list : done ("Reverted …" toast, rollback backup added)
     restoring --> list : failed (error toast, nothing changed)
     list --> confirming : "Delete" or "Clear all"
@@ -34,19 +36,19 @@ stateDiagram-v2
 
 ### Opening the dialog
 
-The Backups dialog is a page of the Settings overlay, titled "Backups" with the subtitle "Snapshots saved before Pi modifies data". Because it is a page of Settings, Escape and the back arrow in its header return to the Settings page rather than closing, even when it was opened with `/history` or from the utilities menu; a second Escape, the close button ("Close settings") or a click on the dimmed backdrop closes the overlay (confirmed in Excel on the web). It lists backups for the workbook in this window only, at most the 40 most recent. While it loads, the status reads "Loading…" and controls are disabled.
+The Backups dialog is a page of the Settings overlay, titled "Backups" with the subtitle "Snapshots saved before Pi modifies data". Escape and the back arrow follow the shared [overlay](../glossary.md#the-taskpane) navigation. It lists backups for the workbook in this window only, 50 per page. While it loads, the status reads "Loading…" and controls are disabled.
 
 With no backups it shows only the warning and an empty state: "No backups yet" and "Pi will save snapshots here before making changes to your data." With backups it adds:
 
-- a search box ("Search backups…") that matches the backup id, the action name and the address, applied 0.2 seconds after typing stops;
+- a search box ("Search this page…") that matches the backup id, action name and address on the loaded page, applied 0.2 seconds after typing stops;
 - an action filter, "All actions (N)" followed by one option per kind present, each with its count: "Write", "Fill formula", "Python transform", "Format cells", "Conditional format", "Comments", "Charts", "Modify structure", "Restore";
 - a sort button that toggles between "↓ Newest" and "↑ Oldest";
 - a toolbar with "Download backup", "Refresh" and "Clear all", and a status such as "12 backups" or "3 of 12 shown" (or "No backups match the current filter." when nothing matches);
-- a collapsed "Retention settings" section: "Keep at most [120] backups" with "Save".
+- "Previous page" and "Next page", disabled when there is no page in that direction, and the hint "50 backups per page. Search and action filters apply to this page only." Sorting starts again at the first page in the chosen direction. There is no retention setting.
 
 Each entry shows its action and address, a relative time, "{N} change(s) · #{first 12 characters of the id}", "Restore" and "Delete", and, for a backup made by a revert, "Restored from #{id}".
 
-The list does not update by itself while open. Backups Pi makes while the dialog is open appear after "Refresh" or reopening.
+The list does not update by itself while open. Backups Pi makes while the dialog is open, or a Save As identity change, appear after "Refresh" or reopening. Running `/history` again while it is already open does not refresh it. Refresh and a successful restore/delete return to the first page.
 
 ### Ends at once
 
@@ -54,7 +56,7 @@ Nothing is changed when the user only searches, filters, sorts, refreshes, or cl
 
 ### Restoring
 
-"Restore" acts at once; there is no confirmation. The status reads "Restoring…" and every control in the dialog is disabled until it finishes. The restore waits for the [workbook lock](../foundations/the-workbook.md#the-workbook-lock) like any mutation (another tab's write finishes first), but never asks for [approval](confirm-mode-and-approvals.md), even in Confirm mode.
+The status reads "Restoring…" and every control in the dialog is disabled until the operation finishes. If the range contains edits made since Pi's change, "Overwrite later edits?" names the affected cells and offers "Keep my edits" or "Restore anyway". Declining changes nothing. Destructive structure restores also require the existing explicit confirmation and live safety checks. These safety dialogs are distinct from execution-mode [approval](confirm-mode-and-approvals.md): a restore the user chose does not ask a second general approval. It waits for the [workbook lock](../foundations/the-workbook.md#the-workbook-lock) like any mutation.
 
 What a restore puts back depends on what was captured:
 
@@ -70,15 +72,15 @@ What a restore puts back depends on what was captured:
 | Modify structure, delete | Re-inserts the rows, columns or sheet and their captured values and formulas (not their formatting). |
 | Modify structure, rename, hide, unhide, duplicate | Renames back, restores the visibility, or deletes the duplicate if it holds no data. |
 
-Restoring does not remove the backup; it can be restored again. It does add a new "Restore" backup of what it overwrote, so the revert can be reverted.
+Restoring normally leaves the original backup and adds a new "Restore" backup of what it overwrote. A chart-create restore cannot recreate the deleted chart; after success its consumed backup is removed so repeated `/revert` does not get stuck there. If the inverse backup cannot be saved after a restore, Pi warns honestly: the already-applied workbook change is not rolled back.
 
 ### Deleting and clearing
 
-"Delete" asks "Delete this backup?" ("Backup: {address} (#{id})", buttons "Cancel" and "Delete"), then removes that one backup ("Deleting…"). "Clear all" asks "Delete all backups for this workbook?" ("This will delete {count} backup(s).", buttons "Cancel" and "Delete all"), then removes every backup for this workbook ("Clearing…") and shows "Cleared {count} backup(s)". Deleting a backup does not change the workbook; it only removes the ability to revert that change.
+"Delete" asks "Delete this backup?" ("Backup: {address} (#{id})", buttons "Cancel" and "Delete"), then removes that one backup ("Deleting…"). "Clear all" asks "Delete all backups for this workbook?" with "This deletes every backup for this workbook, including backups on other pages. This cannot be undone." Confirming "Delete all" removes every page for this workbook, not only visible or filtered entries, and shows "Cleared {count} backup(s)". Other workbooks are untouched. Deleting a backup does not change the workbook; it removes the ability to revert that change.
 
 ### Finishes
 
-After a restore, the toast is "Reverted {address}", the list reloads with the new "Restore" entry at the top, and the dialog stays open. After `/revert`, the toast is the same and no dialog opens. Failures show a toast and leave the workbook as it was:
+After a restore, the toast is "Reverted {address}", the list reloads with the new "Restore" entry when available, and the dialog stays open. After `/revert`, the toast is the same and no history dialog opens. Refused or cancelled restores leave the workbook as it was; an error after Excel already applied a change is not a transactional rollback:
 
 - "Restore failed: {message}" in the dialog, "Revert failed: {message}" for `/revert`;
 - messages include "Snapshot belongs to a different workbook.", "Current workbook identity is unavailable; cannot safely restore this snapshot.", "Structure checkpoint restore is blocked: target rows contain data and cannot be deleted safely.", "Format checkpoint range shape changed and cannot be restored safely." and "Sheet referenced by structure checkpoint no longer exists."
@@ -91,17 +93,21 @@ A failed delete shows "Delete failed: {message}", or "Backup not found" if it wa
 
 ## Pi's `workbook_history` tool
 
-The user can ask Pi to list or restore backups ("undo your last two edits"). Pi's tool cards read "List backups", "Restore backup {id}" or "Restore latest backup", "Delete backup {id}", "Clear backups". A list shows up to 10 backups by default (50 at most) as a table of id, time, tool, range and changed count. A restore says "✅ Restored backup `{id}` at **{address}**.", "Changed item(s): N." and "Rollback backup created: `{id}`."
+The user can ask Pi to list or restore backups ("undo your last two edits"). Pi's tool cards read "List backups", "Restore backup {id}" or "Restore latest backup", "Delete backup {id}", "Clear backups". A list shows 10 backups by default (50 at most) as a table of id, time, tool, range and changed count, plus a cursor when more remain. Pi can request successive pages without loading every backup. Restore reads only the chosen backup; later edits require explicit user permission through `overwrite_later_edits`, and destructive restores require `allow_destructive`. A successful restore reports its rollback backup when one was saved.
 
-Pi's restore is a mutation: in Confirm mode it asks for approval, and it takes the workbook lock. Pi's delete and clear are not treated as mutations and never ask, even in Confirm mode (see [Open questions](#open-questions-and-verification)).
+Pi's restore is a mutation: in Confirm mode it asks for approval, and it takes the workbook lock. Deleting or clearing recovery backups always asks for consent, in either mode, because it removes the user's safety net.
 
 ## Retention
 
-The "Keep at most" field accepts 5 to 120. Outside that range: "Retention limit must be between 5 and 120". Saving shows "Retention set to {count} backups", or "Failed to save retention: {message}". At this commit the value is stored but not applied: Pi keeps the 120 most recent backups across all workbooks regardless. See [the workbook](../foundations/the-workbook.md#backups).
+There is no count or age limit and no "Keep at most" setting. Useful backups stay until the user deletes them or automatic history across all workbooks on this origin exceeds **512 MiB**. Then the oldest backups go first, regardless of workbook. There is no newest-backup floor: heavy use of one workbook can eventually remove another's entire history. A single backup larger than the ceiling is refused with a "Too large to back up" reason before any existing history is evicted.
+
+> Technical note: [#809](https://github.com/tmustier/pi-for-excel/pull/809) stores each backup as a gzip Blob with separate indexed metadata; the fixed budget counts compressed payload plus metadata bytes, not physical database/index overhead. Writes, lists and eviction never load unrelated payloads. Listing uses exclusive time/id cursors, not growing offsets. The ceiling is a safety bound, not a reservation against host quota or a guarantee against whole-origin eviction.
+
+Existing history is migrated once without changing backup IDs or contents. A failed migration leaves the original list intact and shows "Backups could not be upgraded. Existing backups are unchanged; new backups may be unavailable until storage recovers." Other Pi data can still open. Old-format data remains readable while migration is deferred; a new backup may not be available until the copy can commit. See [storage failures](../cross-cutting/persistence-and-restore.md#storage-failures-quota-and-clearing) for the forward-only database upgrade and whole-origin loss risks.
 
 ## Unsaved workbooks
 
-On desktop Excel, a workbook that has never been saved gets backups like any other; Pi files them under a token stored in the document. They are cleared when the workbook is saved for the first time. Where the host cannot store that token, Pi makes no backups for an unsaved workbook and the tool cards say "no backup". See [the workbook](../foundations/the-workbook.md#unsaved-and-new-workbooks).
+On desktop Excel and anonymous-link Excel on the web, a workbook without a path identity can get backups under a token stored in the document. Reading history does not create that token. On first save its backups move to the saved identity; they are not cleared. Later Save As, rename or move observed while the pane follows that document move the history again, preserving any backups already under the destination. History is not copied back to the original file. A file moved while no pane observes both identities cannot be matched safely; its old history remains under the old identity and counts toward the ceiling. Where the host cannot store the token, Pi makes no backup. See [the workbook](../foundations/the-workbook.md#unsaved-and-new-workbooks).
 
 ## Modifiers
 
@@ -109,12 +115,12 @@ On desktop Excel, a workbook that has never been saved gets backups like any oth
 | --- | --- | --- |
 | Model and provider | No effect. Backups and revert need no provider. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | User restores never ask. Pi's restore asks in Confirm mode. | No effect on a restore in progress. |
+| Execution mode | User restores do not ask a general approval, but later-edits/destructive warnings still apply. Pi's restore asks in Confirm mode. | No effect on a restore in progress. |
 | Files in the workspace, or an overlay open | No effect from files. The dialog is itself an overlay (a page of Settings). | Restoring from the dialog while Pi is writing waits for the lock. |
 | Tab state (new, restored, another tab busy) | Backups belong to the workbook, not to a tab: every tab sees the same list. `/revert` is refused only when the active tab is busy; the dialog works while busy. | A restore started while another tab writes waits for that write to finish. |
-| Host (desktop or web) | On Excel on the web, saving never clears backups but every taskpane load does, and a workbook without a location (never saved on desktop, or opened through an anonymous link on the web) loses its first backup (confirmed; see [the workbook](../foundations/the-workbook.md#backups)). | No effect. |
+| Host (desktop or web) | Saves, AutoSave and reloads retain history on both. Anonymous-link web workbooks may use a document token rather than a path identity. Storage quota and eviction vary by host. | No save-triggered clearing. |
 
-Nothing changed during a restore affects it; it applies the backup it was asked for.
+Changing the model, provider or thinking level does not replace the selected backup. Live workbook safety checks still apply.
 
 ## Cancel and interrupt
 
@@ -127,29 +133,29 @@ Nothing changed during a restore affects it; it applies the backup it was asked 
 | Model or thinking level changes | No effect. | No effect. |
 | The provider fails | No effect. | No effect. |
 | The taskpane goes away | Nothing happens. | A restore already sent to Excel may complete without its rollback backup being stored. |
-| The workbook changes underneath | The list is a snapshot; "Refresh" updates it. On desktop, saving clears all backups within about 4 seconds even with the dialog open; entries then fail with "Snapshot not found." On the web, saving does not clear them. | A restore writes the captured state over the user's newer edits in the same range without warning (confirmed: a value the user typed after Pi's write was erased by `/revert`). |
+| The workbook changes underneath | The list is a loaded page; "Refresh" updates it. Saving does not clear history. Another pane can delete or evict a listed backup, which then fails safely with "Snapshot not found." | Range restores preview later edits and ask before overwriting them; live structure guards still reject unsafe deletes. |
 | Focus moves to the grid or another window | The dialog stays open. | The restore continues. |
 | The context window fills | No effect. | No effect. |
 
-After any interrupt the user is back in the dialog or the composer; a restore either completed (with its toast) or changed nothing.
+After an interrupt the user returns to the dialog or composer. Refusal or cancellation before applying changes leaves the workbook alone; a change already sent to Excel may complete even if its rollback backup cannot be saved.
 
 ## Interactions with other systems
 
-**Persistence.** Backups live in the add-in's browser storage and survive a taskpane reload only while the workbook has unsaved changes; reloading on a saved workbook clears them. Excel on the web always reports the workbook as saved, so there every reload clears them (confirmed: 16 backups gone after one reload). See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** Backups survive saves and reloads in local browser storage. Save As moves history, not payload files; multiple panes share atomic storage operations rather than overwriting stale lists. Cache clearing or origin eviction can also erase chats, sign-ins and settings. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
-**Workbook changes and recovery.** A restore is itself a change to the workbook, made through the workbook lock, recorded in the audit log, and backed up. Excel's Undo does not undo it.
+**Workbook changes and recovery.** A restore is itself a change to the workbook, made through the workbook lock, recorded in the audit log, and backed up when possible. Pi's recovery does not depend on Excel's Undo stack.
 
 **Other tabs and sessions.** One list per workbook, shared by all tabs and sessions. Restoring a change made in another tab works the same way. Pi in other tabs is not told that a revert happened, beyond what auto-context reports as changed cells at the next send.
 
-**Execution mode and approvals.** User restores never ask; Pi's do in Confirm mode.
+**Execution mode and approvals.** User restores do not ask a general approval; their safety warnings still apply. Pi's restores ask in Confirm mode, and deleting recovery history always asks.
 
 **Models and providers.** None.
 
 **Offline and provider errors.** None.
 
-**Notifications.** Toasts for every outcome. The warning callout in the dialog is the only notice that saving clears backups; nothing tells the user when it happens.
+**Notifications.** Toasts report user operations and backup-save failures. The callout explains the ceiling, local storage loss and downloading a durable full backup. A committed change with no saved backup is explicitly reported as unavailable for reversion.
 
-**Settings and preferences.** "Keep at most" (stored, not applied). The "Download backup" button belongs to [manual backups](manual-backups.md).
+**Settings and preferences.** No retention preference. The "Download backup" button belongs to [manual backups](manual-backups.md), which are outside the automatic-history ceiling.
 
 **Host differences.** See [Modifiers](#modifiers).
 
@@ -162,23 +168,17 @@ After any interrupt the user is back in the dialog or the composer; a restore ei
 - A backup with "0 changes" (Pi wrote the same values) can still be restored; it changes nothing visible and adds a "Restore" entry.
 - Restoring an old write after the user inserted rows above it writes the old values at the old address, which now holds different data.
 - Restoring "insert rows" after the user typed into the inserted rows is refused rather than deleting their data.
-- The "Clear all" confirmation counts only the backups the dialog loaded (at most 40); it deletes every backup for the workbook (up to 120).
+- Search and action counts cover the loaded page, not the entire archive. Clear all is deliberately broader than either the filter or page.
 - The "Download backup" button is in the toolbar, which is hidden while the list is empty, so a full copy cannot be taken from the dialog until at least one automatic backup exists.
 - A backup's address may name a sheet that has since been renamed; restoring then fails.
-- Reverting a chart-create backup deletes the chart but stores no rollback backup, so the chart cannot be brought back, and the chart-create entry stays the latest. Every further `/revert` restores it again, says "Reverted Sheet1!{chart}" and changes nothing, so `/revert` cannot reach older backups until that entry is deleted (confirmed in Excel on the web).
+- Reverting a chart-create backup cannot bring the chart back. Its consumed entry is removed after success so the next `/revert` can reach older changes.
 
 ## Open questions and verification
 
-- Checked by hand in Excel on the web (orb session, anonymous-link workbook, `ec453df`), 26 October 2026: opening and closing the dialog, the empty state, entries, search, filter, sort, Restore, Delete, Clear all, retention, `/revert` (latest, twice, nothing left, while busy), Pi's list, restore and clear, and the effect of a taskpane reload. See [the workbook checklist](../verification/workbook.md#workbookbackups-and-revertmd). Desktop Excel, "Clear all" with more than 40 backups, and restores across tabs were not run.
-- **Confirmed bug (web).** Saving never clears backups on Excel on the web, but every taskpane load does, because the host always reports the workbook as saved (`src/workbook/save-boundary-monitor.ts:74`). The dialog's warning is wrong there. REVERT-24; see [the workbook](../foundations/the-workbook.md#open-questions-and-verification).
-- **Confirmed bug.** "Keep at most" is saved (`src/workbook/recovery/log-store.ts:64`) and never applied (`src/workbook/recovery-log.ts:420` caps at 120 across all workbooks): with 5 saved, the list held 10. REVERT-21.
-- **Confirmed bug.** "Clear all" builds its message from the loaded list (`src/commands/builtins/settings-pages/backups-page.ts:232`, loaded with a limit of 40 at `src/taskpane/init.ts:1548`) but clears every backup for the workbook: with 46 backups the dialog said "40 backups", the confirmation "This will delete 40 backups.", and the toast "Cleared 46 backups". REVERT-22.
-- **New, confirmed bug.** A chart-create restore returns no state (`src/workbook/recovery/chart-state.ts:291-319`), so `log-restore.ts:236` stores no rollback and `/revert` keeps hitting the same chart-create entry, reporting "Reverted" with no change. 42 consecutive `/revert`s changed nothing. REVERT-26.
-- **Confirmed.** A dialog restore started while another tab's write held the lock showed "Restoring…" for about 17 s and ran after the write (REVERT-25); the open list did not show a backup made meanwhile until "Refresh" (REVERT-23).
-- `/revert` is not busy-allowed but `/history` is, and restoring from the dialog while Pi is writing is allowed. The two paths to the same action disagree; a product call.
-- **Confirmed.** `workbook_history` delete and clear are reads to the policy (`src/tools/execution-policy.ts:73`), so in Confirm mode Pi cleared every backup without asking. Probably worth treating as a bug. APPROVE-17.
-- **Confirmed.** Restores of range values overwrite whatever is in the range now, including the user's later edits, without a conflict check (`src/workbook/recovery/log-restore.ts`, range path). Intended per design; worth stating in the UI. REVERT-19.
-- On Excel on the web, Excel's own Undo also takes back restores; see [the workbook](../foundations/the-workbook.md#excels-undo).
-- Relative times seen: "just now", "1m ago", "9m ago"; longer spans not checked.
+- [#809](https://github.com/tmustier/pi-for-excel/pull/809): real Excel-web model write, independent Office readback, `/revert`, Backups and reload passed. A later edit of 909 triggered "Overwrite later edits?"; "Keep my edits" preserved it. Native Chromium tests covered two-pane migration and concurrent writes, 71 entries paged 50 + 21, and Clear all across pages. Inspected 420-pixel renders covered first/last/empty pages and the all-pages confirmation.
+- Real Excel for Mac, isolated origin: four pre-upgrade backups migrated intact; new writes, inverse restore, restore of a migrated snapshot and relaunch passed. Save As into a new and existing destination moved metadata without changing Blob files. Delete and Clear all freed files and reduced accounting exactly. The normal development origin was untouched.
+- Failed migration rollback, legacy read fallback, eviction order, no protected floor and oversized refusal were tested through public storage interfaces, not by filling a real Mac disk. Real full-disk behavior, peak large-payload heap, Windows WebView2 quota and long-term eviction remain unmeasured. Rename/move outside Save As were not exercised on Mac.
+- Historical [workbook checklist](../verification/workbook.md#workbookbackups-and-revertmd) observations at `ec453df` predate the merged save/restore fixes and #809; they are not the current storage contract. General lock, chart and approval guards here come from main's merged fixes, not new behavior in #809.
+- The open panel still needs Refresh/reopen after changes outside it. `/revert` remains refused while the active tab is busy; `/history` and user-initiated dialog restores remain available.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel main [1f51cf8](https://github.com/tmustier/pi-for-excel/commit/1f51cf8f) plus [#809](https://github.com/tmustier/pi-for-excel/pull/809): implementation [5c61b21](https://github.com/tmustier/pi-for-excel/commit/5c61b21d), final metadata-fallback/test/doc follow-up [9f4f60d](https://github.com/tmustier/pi-for-excel/commit/9f4f60d7). Mac acceptance used the initial implementation; final fallback validation used deterministic tests.

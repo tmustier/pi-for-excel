@@ -10,7 +10,7 @@ The user asks "Put a total under the Revenue column." Pi reads the sheet first: 
 
 Pi did not ask before writing, because the execution mode is Auto by default. If the user had switched the status-bar control to "Confirm", a dialog "Allow workbook mutation in Safe mode?" would have appeared before the write and the turn would have waited for the answer (confirmed in Excel on the web).
 
-If the total is wrong, the user types `/revert` or opens Backups from the [utilities menu](../ui/the-utilities-menu.md) and clicks "Restore": D21 goes back to what it held, and a toast says "Reverted Sheet1!D21". On Excel desktop, saving the workbook clears its backups, because they are meant to cover the stretch between saves. On Excel on the web saving never clears them; reopening or reloading the taskpane does (see [Backups](#backups)).
+If the total is wrong, the user types `/revert` or opens Backups from the [utilities menu](../ui/the-utilities-menu.md) and clicks "Restore": D21 goes back to what it held, after confirming any later edits that would be overwritten. Saving, AutoSave and taskpane reload do not clear backups on desktop or the web. See [Backups](#backups).
 
 ## What Pi can read and change
 
@@ -105,10 +105,10 @@ A backup is a snapshot of what a mutation is about to change, saved by Pi so the
 
 - **What is captured.** Depends on the tool (see the table above): for cell writes, the values and formulas of the target range; for formatting, the format properties Pi can set; for conditional formats, the range's rules; for comments, the thread; for charts, the chart's properties; for structure, enough to undo the change, including deleted values and formulas. A backup never captures cell formatting when the mutation was a write, so reverting a write does not undo formatting that Excel's fill copied.
 - **When it is not taken.** No backup for `view_settings`, chart deletes, direct Office.js, or a mutation larger than 20,000 cells. No backup when the workbook has no identity and the host cannot store a document token (see [Unsaved and new workbooks](#unsaved-and-new-workbooks)). The tool card says " — no backup" and the result tells the model "ℹ️ Backup not created …".
-- **Where it lives.** In the add-in's browser storage on this computer, never in the workbook file. One list holds the backups of every workbook, each tagged with its workbook's identity; the user only ever sees the current workbook's.
-- **Retention.** The list keeps the 120 most recent backups across all workbooks; older ones are dropped. The Backups dialog shows at most the 40 most recent for the current workbook. The "Keep at most" setting in the Backups dialog is saved but, at this commit, does not change the cap (see [Open questions](#open-questions-and-verification)).
-- **Cleared on save.** Every 4 seconds Pi asks Excel whether the workbook has unsaved changes. When it sees the workbook go from unsaved to saved, it deletes every backup for that workbook. It also deletes them the first time it looks at a workbook identity, if the workbook reports itself saved at that moment; in practice, opening or reloading the taskpane on a saved workbook clears its backups. Hence the warning in the Backups dialog: "Backups will be cleared when this workbook is saved in Excel." If the host cannot report the saved state, backups are never cleared this way.
-- **Excel on the web.** Excel on the web reports the workbook as saved at every moment, even right after Pi or the user changes a cell, so the unsaved-to-saved transition never happens. The result is the opposite of the warning: saving (including Ctrl/Cmd+S and autosave) never clears backups, but every time the taskpane opens or reloads, all of the workbook's backups are cleared within about 4 seconds. A workbook with no path identity (see [Unsaved and new workbooks](#unsaved-and-new-workbooks)) also loses its very first backup: that backup creates the document token, the next check sees a new identity "already saved", and clears it. Backups taken after that survive until the next taskpane load. (Confirmed in Excel on the web: 16 backups cleared by a reload; the first write's backup gone within seconds; later backups still listed after 10 seconds and after Ctrl+S.)
+- **Where it lives.** In local browser storage, never in the workbook file. Each backup is independent; listing, writing and deleting one do not load other backups' contents. The dialog and Pi's history tool page through lightweight summaries, showing only the current workbook. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+- **Retention.** There is no count/age limit or "Keep at most" setting. The shared automatic-history ceiling is 512 MiB across all workbooks; only crossing it removes oldest backups, without a per-workbook floor. A single oversized backup is refused before any eviction. History is shown in 50-row pages; search/action counts apply only to the loaded page. See [backups and revert](../workbook/backups-and-revert.md#retention).
+- **Saves and reloads.** Neither clears history. First save moves token-scoped history to the saved identity. Save As, rename and move observed while following the same open document move history without copying or wiping it; any existing destination history remains. Changes made while no pane observes both paths cannot be inferred safely.
+- **Loss and failure.** Cache clearing or whole-origin storage eviction can erase backups together with chats, sign-ins and settings. The ceiling does not reserve disk space. A successful workbook change whose backup cannot be saved stays applied and is explicitly reported as not revertible from backups. Downloading a full workbook is the durable safety net.
 
 ## The execution mode
 
@@ -118,7 +118,7 @@ The execution mode decides whether Pi applies mutations immediately (**Auto**, t
 
 Pi recognizes a workbook by an identity derived from the file's location (a hash of its path or URL), never by storing the path itself. The identity links sessions, the tab layout, workbook rules, backups and manual backups to the workbook. Consequences the user can see:
 
-- Renaming, moving or "Save As" gives the workbook a new identity. Backups, manual backups and workbook rules stay with the old identity and are no longer shown; sessions linked to the old identity are no longer preferred on restore (see [sessions and tabs](sessions-and-tabs.md)).
+- Renaming, moving or "Save As" gives the workbook a new identity. While Pi follows the same open document, automatic backups move to it without copying payloads. Offline location changes cannot be matched safely. Sessions/layout, rules and manual backups have their own contracts: see [sessions and tabs](sessions-and-tabs.md), [rules](../guidance/rules.md) and [manual backups](../workbook/manual-backups.md).
 - Two copies of the same file in different folders are different workbooks.
 - A workbook with no location (never saved) has no identity; see below.
 
@@ -126,7 +126,7 @@ Pi recognizes a workbook by an identity derived from the file's location (a hash
 
 A workbook that has never been saved ("Book1") has no path-derived identity. On Excel on the web, a workbook opened through an "anyone with the link" sharing link without signing in has none either: Excel reports no location for it, so it behaves exactly like a never-saved workbook (confirmed in Excel on the web).
 
-- **Automatic backups** still work on Excel desktop and Excel on the web: the first time Pi needs one, it stores a random token inside the document's add-in settings and files the backup under that token. On Excel on the web that first backup is then cleared (see [Backups](#backups)). Reading the list never creates the token. When the workbook is saved for the first time it gets a real identity, and the token's backups are cleared at that moment, just as any save clears backups.
+- **Automatic backups** work on Excel desktop and Excel on the web when the host can store a random document token. Reading history never creates it. First save moves existing token-scoped backups to the saved identity rather than clearing them. Reloading also preserves them. If a token cannot be stored safely, the change may proceed without a backup and is reported that way.
 - **Manual backups** refuse: "Current workbook identity is unavailable; cannot create or restore manual full-workbook backups safely." (confirmed in Excel on the web). See [manual backups](../workbook/manual-backups.md).
 - **Workbook rules** cannot be set ("Can't identify this workbook right now — try saving the file first."). See [rules](../guidance/rules.md).
 
@@ -143,7 +143,7 @@ Pi's changes are made through Excel's add-in API, not through the grid. On Excel
 | Execution mode | Auto: mutations run as called. Confirm: each mutation waits for an approval. | Applies from the next mutation; an approval dialog already open is not affected. |
 | Files in the workspace, or an overlay open | Files are not part of the workbook. An open overlay does not pause tools, but an approval dialog replaces any other approval dialog. | No effect on tools already running. |
 | Tab state (new, restored, another tab busy) | No difference between new and restored tabs. Another tab's mutation makes this tab's mutation wait ("Locking…"). | Reads are never delayed by another tab. |
-| Host (desktop or web) | Excel on the web always reports the workbook as saved: saving never clears backups there, but each taskpane load does, and a workbook without a location loses its first backup (see [Backups](#backups)). Workbooks without a location occur on desktop (never saved) and on the web (opened through an anonymous link). Excel's Undo takes back Pi's changes on the web. | No effect. |
+| Host (desktop or web) | Saves and reloads retain backups on both. Workbooks without a path occur on desktop (never saved) and the web (anonymous link); backups can use a document token. Excel's Undo takes back Pi's changes on the web. | No save-triggered backup clearing. |
 
 A modifier changed while a tool runs takes effect at the next tool call, never in the middle of one.
 
@@ -158,11 +158,11 @@ A modifier changed while a tool runs takes effect at the next tool call, never i
 | Model or thinking level changes | Not applicable. | Model change refused while busy; thinking level does not affect tools. |
 | The provider fails | Not applicable. | Tools already running finish; their changes stay. |
 | The taskpane goes away | Not applicable. | A mutation already sent to Excel may complete without its backup being stored. Waiting mutations are lost. The lock disappears with the taskpane. |
-| The workbook changes underneath | Auto-context tells Pi about the user's edits at send time. | Pi's tools see the grid as it is when they run. Addresses without a sheet name follow the sheet the user has active. A revert later writes back the captured state over the user's newer edits in that range. Saving clears all backups. |
+| The workbook changes underneath | Auto-context tells Pi about the user's edits at send time. | Pi's tools see the grid as it is when they run. Addresses without a sheet name follow the active sheet. A range restore previews later edits and asks before overwriting them; saves do not clear backups. |
 | Focus moves to the grid or another window | Not applicable. | Tools keep running. If the user is editing a cell, Excel on the web rejects Pi's calls at once, reads included: the result says "Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again." and Pi usually asks the user to finish the edit (confirmed in Excel on the web). |
 | The context window fills | Not applicable. | No effect on the workbook; large tool output is cut before it reaches the conversation. |
 
-Whatever interrupts a turn, workbook changes already made stay made and can be reverted from their backups until the next save.
+Whatever interrupts a turn, workbook changes already made stay made. Any available backup remains usable until deletion, ceiling-driven eviction or storage loss; a save does not expire it.
 
 ## Interactions with other systems
 
@@ -178,11 +178,11 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 
 **Offline and provider errors.** Tools talk only to Excel, so they keep working while the provider is unreachable; the turn that called them may fail afterwards.
 
-**Notifications.** Tool cards, "Locking…" on tabs, the "lock" badge in the status bar, approval dialogs, and the "Reverted {address}" toast. There is no notification when backups are cleared, on save or on taskpane load.
+**Notifications.** Tool cards, "Locking…" on tabs, the "lock" badge in the status bar, approval dialogs, and the "Reverted {address}" toast. Backup persistence failures are reported honestly; saves and taskpane loads no longer clear backups.
 
-**Settings and preferences.** The "Auto mode" switch in Settings, and the retention field in the Backups dialog.
+**Settings and preferences.** The "Auto mode" switch in Settings. Automatic-backup retention has no setting.
 
-**Host differences.** Desktop Excel on macOS and Windows and Excel on the web run the same tools. Differences come from the host: Excel on the web always reports "saved", so backups are cleared on taskpane load instead of on save; anonymous-link workbooks on the web have no location; Excel on the web puts Pi's changes on its Undo stack; and it rejects calls during cell editing. See [host differences](../cross-cutting/host-differences.md).
+**Host differences.** Desktop Excel on macOS and Windows and Excel on the web run the same tools. Anonymous-link web workbooks may have no location; Excel on the web puts Pi's changes on its Undo stack and rejects calls during cell editing. Backup retention no longer depends on the host's saved-state signal. See [host differences](../cross-cutting/host-differences.md).
 
 **Language.** Tool card headers are mostly English in every UI language (only "Overview" is translated); tool results are English because they are written for the model.
 
@@ -193,10 +193,12 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 - A tab whose own model response asks for two mutations at once shows "Locking…" on itself while the first runs, and its close button becomes enabled during that time (confirmed in Excel on the web: one tab running six parallel writes showed "Locking…" with the status bar showing "lock", and the close button was enabled at moments while the lock was held).
 - A no-op write (the same values written again) still takes a backup, with "0 changes".
 - Reading a very hidden sheet works if Pi names it; search skips hidden sheets unless Pi names the sheet.
-- Backups for workbook A count against the same 120-entry cap as workbook B; heavy work in one workbook can push out another workbook's backups.
-- After a save on desktop, or after a taskpane reload on the web, `/revert` says "No backups for this workbook yet" even though Pi changed the workbook earlier in the session (confirmed on the web after a reload).
+- Backups for workbook A count against the same 512 MiB ceiling as workbook B; enough activity in one workbook can evict another's entire history.
+- Saving and reloading preserve `/revert` history; manual deletion, automatic eviction or storage loss may leave no backup.
 
 ## Open questions and verification
+
+Backup behavior above is updated for main's merged fixes and [#809](https://github.com/tmustier/pi-for-excel/pull/809); current storage acceptance and remaining unknowns are recorded in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). The older observations below are historical, not a claim that save-clearing, stale-list overwrites or ignored retention still occur: main #794 fixed save/concurrent-list handling, and #809 replaces count retention with the indexed byte ceiling.
 
 - Checked by hand in Excel on the web (orb session, anonymous-link workbook, `ec453df`), 26 October 2026; see [the workbook checklist](../verification/workbook.md). Desktop Excel has not been checked.
 - **Confirmed bug (web).** Excel on the web reports `workbook.isDirty` as `false` at all times, even right after a write, so `src/workbook/save-boundary-monitor.ts:74` (`firstObservationIsAlreadySaved`) clears every backup on the first poll after each taskpane load, and, for a workbook without a location, again on the first poll after the first backup creates the document token. Saving never clears backups on the web. The warning "Backups will be cleared when this workbook is saved in Excel." is wrong there. WB-12 to WB-15.
