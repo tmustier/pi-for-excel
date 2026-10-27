@@ -207,14 +207,13 @@ async function requireMutationApprovalIfNeeded(args: {
 }
 
 /**
- * Mutations started earlier in this tool set that have not finished. A model can
- * issue a write and a verifying read in one batch; the batch's calls start in
- * order but run concurrently, so without this a read can see the value from
- * before the write. Reads wait for mutations already started; mutations do not
- * wait for reads. Registration happens before the first `await` in `execute`,
- * so the order of the batch decides who waits.
+ * A tool that checks Stop itself and returns a precise result (what it wrote,
+ * its backup) once stopped. Its own per-batch `excelRun` timeout bounds how
+ * long that takes, so the wrapper does not cut it short after Stop.
  */
-type PendingMutations = Set<Promise<void>>;
+export interface StopReporting {
+  reportsStop?: true;
+}
 
 function wrapTool<TParameters extends TSchema, TDetails>(
   tool: AgentTool<TParameters, TDetails> & StopReporting,
@@ -259,7 +258,8 @@ function wrapTool<TParameters extends TSchema, TDetails>(
             console.warn("[pi] Workbook write observer failed:", getErrorMessage(error));
           }
           try {
-            return await settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "write");
+            const work = tool.execute(toolCallId, params, signal, onUpdate);
+            return await (tool.reportsStop ? work : settleOnStop(work, signal, "write"));
           } finally {
             window.settledAt = Date.now();
           }
