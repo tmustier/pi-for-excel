@@ -5,6 +5,7 @@
 import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
+import { getActiveProviders } from "../models/active-providers.js";
 import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
@@ -51,6 +52,30 @@ function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
   }
 }
 
+/**
+ * Providers that serve the same models under different billing. When more
+ * than one of a family is connected, the model name alone does not say which
+ * account a tab bills, so the control adds this tag (P-89). Brand names, not
+ * translated.
+ */
+const SHARED_MODEL_PROVIDER_TAGS: Record<string, { family: string; tag: string }> = {
+  openai: { family: "openai", tag: "API" },
+  "openai-codex": { family: "openai", tag: "ChatGPT" },
+  google: { family: "google", tag: "Gemini API" },
+  "google-gemini-cli": { family: "google", tag: "Code Assist" },
+  "google-antigravity": { family: "google", tag: "Antigravity" },
+};
+
+function ambiguousProviderTag(provider: string): string | null {
+  const entry = SHARED_MODEL_PROVIDER_TAGS[provider];
+  const active = getActiveProviders();
+  if (!entry || !active) return null;
+  for (const other of active) {
+    if (other !== provider && SHARED_MODEL_PROVIDER_TAGS[other]?.family === entry.family) return entry.tag;
+  }
+  return null;
+}
+
 function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
@@ -73,7 +98,9 @@ function renderStatusBar(
 
   // Model alias
   const model = state.model;
-  const modelAlias = model ? (model.name || model.id) : t("status.select_model");
+  const providerTag = model ? ambiguousProviderTag(model.provider) : null;
+  const modelName = model ? (model.name || model.id) : t("status.select_model");
+  const modelAlias = providerTag ? `${modelName} · ${providerTag}` : modelName;
   const modelAliasEscaped = escapeHtml(modelAlias);
 
   // Context usage
