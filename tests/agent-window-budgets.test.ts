@@ -47,7 +47,7 @@ void test("agent requests apply full, scaled, and floor budgets for each model w
     const models = createModels();
     models.setProvider(faux.provider);
     const requests: Context[] = [];
-    const messages = Array.from({ length: 7 }, (_, index) => toolResult(index + 1, "z".repeat(1_500)));
+    const messages = Array.from({ length: 12 }, (_, index) => toolResult(index + 1, "z".repeat(1_500)));
     const agent = new Agent({
       initialState: { model, messages, tools: [] },
       convertToLlm: createConvertToLlm({ getContextWindow: () => model.contextWindow }),

@@ -103,10 +103,12 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
 }
 
 /**
- * After Stop, how long a tool call may take to finish by itself (and report
- * precisely what it did) before the wrapper gives up on it.
+ * After Stop, how long a tool call may take to finish by itself before the
+ * wrapper gives up on it. A write that finishes reports precisely what it
+ * wrote (and its backup), so it gets long enough for a slow Excel on the web
+ * batch; a hung Excel still ends the turn after this.
  */
-export const STOP_GRACE_MS = 500;
+export const STOP_GRACE_MS: Readonly<Record<"read" | "write", number>> = { read: 500, write: 10_000 };
 
 /**
  * Settle a tool call promptly after Stop, even when Excel never answers, so
@@ -128,7 +130,7 @@ function settleOnStop<T>(
         reject(mode === "write"
           ? Object.assign(new Error("Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it."), { outcomeUnknown: true })
           : new Error("Stopped by the user before Excel answered."));
-      }, STOP_GRACE_MS);
+      }, STOP_GRACE_MS[mode]);
     };
     if (signal.aborted) onAbort();
     else signal.addEventListener("abort", onAbort, { once: true });

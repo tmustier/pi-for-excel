@@ -77,6 +77,7 @@ void test("model request compacts an older large tool result but preserves recen
     older,
     toolResult("2", large),
     toolResult("3", large),
+    toolResult("4", large),
   ]);
 
   assert.match(textOf(requestToolResult(request, "1")), /^\[Compacted tool result\] read_range/u);
@@ -98,6 +99,7 @@ void test("model request keeps an older small tool result intact", async () => {
     toolResult("1", "short"),
     toolResult("2", "recent"),
     toolResult("3", "recent"),
+    toolResult("4", "recent"),
   ]);
 
   assert.equal(textOf(requestToolResult(request, "1")), "short");
@@ -108,6 +110,7 @@ void test("model request compacts an older legacy string tool result", async () 
     toolResult("1", "legacy".repeat(350), { legacy: true }),
     toolResult("2", "recent"),
     toolResult("3", "recent"),
+    toolResult("4", "recent"),
   ]);
 
   assert.match(textOf(requestToolResult(request, "1")), /^\[Compacted tool result\]/u);
@@ -118,9 +121,30 @@ void test("model request replaces an older image tool result with a text-only su
     toolResult("1", "ok", { image: true }),
     toolResult("2", "recent"),
     toolResult("3", "recent"),
+    toolResult("4", "recent"),
   ]);
 
   const older = requestToolResult(request, "1");
   assert.equal(older.content.length, 1);
   assert.match(textOf(older), /1 image block/u);
+});
+
+void test("a growing tool loop rewrites earlier tool results only once every few results, keeping the prompt cache", () => {
+  // 200k window: the 6 newest results are always whole.
+  const convert = createConvertToLlm({ getContextWindow: () => 200_000 });
+  const history: AgentMessage[] = [];
+  let previous: ReturnType<typeof convert> = [];
+  let rewrites = 0;
+  for (let n = 1; n <= 24; n += 1) {
+    history.push(toolResult(String(n), `${n}:`.padEnd(2_000, "x")));
+    const request = convert(history);
+    const whole = request.filter((message) => message.role === "toolResult" && textOf(message).length === 2_000);
+    assert.ok(whole.length >= Math.min(n, 6), `request ${n}: ${whole.length} whole`);
+    assert.ok(whole.some((message) => message.role === "toolResult" && message.toolCallId === String(n)), "newest result is whole");
+    // Each request's messages are the previous request's plus new ones, except at a step.
+    if (JSON.stringify(request.slice(0, previous.length)) !== JSON.stringify(previous)) rewrites += 1;
+    previous = request;
+  }
+  // Results 12, 18 and 24 each move the boundary by 6; moving it every time would rewrite 18 times.
+  assert.equal(rewrites, 3);
 });

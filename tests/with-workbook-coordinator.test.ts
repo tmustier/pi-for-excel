@@ -413,7 +413,8 @@ void test("write failures do not emit mutation events", async () => {
 });
 
 
-void test("Stop settles a write Excel never answers, so the workbook lock is released", { timeout: 5_000 }, async () => {
+void test("Stop settles a write Excel never answers, so the workbook lock is released", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const coordinator = new FakeCoordinator();
   const windows: Array<{ toolCallId: string; settledAt: number }> = [];
   const [hung] = withWorkbookCoordinator(
@@ -426,9 +427,10 @@ void test("Stop settles a write Excel never answers, so the workbook lock is rel
 
   const controller = new AbortController();
   const call = hung.execute("tc-hung", {}, controller.signal);
-  await new Promise((resolve) => setTimeout(resolve, 10));
+  await new Promise((resolve) => setImmediate(resolve));
   assert.equal(windows[0]?.settledAt, Number.POSITIVE_INFINITY, "write window open while the call runs");
   controller.abort();
+  t.mock.timers.tick(10_000);
 
   await assert.rejects(call, (error: unknown) => {
     assert.ok(error instanceof Error);
@@ -438,4 +440,26 @@ void test("Stop settles a write Excel never answers, so the workbook lock is rel
   });
   assert.equal(windows[0]?.toolCallId, "tc-hung");
   assert.ok(Number.isFinite(windows[0]?.settledAt), "write window closed");
+});
+
+void test("a write that finishes a few seconds after Stop reports its own result", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const [slow] = withWorkbookCoordinator(
+    [makeTool("write_cells", () => new Promise((resolve) => {
+      setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing Calc!K11:K20; backup fae5e5d3" }], details: { echo: "slow" } }), 6_000);
+    }))],
+    new FakeCoordinator(),
+    createContextProvider("url_sha256:abc"),
+  );
+  if (!slow) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = slow.execute("tc-slow", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(6_000);
+
+  const result = await call;
+  const first = result.content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing Calc!K11:K20; backup fae5e5d3");
 });
