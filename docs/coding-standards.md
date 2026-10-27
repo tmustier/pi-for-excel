@@ -125,3 +125,15 @@ Before opening a PR, report:
 - Any lint/type/test warnings left intentionally.
 - Any `unknown` that travels past the seam and why it cannot be parsed closer to it.
 - Any safety helper usage (`setSafeInnerHTML`, lint disable, type assertion) and the local invariant that makes it safe.
+
+## Review
+
+One independent review per PR, at the end, once the checks pass and acceptance is done. Give a reviewer with fresh context (a review subagent or an orb) the diff, the goal and this checklist:
+
+- no defensive branches, catches, optional chaining or fallbacks for states the system does not permit;
+- no comments that narrate what the code does, what it used to do, or why the author chose it;
+- no tests that still pass against a plausible mutation of the change;
+- no duplicated logic, dead code, compatibility shims or TODO placeholders;
+- no new upstream divergence without an entry in `docs/upstream-divergences.md`.
+
+Fix what the review raises and rerun the checks. Repeat the Excel acceptance run only when a fix could invalidate its evidence. Re-review only when the review raised a blocker whose fix is itself non-trivial; do not run second, final or confirmation passes.

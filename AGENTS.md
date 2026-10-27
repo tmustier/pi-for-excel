@@ -143,6 +143,10 @@ When to add new gallery sections:
 - Changing CSS for an existing component → verify via `./scripts/ui-verify.sh <section>`
 - Before/after comparison → screenshot before change, make edit, screenshot again
 
+## Pull requests
+- One independent review per PR, at the end: see the Review section of `docs/coding-standards.md`.
+- You can now natively stack PRs with `gh stack` if helpful.
+
 ## Pre-commit
 - `.githooks/pre-commit` runs `npm run check`.
 - Bypass only when needed: `git commit --no-verify`.
