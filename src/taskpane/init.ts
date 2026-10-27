@@ -1516,10 +1516,11 @@ export async function initTaskpane(opts: {
     // dialog was open) cannot be cancelled inside Excel. Keep the tab until
     // its run has settled, so the change lands with its backup and is saved
     // in the session instead of happening after the tab is gone.
-    if (runtime.agent.state.isStreaming || runtime.lockState !== "idle") {
+    // Only a write makes the user wait; an aborted model request settles at once.
+    if (runtime.lockState !== "idle") {
       showToast(t("init.waitingForChangeBeforeClose"));
-      await runtime.agent.waitForIdle();
     }
+    await runtime.agent.waitForIdle();
 
     await runtime.persistence.saveSession({ force: true });
 
