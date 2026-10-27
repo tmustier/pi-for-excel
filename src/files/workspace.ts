@@ -1104,7 +1104,8 @@ export class FilesWorkspace {
         backend: activeBackend.kind,
         context: options.audit,
       });
-      dispatchWorkspaceChanged({ reason: "audit" });
+      // No change event: listing changes no file, and the Files dialog
+      // re-renders (and re-lists) on every change.
     }
 
     return mergedFiles;
@@ -1208,7 +1209,8 @@ export class FilesWorkspace {
         path: normalizedPath,
         bytes: resolved.size,
       });
-      dispatchWorkspaceChanged({ reason: "audit" });
+      // No change event: a read changes no file. Emitting one made the Files
+      // detail view re-render, re-read and re-emit in a loop (P-153).
     }
 
     return resolved;
