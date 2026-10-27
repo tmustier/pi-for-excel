@@ -1,6 +1,7 @@
 /** Format-state capture/apply for workbook recovery snapshots. */
 
 import { excelRun, getRange, parseRangeRef } from "../../excel/helpers.js";
+import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { qualifyAddressWithSheet, splitRangeList } from "./address.js";
 import {
   cloneRecoveryFormatRangeState,
@@ -502,7 +503,7 @@ export async function applyFormatCellsState(
   }
   const previousState = previousStateResult.state;
 
-  return excelRun<RecoveryFormatRangeState>(async (context) => {
+  return runMutation<RecoveryFormatRangeState>(async (context) => {
     const loadedAreas = targetState.areas.map((areaState) => {
       const { range } = getRange(context, areaState.address);
       range.load("rowCount,columnCount");

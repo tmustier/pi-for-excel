@@ -1,6 +1,6 @@
 /** Structure-state restore/apply helpers for workbook recovery snapshots. */
 
-import { excelRun } from "../../excel/helpers.js";
+import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
 import { toRestoreValues } from "./grid.js";
 import {
@@ -387,7 +387,7 @@ async function applyColumnsState(
 export async function applyModifyStructureState(
   targetState: RecoveryModifyStructureState,
 ): Promise<RecoveryModifyStructureState> {
-  return excelRun<RecoveryModifyStructureState>(async (context) => {
+  return runMutation<RecoveryModifyStructureState>(async (context) => {
     switch (targetState.kind) {
       case "sheet_name":
         return applySheetNameState(context, targetState);
