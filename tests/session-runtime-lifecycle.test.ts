@@ -342,3 +342,26 @@ void test("an in-place model switch drops a thinking level the new model cannot 
   assert.equal(result.outcome, "updated");
   assert.equal(runtime.agent.state.thinkingLevel, "off");
 });
+
+void test("a reopened session drops a saved thinking level its model cannot use", async () => {
+  const environment = createEnvironment();
+  await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
+  runtime.agent.state.messages.push({ role: "user", content: "question", timestamp: 1 });
+  runtime.agent.state.thinkingLevel = "high";
+  await runtime.persistence.saveSession({ force: true });
+  const sessionId = runtime.persistence.getSessionId();
+  environment.manager.closeRuntime(runtime.runtimeId);
+
+  const loaded = await environment.sessions.loadSession(sessionId);
+  assert.ok(loaded);
+  // The saved model is gone; the session comes back on one without reasoning.
+  const result = await environment.manager.openSession(
+    { ...loaded, model: getBuiltinModel("openai", "gpt-4.1-mini") },
+    { kind: "new_tab" },
+  );
+  assert.equal(result.outcome, "opened");
+  const reopened = environment.manager.getActiveRuntime();
+  assert.equal(reopened?.agent.state.model.id, "gpt-4.1-mini");
+  assert.equal(reopened?.agent.state.thinkingLevel, "off");
+});

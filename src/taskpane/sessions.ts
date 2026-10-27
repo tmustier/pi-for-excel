@@ -8,6 +8,7 @@
  */
 
 import type { Api, Model } from "@earendil-works/pi-ai";
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData, SessionMetadata } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
@@ -373,7 +374,8 @@ export async function setupSessionPersistence(opts: {
       agent.state.model = opts.resolveModel(sessionData.model) ?? sessionData.model;
     }
     if (sessionData.thinkingLevel) {
-      agent.state.thinkingLevel = sessionData.thinkingLevel;
+      // The saved model may have been swapped for one with fewer thinking levels.
+      agent.state.thinkingLevel = clampThinkingLevel(agent.state.model, sessionData.thinkingLevel);
     }
 
     await updateWorkbookAssociation(sessionId);

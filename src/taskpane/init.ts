@@ -11,7 +11,7 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
@@ -592,9 +592,8 @@ export async function initTaskpane(opts: {
     isBusy: isRuntimeBusy(runtime),
     applyModel: (model, thinkingLevel) => {
       runtime.agent.state.model = model;
-      if (thinkingLevel !== undefined) {
-        runtime.agent.state.thinkingLevel = thinkingLevel;
-      }
+      // A refreshed or swapped model may support fewer thinking levels than the current one.
+      runtime.agent.state.thinkingLevel = clampThinkingLevel(model, thinkingLevel ?? runtime.agent.state.thinkingLevel);
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       if (runtime.runtimeId === getActiveRuntime()?.runtimeId) {
         requestAnimationFrame(() => sidebar.requestUpdate());
