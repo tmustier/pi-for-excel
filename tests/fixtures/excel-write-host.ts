@@ -405,6 +405,11 @@ export class FakeRange {
     });
   }
 
+  /** Paste with relative references shifted, like autofill; only a one-cell source, as fill_formula uses. */
+  copyFrom(source: FakeRange, _type?: string): void {
+    source.autoFill(this);
+  }
+
   calculate(): void {
     this.sheet.host.queueWrite(() => {
       for (const { row, col } of this.coords()) {
