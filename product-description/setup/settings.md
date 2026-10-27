@@ -34,8 +34,8 @@ stateDiagram-v2
 
 How Settings opens decides where the user lands and what Back does:
 
-- **The utilities menu "Settings"** and **`/settings`** open the root page. If Settings is already open, either one closes it instead. The header is covered, but F2 still puts focus in the composer behind Settings, and `/settings` typed there closes Settings; `/login` typed there switches it to "Model providers".
-- **A command or menu item for one page** opens that page with the root page underneath, so Back always leads to the root page rather than closing. `/login` opens "Model providers"; `/rules` and "Rules" open "Rules"; `/history` and "Backups" open "Backups"; `/extensions` and `/tools` open "Connections", `/plugins` "Plugins", `/skills` "Skills"; `/shortcuts` and "Keyboard shortcuts" open "Keyboard shortcuts"; `/experimental` with no arguments opens "Experimental features". If Settings is already open on another page, it switches to the requested page; if it is already on that page, nothing happens.
+- **The utilities menu "Settings"** and **`/settings`** open the root page. While Settings is open, focus stays inside; F2 and other background shortcuts cannot move it to the composer.
+- **A command or menu item for one page** opens that page as the entry page. Escape closes at that entry point; after navigating deeper, it goes back first. `/login` opens Model providers; `/rules` Rules; `/history` Backups; `/extensions` and `/tools` Connections; `/plugins` Plugins; `/skills` Skills; `/shortcuts` Keyboard shortcuts; `/experimental` Experimental features. Page changes still run unsaved-change guards.
 - **The welcome overlay's** "Use a custom OpenAI-compatible gateway" opens the gateway page, and the [disclosure bar's](../glossary.md#the-taskpane) "Change anytime in Settings" dismisses the bar and opens the root page.
 
 Focus moves to the page body so that Tab starts inside the page.
@@ -92,10 +92,10 @@ Settings covers the whole taskpane. A turn running in any tab keeps running behi
 
 ### Leaving a page and closing
 
-- **Back and Escape go up one level.** On the root page, Escape closes Settings. Inside a text field, the first Escape only leaves the field; the next one goes back.
+- **Back and Escape follow the navigation stack.** Escape closes at the entry page; after navigating deeper, it goes back. The Rules unsaved-change guard still runs.
 - **× and the backdrop close Settings from any page**, after asking the current page if it may be left.
 - **Unsaved edits.** Only the Rules page protects unsaved edits: leaving it by Back, Escape, ×, the backdrop or a command that opens another page asks "Discard changes?" ("You have unsaved changes to your rules. Discard them?") with "Discard" and "Keep editing". Elsewhere, unsaved input is handled without asking: a half-filled gateway form and a typed but unsaved API key are dropped silently; a changed proxy URL is saved (or rejected with a toast) as the field loses focus on the way out.
-- **Saving Rules** shows "Rules saved" and returns to the root page; it does not close Settings, even when Settings was opened with `/rules`.
+- **Saving Rules** shows "Rules saved" and closes Settings after changed-scope/conflict checks.
 
 When Settings closes, focus returns to the composer.
 
@@ -155,13 +155,15 @@ After closing Settings the user is in the composer of the tab that was active wh
 
 ## Edge cases
 
-- Opening Settings with `/rules` and saving lands on the root page, not back in the chat.
-- `/settings` while Settings is open on any page closes it, after the Rules page's unsaved-edits check. The composer is reachable for this only through F2, which moves focus out of the modal Settings dialog.
+- Rules Save/Cancel close the overlay, after the appropriate save/discard checks, rather than taking a deep-linked user to Settings root.
+- Background composer commands and F2 cannot bypass the modal's focus trap.
 - The "Model providers" count includes OAuth and API-key providers but not gateways; a user with only a gateway sees "Not set up".
 - The value previews on the root page are read when the root page opens and are not refreshed until it is shown again.
 - Changing the language reloads the taskpane, which ends any running turn the same way closing the taskpane does.
 
 ## Open questions and verification
+
+The old two-Escape deep-link, F2 escape and Rules-save-return observations below are historical, superseded by #793. This pass observed focus inside Rules in Excel-web. The merged #805 model-setting changes are retained; no #811 provider-setup changes are described by this correction.
 
 - Historical Excel-web verification covered the root groups and values, navigation, close/focus behavior and Rules unsaved-edit protection. The former fork switch and its toasts are removed by PR #805, not current behavior.
 - The earlier SETTINGS-04/05 busy-command refusals are superseded by CL-12 in PR #805: all settings entry points are available while busy.

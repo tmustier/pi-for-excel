@@ -2,7 +2,7 @@
 
 ## Summary
 
-The empty state is what a tab with no conversation shows in place of the [transcript](../glossary.md#the-taskpane): a short statement of what Pi is for and four starter hints, ready-made requests the user can take as a starting point. Clicking a hint writes its full prompt into the [composer](../turn/the-composer.md) for the user to read, edit and send; it never sends anything by itself. The empty state fills the transcript area of any tab that has no messages: the first tab of a fresh start, a tab made with "+" or `/new`, a blank tab restored after a reload. It shows the π mark, the tagline "Understand and operate Excel. Remember your preferences. Build your own tools." and, in this order, the hints "Explain this workbook", "Quality check this workbook", "Build my financial model" and "Format this sheet". Each hint's tooltip says "Inserts into input — editable before sending." The empty state disappears as soon as the tab's first message joins the transcript. Hints work with no provider connected and on every host; they are only on screen while the tab has no messages, which in practice means while it is idle.
+The empty state fills a tab with no visible conversation: a π mark, the tagline "Understand and operate Excel. Remember your preferences. Build your own tools." and four starter hints, in order: Explain, Quality check, Build my financial model and Format this sheet. Clicking appends the full prompt to that tab's [composer](../turn/the-composer.md), without sending or discarding its existing draft. A visible note says "A hint fills the message box so you can edit it before sending." The empty state disappears when the first message joins the transcript. Hints need no provider and work across hosts.
 
 ## The simple case
 
@@ -17,8 +17,8 @@ The user adds "Keep it short." at the end and presses Enter. The message joins t
 ```mermaid
 stateDiagram-v2
     [*] --> empty : tab has no messages
-    empty --> filled : click a hint (composer text replaced, nothing sent)
-    filled --> filled : click another hint (composer text replaced again)
+    empty --> filled : click a hint (prompt appended, nothing sent)
+    filled --> filled : click another hint (another prompt appended)
     filled --> empty : user clears the composer (nothing recorded)
     filled --> transcript : Enter (message sent, empty state gone)
     empty --> transcript : Enter with typed text (message sent)
@@ -49,12 +49,12 @@ The exact wording is in `src/language/locales/en.json` under `hint.explain.promp
 
 ### Clicking a hint ends at once
 
-Clicking a hint is the whole of the hint's own interaction, and it records nothing:
+Clicking a hint edits a draft, not the conversation:
 
-- The composer's text is **replaced** by the hint's full prompt. Anything the user had typed is gone. It is not appended to, and Ctrl/Cmd+Z in the composer does not bring it back (confirmed in Excel on the web).
+- The full prompt is appended, with a blank line after a non-empty draft. The native insertion path preserves undo; a host that refuses it uses an append fallback rather than discarding the draft.
 - Focus moves to the composer, with the caret at the end of the prompt. The composer grows to fit, up to its maximum height, and the send button becomes active.
-- Nothing is sent, nothing is saved, and the tab does not become busy. The [command menu](the-command-menu.md) does not open; no hint starts with `/`.
-- The empty state stays on screen. Clicking another hint replaces the text again.
+- Nothing is sent and the tab does not become busy. Normal draft persistence applies. The [command menu](the-command-menu.md) does not open; no hint starts with `/`.
+- The empty state stays on screen. Clicking another hint appends again.
 
 The user can now edit the text freely, clear it (and be back where they started), or leave it there and do something else.
 
@@ -64,7 +64,7 @@ The hint's text is sent like any other text: Enter or the send button. There is 
 
 ### While Pi is busy
 
-The empty state is replaced by the transcript the moment the first user message joins it, which is almost immediately after Enter. Between Enter and that moment (while Pi waits for a missing login, for example) the empty state is still shown and its hints can still be clicked; a click there just replaces the composer text, which is empty after sending. Once the transcript appears, the hints are gone for this tab.
+The empty state is replaced by the transcript when the first user message joins it. Until then, any visible hint still appends editable text without sending. Once the transcript appears, hints are gone for this tab.
 
 ### After the first message
 
@@ -90,12 +90,12 @@ For hints, "before sent" is the time between clicking a hint and sending its tex
 | Event | Before sent | While busy |
 | --- | --- | --- |
 | Stop (button or Escape) | There is nothing to stop. Escape with focus in the composer moves focus to the tab strip; the inserted text stays. | The turn stops as described in [stopping](../turn/stopping.md); the user's message stays in the transcript, so the empty state does not return. |
-| The user sends something else | Clicking another hint replaces the text. Typing edits it. A slash command typed over it runs instead (the hint text is lost when the user replaces it). | Enter steers and Alt/Option+Enter follows up as usual. |
-| Tab switched, created, closed or reopened | The composer text is shared by all tabs, so the inserted prompt stays in the composer when the user switches tabs and is sent to whichever tab is active when they press Enter. | The turn keeps running in its tab. |
+| The user sends something else | Another hint appends; typing edits the draft. A slash command deliberately typed over it runs instead. | Enter steers and Alt/Option+Enter follows up as usual. |
+| Tab switched, created, closed or reopened | The inserted prompt stays in its originating tab's draft; the destination tab restores its own draft. | The turn keeps running in its tab. |
 | An overlay or menu opens | The inserted text stays in the composer behind the overlay. | No effect on the empty state, which is already gone. |
 | Model or thinking level changes | Applies to the turn the prompt will start. | As for any turn. |
 | The provider fails | Not applicable; nothing has been sent. | The turn fails; the message stays and the empty state does not return. |
-| The taskpane goes away | The inserted text is lost; composer text is never saved. On reopening, the blank tab shows the empty state again. | As for any turn; see [turns](../foundations/turns.md). |
+| The taskpane goes away | Saved composer draft restores, including hint text. | First user message persists before its answer; streaming itself does not resume. |
 | The workbook changes underneath | No effect. The prompt is text and reads the workbook only once sent. | As for any turn. |
 | Focus moves to the grid or another window | The inserted text stays in the composer. | No effect. |
 | The context window fills | Not applicable. An empty tab uses almost no context. | As for any turn. |
@@ -104,11 +104,11 @@ After any interrupt before sending, the user still has the empty state on screen
 
 ## Interactions with other systems
 
-**Persistence.** Nothing about the empty state or the hints is saved. Text inserted by a hint is composer text, which is lost when the taskpane closes. A blank tab is kept in the tab layout and shows the empty state again after a reload. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** The empty-state display is derived from visible messages. Hint text becomes that tab's saved draft, not shared text following tab switches; normal debounce/storage limitations apply. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 **Workbook changes and recovery.** Clicking a hint does not touch the workbook. Sending "Build my financial model" or "Format this sheet" usually leads to changes, each with its [automatic backup](../foundations/the-workbook.md).
 
-**Other tabs and sessions.** Each tab shows the empty state independently, based on its own messages. The composer is shared, so a hint clicked in one empty tab can be sent from another tab.
+**Other tabs and sessions.** Each tab shows the empty state independently, based on its own messages. A hint changes only the active tab's draft; switching tabs restores the destination tab's own draft.
 
 **Execution mode and approvals.** No interaction until the prompt is sent.
 
@@ -122,25 +122,27 @@ After any interrupt before sending, the user still has the empty state on screen
 
 **Host differences.** None.
 
-**Language.** The tagline, the hint labels, the prompts and the tooltip are translated; in Chinese the prompt inserted is the Chinese one. The hints are read once when the taskpane starts; changing the language reloads the taskpane, so they always match it.
+**Language.** The tagline, hint labels, prompts and visible explanation are translated; a Chinese hint inserts its Chinese prompt. Hints are read at startup; the language-change reload refreshes them.
 
-**Accessibility and keyboard.** Each hint is a button reachable with Tab and activated with Enter or Space. Its accessible name is the label followed by the whole preview, which is long. The explanation "Inserts into input — editable before sending." is only a hover tooltip, so keyboard and screen-reader users are not told that nothing is sent. The π mark is plain text. There is no keyboard shortcut for the hints.
+**Accessibility and keyboard.** Each hint is a Tab-reachable button activated with Enter/Space. A visible shared note explains that it fills the message box before sending and is associated with each button through its accessible description. The π mark is plain text. There is no dedicated hint shortcut.
 
 ## Edge cases
 
 - **Short pane (520 px tall or less).** The π mark and the grey previews are hidden and the cards shrink to their labels. Confirmed in Excel on the web with a taskpane about 340 px tall.
-- **Very long existing draft.** Clicking a hint discards it without warning.
-- **Same hint twice.** The second click replaces the text with the same prompt, discarding any edits made to it.
-- **A hint, then `/new`.** The prompt stays in the composer and the new tab shows the empty state; sending goes to the new tab.
+- **Very long existing draft.** The hint appends; existing text remains.
+- **Same hint twice.** Two copies are appended; edited text is not replaced.
+- **A hint, then `/new`.** The prompt remains in the originating tab's saved draft; the new tab has its own composer state.
 - **Empty tab while another tab is busy.** The hints work normally; sending starts a turn in this tab, independent of the other.
 
 ## Open questions and verification
 
+Replacement, missing undo, hover-only explanation and shared-draft observations below are historical, superseded by #789/#803. Current append and visible-note behavior was inspected in merged source; this is not a new live hint acceptance run.
+
 - Clicking a hint replaces the composer text instead of inserting into it (`src/ui/pi-sidebar.ts:1205`, `input.value = prompt`), and the replaced text cannot be recovered with Ctrl/Cmd+Z. Confirmed in Excel on the web: a draft "my draft" was replaced by the whole Explain prompt, the caret was at the end, and Ctrl+Z left the prompt in place. [turns](../foundations/turns.md) now agrees. Losing a draft without warning may be worth treating as a bug.
 - The order of the hints in the product is Explain, Quality check, Build my financial model, Format this sheet (`src/taskpane/init.ts:341-358`); the glossary lists "Format this sheet" before "Build my financial model". Confirmed in Excel on the web.
-- The composer is shared by all tabs, so hint text follows the user across tab switches. Confirmed for a draft in Excel on the web; see [sessions and tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns).
+- Each tab owns its draft; switching restores the target tab's text instead of carrying hint text into it.
 - "Inserts into input — editable before sending." is only a `title` tooltip (`src/ui/pi-sidebar.ts:1225`); on touch devices and for keyboard users it is never seen. A product call.
 - With a provider connected, the empty state was already gone 150 ms after Enter, even with the model request held (confirmed in Excel on the web). The window in which hints stay clickable after Enter only matters while a login is being asked for; that case was not run.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#commandsempty-state-and-hintsmd).
 
-Verified against pi-for-excel commit `ec453df`.
+Baseline source inspected at `1f51cf8`, reconciled to merged #803. Older hint-click observations remain historical.

@@ -43,7 +43,7 @@ The switch decides whether the proxy is used at all. With it on and a valid URL,
 
 ### The proxy banner
 
-The banner shows whenever the last check failed, and hides as soon as one succeeds. It has no close button. "How to fix →" expands it in place:
+The banner below the tabs warns only when the proxy is enabled and unreachable. It has a dismiss control and hides when a check succeeds. A changed proxy setting triggers a fresh check. "How to fix →" expands it in place:
 
 - "Run this command in your terminal and keep the window open:"
 - the command `npx -y pi-for-excel-proxy@latest` with a copy button ("Copy command"; its icon turns to a check, "Copied", for 1.4 seconds; if copying is blocked, the command text is selected instead);
@@ -131,14 +131,16 @@ Stopping the helper while Pi runs shows the banner within 30 seconds and fails t
 
 ## Edge cases
 
-- With the switch off, the banner still appears whenever no helper answers at the stored URL.
+- With the switch off, there is no unreachable-proxy banner.
 - Setting a remote URL in Settings shows no security warning until the taskpane next opens.
-- After changing the URL, the status line keeps the last check's result, now shown against the new URL, until the next 30-second check: an unreachable URL is shown as "✓ Proxy connected at {url}", and after a switch back to a reachable URL, "⚠ Proxy is enabled at {url} but is not currently reachable.". While the page stays open it does not follow later checks either; leaving the page and coming back shows the current state.
-- The banner appears or disappears at the next check after a change, so up to 30 seconds later (12 s and 25 s in two tries).
+- URL/enabled changes trigger a recheck rather than relabelling the previous URL's result until the next poll.
+- When browser policy blocks localhost in the Excel-web frame, advice explains the policy restriction. It does not offer an impossible permission prompt or imply that restarting the helper fixes frame policy.
 - A URL with a trailing slash is saved without it.
 - Typing the default URL into an empty field and saving shows nothing if it was already the stored value.
 
 ## Open questions and verification
+
+The old disabled-proxy warning, missing close control and stale status after settings changes below are historical, superseded by #793/#796. #806's exact `npx -y pi-for-excel-proxy@latest` command remains unchanged. Source inspected; this pass did not reproduce desktop/network-policy failures on a second host.
 
 - Confirmed in Excel on the web: the Proxy page with "✓ Proxy connected at https://localhost:3003", "Proxy URL saved." with the trailing slash removed, the rejection of `http://example.com` with the mixed-content message in the status line and the "Proxy URL not saved: …" toast, "Proxy disabled." / "Proxy enabled." toasts and the "Proxy disabled." status line, the root page's "On"/"Off", the banner appearing at the next check after the URL pointed at nothing, its "How to fix →" steps and "Hide steps", and the banner disappearing at the next check after the URL was restored. The gate and the Luna messages are confirmed below.
 - The banner ignores the switch and the provider: confirmed in Excel on the web, it stayed up with the proxy switched off (PROXY-07). `src/taskpane/proxy-status.ts:45-58` checks the stored URL unconditionally and `src/ui/proxy-banner.ts:142` shows it on any failed check. API-key-only users who never run the helper see a permanent warning. Looks like a bug.

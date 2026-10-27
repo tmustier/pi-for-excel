@@ -4,7 +4,7 @@ Chat/thinking rows revised for CL-03, CL-09 / CC-07 in [PR #803](https://github.
 
 ## Summary
 
-Pi for Excel can be driven almost entirely from the keyboard: sending, steering and following up, stopping, restoring queued messages, cycling the thinking level, opening, closing, reopening and switching tabs, the command menu, and returning focus to the composer. This document has two parts. The first describes the **Keyboard shortcuts** page, the in-product reference opened with `/shortcuts`, from the utilities menu's "Keyboard shortcuts" item, or from Settings → "Keyboard shortcuts". The second is the **index** of every shortcut the product actually handles, with where it works, what blocks it, and the document that owns its behaviour. Behaviour is described in the owning documents; this index only points to them (see the README's scope decision on shortcuts). The page is available while the tab is busy only from the utilities menu or Settings: `/shortcuts` is refused while busy. It needs no provider and works on every host, though some shortcuts collide with the browser on Excel on the web.
+Pi for Excel can be driven almost entirely from the keyboard: sending, steering and following up, stopping, restoring queued messages, cycling thinking, managing tabs, the command menu and composer focus. This document describes the in-product **Keyboard shortcuts** page and indexes bindings by their owning feature. `/shortcuts`, the utilities menu and Settings all open it, including while busy. It needs no provider; host-reserved keys still may not reach Pi.
 
 ## The simple case
 
@@ -12,19 +12,19 @@ The user types `/shortcuts` and presses Enter, or opens the utilities menu (the 
 
 The page lists four groups, "Chat", "Tabs", "Navigation" and "System", each a list of key labels and descriptions. Keys are shown in macOS notation (⌃ ⌘ ⌥ ⇧) when the taskpane runs on a Mac, and as "Ctrl+…", "Alt+…", "Shift+…" otherwise. Tab chords use Control+Option on Mac, not Command. The page is read-only.
 
-The user presses Escape once to go back to the Settings root and again to close Settings, or clicks × to close at once. They land back in the tab they came from.
+Escape closes at a deep-linked entry page; after navigation from Settings root it goes back first. × closes at once. The user lands back in the originating tab.
 
 ## The interaction, event by event
 
 ```mermaid
 stateDiagram-v2
     [*] --> composing
-    composing --> refused : /shortcuts while busy (toast, text kept)
-    refused --> composing
-    composing --> shortcuts_page : /shortcuts, or utilities menu "Keyboard shortcuts"
-    shortcuts_page --> settings_root : Escape or back arrow (nothing changed)
+    composing --> shortcuts_page : /shortcuts or utilities menu (idle or busy)
+    composing --> settings_root : Settings
+    settings_root --> shortcuts_page : Keyboard shortcuts
+    shortcuts_page --> settings_root : Escape after navigation, or back arrow
     settings_root --> composing : Escape, ×, or backdrop click (Settings closed)
-    shortcuts_page --> composing : × or backdrop click (Settings closed)
+    shortcuts_page --> composing : Escape at entry page, ×, or backdrop
 ```
 
 ### Opening the page
@@ -33,11 +33,11 @@ stateDiagram-v2
 
 ### Ends at once
 
-While the active tab is busy, `/shortcuts` shows "Can't run /shortcuts while Pi is busy". Whether the typed text survives depends on the path. Typing `/shortcuts` leaves the command menu open on that one match, so Enter runs the menu's highlighted command, which empties the composer before the busy check refuses it: the text is gone (confirmed in Excel on the web). Only when the command menu is not showing (for example after Escape closed it) does Enter refuse the command and leave the text in place. The utilities menu item works while busy. Nothing is recorded either way.
+`/shortcuts` is a local command and opens while busy. Nothing goes to the model or transcript. For a different command that is refused, both typed and menu paths retain the draft; the historical command-menu text-loss observation below is superseded.
 
 ### Committed, while busy, finishes
 
-There is nothing to commit. The page is a static list; opening it changes no setting and does not touch the session or the workbook. A turn running in the tab continues behind the overlay. Closing the page returns to the Settings root (Escape or back) or closes Settings (× or the backdrop).
+There is nothing to commit. The page is a static list; opening it changes no setting or workbook. A turn continues behind it. Escape follows the entry-page/navigation rule above; × and the backdrop close Settings.
 
 ### What the page lists
 
@@ -151,14 +151,14 @@ Escape goes to the first of these that applies, in this order:
 | Thinking level | No effect on the page. | No effect. |
 | Execution mode | No effect. | No effect. |
 | Files in the workspace, or an overlay open | The page is itself a modal. Thinking cycling does not act behind it; Shift+Tab navigates its controls. | Same. |
-| Tab state (new, restored, another tab busy) | No effect on the page. Shortcuts act on the active tab. | `/shortcuts` is refused while busy; the menu item is not. |
+| Tab state (new, restored, another tab busy) | No effect on the page. Shortcuts act on the active tab. | `/shortcuts` and menu navigation remain available. |
 | Host (desktop or web) | Notation follows the platform. The common tab chords replace browser-reserved aliases; see [What Excel on the web does with the keys](#what-excel-on-the-web-does-with-the-keys) for historical observations. | No effect. |
 
 ## Cancel and interrupt
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape on the page goes back to the Settings root. | A turn running in the tab is not stopped by Escape while Settings is open; Settings claims it. |
+| Stop (button or Escape) | Escape closes at the entry page, or goes back after deeper navigation. | A turn running in the tab is not stopped by Escape while Settings is open; Settings claims it. |
 | The user sends something else | The overlay holds focus; nothing can be sent until it closes. | Same. |
 | Tab switched, created, closed or reopened | Tab shortcuts do not act behind the open modal page. | Same. |
 | An overlay or menu opens | Opening another Settings page replaces the shortcuts page. | Same. |
@@ -204,6 +204,8 @@ After closing the page the user is back in the same tab with the composer as it 
 - Ctrl/Cmd+O is a single taskpane-wide toggle, not per tab, and resets on reload.
 
 ## Open questions and verification
+
+Busy refusal, two-Escape deep links, `/default-models` and command-menu draft loss below are historical, superseded by #789/#793/#805. The merged #802 tab chords and its acceptance evidence remain unchanged.
 
 - F6 and Shift+F6 are not Pi bindings and are no longer listed on the page. Host-specific pane cycling is outside this contract.
 - `/default-models` advertises Ctrl+P (`src/language/locales/en.json:45`), which is not implemented.

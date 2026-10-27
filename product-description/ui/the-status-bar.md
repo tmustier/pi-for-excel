@@ -4,7 +4,7 @@ Thinking and context controls revised for CL-09 / CC-07 / CC-03 in [PR #803](htt
 
 ## Summary
 
-The status bar is the row of small controls under the [composer](../turn/the-composer.md) that shows, and lets the user change, the settings that shape the active tab's next turn: which model answers, how hard it thinks, whether Pi asks before changing the workbook, and how full the conversation is. It always reflects the [active tab](../glossary.md#sessions-and-tabs) and changes when the user switches tabs. From left to right it holds the **model control** (the π mark, the model name and a chevron), the **thinking control** (a brain icon and the level, such as "High"), the **context meter** (for example "1% / 500k"), a **lock badge** that appears only while the tab is involved with the [workbook lock](../glossary.md#the-workbook), and, at the right edge, the **execution-mode control** ("Auto" or "Confirm"). Every control is a button with a hover tooltip; the thinking control and the context meter open a small popover. The bar is usable while the tab is busy (only changing the model is refused), works the same on every host, and with no provider connected still shows the tab's model. This document owns the controls themselves; the behaviour behind them is owned by [the model picker](../setup/the-model-picker.md), [thinking](../turn/thinking.md), [context and compaction](../turn/context-and-compaction.md) and [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md).
+The status bar under the [composer](../turn/the-composer.md) reflects the active tab: model, thinking, context, workbook-lock state and Auto/Confirm, from left to right. Buttons expose tooltips; thinking and context open popovers. It remains usable while busy, with model/thinking choices applying next turn. Without a connected provider the model control says "Connect a provider". This page owns the controls; their behavior belongs to [the model picker](../setup/the-model-picker.md), [thinking](../turn/thinking.md), [context and compaction](../turn/context-and-compaction.md) and [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md).
 
 ## The simple case
 
@@ -32,9 +32,9 @@ stateDiagram-v2
 
 ### The model control
 
-The control shows the active tab's model by its display name (or its id when it has no name), cut off with an ellipsis when the bar is narrow, followed by a chevron. With no model set it says "Select model". Its tooltip is "Switch the AI model for this session."
+The control shows the active tab's model by display name (or ID), ellipsized when narrow, with a chevron. Existing API/ChatGPT tags distinguish ambiguous OpenAI routes. Without a provider it reads "Connect a provider" instead of presenting the internal fallback model as usable.
 
-Clicking it closes any open status popover, refreshes the list of connected providers, and opens the [model picker](../setup/the-model-picker.md) for the active tab. The picker remembers which tab it was opened for: choosing a model applies to that tab even if the user has switched since. While that tab is busy, the picker still opens, but choosing a different model is refused with "Wait for this tab to finish before changing models" (confirmed in Excel on the web: the picker closes, the toast shows, the label is unchanged). The Settings preference to fork on model switch changes what choosing does; see the picker document.
+Clicking it closes any open status popover and opens the [model picker](../setup/the-model-picker.md), or the provider choices when none is connected. The picker captures its target tab. A busy choice saves for the next turn without changing the running turn's model/reasoning. Model selection never forks; the former Settings preference is removed by #805.
 
 ### The thinking control
 
@@ -91,8 +91,8 @@ During startup and teardown, when no tab exists, the whole bar is replaced by th
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Decides the model label, which thinking levels the popover lists, and the window size in the meter. With no provider connected the label still shows the tab's model. | Opening the picker works; choosing another model is refused with "Wait for this tab to finish before changing models". |
-| Thinking level | Shown in the control. | Can be changed from the popover or with Shift+Tab; applies from the next model request. |
+| Model and provider | Decides model label, supported thinking levels and context size. No provider shows "Connect a provider". | A choice saves for the next turn. |
+| Thinking level | Shown in the control. | Popover or composer Ctrl+Alt/Option+T changes the next turn's level. Shift+Tab moves focus backwards. |
 | Execution mode | Shown at the right. | Can be toggled; applies from the next mutation. |
 | Files in the workspace, or an overlay open | No effect from files. An overlay covers the bar; it cannot be clicked until the overlay closes. | Same. |
 | Tab state (new, restored, another tab busy) | The bar shows the active tab only. A restored tab shows its saved model and level; its meter reflects the restored history. Another tab being busy does not change this bar, except the lock badge when this tab waits for that tab's mutation. | The meter, lock badge and labels update as the turn runs. |
@@ -133,7 +133,7 @@ After any interrupt the user is where they were; only the mode toggle commits an
 
 **Notifications.** "{mode} mode." when the mode is toggled, and "Thinking: {level} (next turn) · {shortcut}" for the dedicated thinking chord. The popovers are not notifications.
 
-**Settings and preferences.** The fork-on-model-switch preference changes what choosing a model does. `/debug` adds a usage breakdown after the context meter; see [experimental](../extensions/experimental.md).
+**Settings and preferences.** Model choices stay in the current conversation; there is no fork preference. `/debug` adds a usage breakdown after the context meter; see [experimental](../extensions/experimental.md).
 
 **Host differences.** None.
 
@@ -151,6 +151,8 @@ After any interrupt the user is where they were; only the mode toggle commits an
 - A model without reasoning shows "Off"; the dedicated thinking chord keeps it there. Shift+Tab just moves focus.
 
 ## Open questions and verification
+
+The old busy-model refusal and fork-setting descriptions are superseded by #805. Other dated observations below are historical where they conflict with the merged thinking/context controls above; no new status-bar acceptance run is claimed here.
 
 - Confirmed in Excel on the web (2026-10-26): the controls, tooltips and popover contents, the busy model refusal, the mode toast and its stale label while hovered, Shift+Tab cycling, the thinking popover staying bound to the old tab, "lock" on a single write, "lock…" while the active tab waits, the redraw deferral, the yellow and red thresholds, and "/new" and "/compact" from the context popover. "No active session" was never seen. Not reached: the "over 100%" warning, because auto-compaction ran first.
 - After "/compact" from the popover, the meter kept showing the pre-compaction figure (75%) until a tab switch, though the summary had replaced the older messages. The pointer was not on the bar, so the hover deferral does not explain it. The cause was not established. Minor.
