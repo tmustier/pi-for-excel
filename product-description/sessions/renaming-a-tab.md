@@ -2,13 +2,13 @@
 
 ## Summary
 
-Renaming gives a session tab a title the user chose instead of the default "Chat N". The chosen title replaces the tab label, becomes the session's title in the [resume picker](resuming-a-session.md), and is used in the close and reopen toasts. There are three ways in: double-click the tab, right-click the tab and choose "Rename tab…", or type `/name My title` in the [composer](../turn/the-composer.md). The first two open a native browser prompt titled "Rename tab"; `/name` renames at once with no dialog. All three refuse to run while the tab is [busy](../glossary.md#the-turn). None of them needs a provider to be connected. On Excel on the web, and wherever Office.js stubs out browser dialogs, the double-click and "Rename tab…" paths do nothing at all (see [Open questions](#open-questions-and-verification)); `/name` is the only path that works there.
+Renaming gives a session tab a chosen title instead of "Chat N". It appears in the [resume picker](resuming-a-session.md) and close/reopen notices. Double-click the tab, choose "Rename tab…" from its context menu, or type `/name My title` in the composer. The first two open a translated in-taskpane text dialog on desktop and web; `/name` applies immediately. All refuse while the target tab is busy. No provider connection is needed.
 
 ## The simple case
 
 The user types `/name Q3 budget review` in the composer and presses Enter. The composer clears, the tab label changes to "Q3 budget review" (cut off with an ellipsis after about 110 px, with the full title in the tab's tooltip), and a toast says "Session named: Q3 budget review". Confirmed in Excel on the web, including the tooltip and the accessible name "Open tab {title}". The tab stays active and focus stays in the composer.
 
-On a host where the native prompt works, the user can instead double-click the tab, or right-click it and choose "Rename tab…". A prompt titled "Rename tab" appears, prefilled with the tab's current label. The user edits the text and confirms. The label changes and a toast says "Renamed to Q3 budget review". Clearing the text and confirming removes the chosen title instead: the label goes back to "Chat N" and the toast says "Tab name reset".
+The user can instead double-click the tab or choose "Rename tab…". The text dialog selects its prefilled current label. Confirming changes the label and shows "Renamed to Q3 budget review". Clearing it resets the stable "Chat N" label and shows "Tab name reset".
 
 ## The interaction, event by event
 
@@ -37,14 +37,14 @@ The rename targets one tab, chosen by how the user starts:
 
 Before anything else, the target is checked for busy: if Pi is responding in it, or it is running a queued action such as `/compact`, the rename is refused (see [Ends at once](#ends-at-once)).
 
-For the two dialog paths, the prompt is prefilled with the text the user would expect to edit: the chosen title if the tab has one, otherwise the label currently shown ("Chat 2"). The prefill is not selected; the caret position is the browser's default for native prompts.
+The selected prefill is the chosen title or current "Chat N". The dialog takes and traps focus, then returns it to the opener.
 
 ### Ends at once
 
 The rename ends without recording anything when:
 
 - **The tab is busy.** The dialog paths show the toast "Wait for this tab to finish before renaming" (confirmed in Excel on the web for both double-click and "Rename tab…": the busy check runs before the prompt, so on a busy tab the user does see this toast even where the prompt itself would fail). `/name` goes through the [command busy policy](../commands/the-command-menu.md) instead and shows "Can't run /name while Pi is busy". The text the user typed after `/name` is kept in the composer because the command never ran.
-- **The prompt is cancelled.** Cancel or Escape in the native prompt closes it. No toast, no change.
+- **The prompt is cancelled.** Cancel or Escape closes the text dialog. No toast, no change.
 - **`/name` has no text.** `/name` on its own, or followed only by spaces, shows the toast "Usage: /name My Session Name" and changes nothing. The composer is cleared.
 - **The tab no longer exists.** If the tab closed between the click and the prompt, the toast is "Session not found".
 
@@ -65,9 +65,7 @@ There is no busy phase. Applying the title is instantaneous from the user's poin
 
 The toast confirms the result: "Session named: {title}" for `/name`, "Renamed to {title}" for the dialog, "Tab name reset" when the dialog cleared the title. The tab stays where it was in the tab strip, and the active tab does not change.
 
-The title is saved with the session only if the session has already been saved, which happens once Pi has answered at least once in it (see [persistence](../cross-cutting/persistence-and-restore.md)). In a tab where Pi has not yet answered, the title lives in memory and is saved together with the session after the first response.
-
-> Technical note: whether or not it was saved, the chosen title does not survive a reload of the taskpane. When the taskpane reopens, each tab's session is reloaded with its title but without the flag that says the title was chosen, so the label falls back to "Chat N". The saved title still appears in the resume picker. Confirmed in Excel on the web; see [Open questions](#open-questions-and-verification).
+The title and the fact that the user chose it are saved with the session. Reload, resume and reopen preserve it. Session saving starts with the first user message, not the first answer; see [persistence](../cross-cutting/persistence-and-restore.md).
 
 ## Modifiers
 
@@ -77,8 +75,8 @@ The title is saved with the session only if the session has already been saved, 
 | Thinking level | No effect. | No effect. |
 | Execution mode | No effect. Renaming never touches the workbook. | No effect. |
 | Files in the workspace, or an overlay open | No effect from files. An overlay that covers the tab strip (settings, resume, the model picker) prevents double-clicking or right-clicking a tab; `/name` cannot be typed while an overlay holds focus. | No effect. |
-| Tab state (new, restored, another tab busy) | A new tab that Pi has not answered keeps the title in memory only until the first response. A restored tab shows "Chat N" even if it was named before the reload. Another tab being busy does not block renaming this one. | Refused while this tab is busy; see [Ends at once](#ends-at-once). |
-| Host (desktop or web) | On Excel on the web, double-click and "Rename tab…" do nothing because the native prompt is unavailable. `/name` works on every host. | No effect. |
+| Tab state (new, restored, another tab busy) | Saved chosen titles survive restore. Another busy tab does not block renaming this one. | Refused while this tab is busy. |
+| Host (desktop or web) | Same in-taskpane dialog on both. | No effect. |
 
 A variant cannot change mid-interaction in a way that matters: the dialog is modal and `/name` completes instantly.
 
@@ -86,22 +84,22 @@ A variant cannot change mid-interaction in a way that matters: the dialog is mod
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape in the native prompt cancels it; nothing is recorded. Escape with the tab context menu open closes the menu. If Pi is responding in the active tab at that moment, Escape stops the response instead and the menu stays open, because the tab context menu is not one of the surfaces that claim Escape. | Not applicable: renaming has no busy phase, and renaming is refused while the tab is busy. |
-| The user sends something else | The native prompt is modal; nothing else can be sent until it closes. `/name` is itself a send. | Not applicable. |
-| Tab switched, created, closed or reopened | The native prompt blocks the taskpane, so no tab can change while it is open. With the context menu open, clicking another tab closes the menu and switches tabs; no rename happens. | Not applicable. |
+| Stop (button or Escape) | Escape dismisses the text dialog or context menu, without stopping a turn underneath. | Not applicable: no busy phase. |
+| The user sends something else | The text dialog is modal; no send behind it. `/name` is itself a send. | Not applicable. |
+| Tab switched, created, closed or reopened | Tab shortcuts do not act behind the dialog. Clicking a tab closes an open context menu. | Not applicable. |
 | An overlay or menu opens | Opening the utilities menu closes the tab context menu. | Not applicable. |
 | Model or thinking level changes | No effect. | Not applicable. |
 | The provider fails | No effect. Renaming makes no network request. | Not applicable. |
-| The taskpane goes away | Closing the taskpane with the prompt open discards the rename. | After a successful rename, a reload shows "Chat N" again; the title is only visible in the resume picker. |
+| The taskpane goes away | An unconfirmed rename is discarded. | A saved chosen title survives reload. |
 | The workbook changes underneath | No effect. | Not applicable. |
-| Focus moves to the grid or another window | The native prompt keeps focus. The context menu stays open until the next click inside the taskpane. | Not applicable. |
+| Focus moves to the grid or another window | The dialog stays open; focus is trapped within it inside the pane. | Not applicable. |
 | The context window fills | No effect. The title is not part of the conversation. | Not applicable. |
 
 After any interrupt the user is back on the tab they started from, with the composer as it was.
 
 ## Interactions with other systems
 
-**Persistence.** The title is saved with the session once Pi has answered in it. The tab layout (which sessions are open, in which order) is saved separately and does not record titles. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+**Persistence.** Chosen titles are session metadata and stable tab numbers are layout metadata; both survive reload. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 **Workbook changes and recovery.** No interaction. Renaming does not read or change the workbook and creates no checkpoint.
 
@@ -117,9 +115,9 @@ After any interrupt the user is back on the tab they started from, with the comp
 
 **Settings and preferences.** No interaction.
 
-**Host differences.** The native prompt is the only rename dialog. Office.js replaces `window.prompt` with a function that throws on Excel on the web, so double-click and "Rename tab…" fail silently there. Excel for Mac is worse: no prompt appears, whether Excel is in front or not, and the call never returns, so the taskpane freezes (no clicks, no keys) until the user closes it and opens Pi again (confirmed in Excel for Mac, RENAME-09). Windows (WebView2) has not been checked.
+**Host differences.** No native browser prompt is used. Desktop acceptance of the shared dialog remains separate from this orb's web checks.
 
-**Language.** The toasts and the context-menu label are translated. The prompt's title, "Rename tab", is hard-coded in English and is not translated in the Chinese UI. The default label "Chat N" is translated.
+**Language.** Dialog, toasts, context menu and "Chat N" are translated; user titles are not.
 
 **Accessibility and keyboard.** There is no keyboard path to the dialog: double-click and right-click need a pointer, and focusing a tab and pressing Enter selects it rather than renaming it. `/name` is the keyboard path. The tab button's accessible name is "Open tab {title}" and updates with the new title.
 
@@ -130,16 +128,11 @@ After any interrupt the user is back on the tab they started from, with the comp
 - Renaming a tab to exactly "Chat 2" makes "Chat 2" a chosen title. It looks identical to the default, but it is what the resume picker shows and it does not change if the tab's number would differ.
 - `/name` applies the text after the first space verbatim (after trimming), including any further slashes or quotes: `/name "Draft"` produces the title `"Draft"` with the quotes.
 - Renaming the same tab twice in a row replaces the title each time; there is no history of titles.
-- In a tab Pi has not answered, renaming and then closing the tab loses the title along with the empty session.
+- A genuinely empty tab has no conversation to recover; saved session metadata is distinct from a conversation turn.
 
 ## Open questions and verification
 
-- Double-click and "Rename tab…" call the browser's native `window.prompt`, which Office.js replaces with a function that throws "Function window.prompt is not supported." Confirmed in Excel on the web: double-clicking a tab, and "Rename tab…" on an idle tab, do nothing, with no toast and no error shown. This makes two of the three rename paths dead on that host and likely on others; it may be worth treating as a bug rather than documenting. The repo already has an in-taskpane text dialog (`requestTextInputDialog`) that would fit.
-- A chosen title does not survive a reload: the label falls back to "Chat N" because the restored session is loaded without the "chosen title" flag. Confirmed again in Excel on the web on 2026-10-26: "Q3 budget" came back as "Chat 1", while the resume picker still listed the session as "Q3 budget" and resuming it gave a tab "Chat 4" with the toast "Resumed in new tab: Q3 budget". Looks like a bug.
-- In a tab where Pi has not answered yet, the title is not saved until the first response. Read from code, not confirmed by hand.
-- The "Rename tab" prompt title is hard-coded English. Read from code.
-- Confirmed in Excel for Mac: "Rename tab…" shows no prompt and freezes the taskpane until it is reopened; this may be worth treating as a bug, since renaming by dialog now works on no confirmed host. Windows has not been checked.
-- Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsrenaming-a-tabmd).
+- Merged code uses `requestTextInputDialog` and persists chosen-title metadata. The old native-prompt and reload failures remain historical observations in the [checklist](../verification/sessions-and-commands.md#sessionsrenaming-a-tabmd), not the current contract.
 - The toast wording differs between paths ("Session named: …" vs "Renamed to …"), and the busy refusal wording differs too ("Wait for this tab to finish before renaming" vs "Can't run /name while Pi is busy"). Probably unintentional; a product call.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (code inspection; see historical checklist for earlier host runs).
