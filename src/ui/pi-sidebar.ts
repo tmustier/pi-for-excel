@@ -390,12 +390,12 @@ export class PiSidebar extends LitElement {
     this._setupAutoScroll();
     this._observeDock();
     this._updateSessionTabOverflow();
-    // Reveal the active tab only when the active tab or the tab count changes,
+    // Reveal the active tab when it, its busy marker, or the tab count changes,
     // never on other re-renders: the ‹ › arrows scroll the strip, and pulling
     // it back would make earlier tabs unreachable. Showing an arrow resizes
     // the scroller, so the reveal also re-runs on the render that follows.
     const activeTab = this.sessionTabs.find((tab) => tab.isActive);
-    const revealKey = `${activeTab?.runtimeId ?? ""}:${this.sessionTabs.length}`;
+    const revealKey = `${activeTab?.runtimeId ?? ""}:${this.sessionTabs.length}:${activeTab?.isBusy ?? false}`;
     const changedKeys: ReadonlyMap<PropertyKey, unknown> = changed;
     const arrowsChanged = changedKeys.has("_tabCanScrollLeft") || changedKeys.has("_tabCanScrollRight");
     if (revealKey !== this._tabRevealKey || (arrowsChanged && this._tabRevealPending)) {

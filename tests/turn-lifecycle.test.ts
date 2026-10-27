@@ -282,7 +282,7 @@ void test("the error banner names the real failure", () => {
   );
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("400 model_not_supported") }),
-    "LLM error: 400 model_not_supported",
+    "Couldn’t get a response: 400 model_not_supported",
   );
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("Provider is not configured: anthropic"), missingCredentialsFor: "anthropic" }),

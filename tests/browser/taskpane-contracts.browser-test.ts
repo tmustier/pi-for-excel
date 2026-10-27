@@ -547,6 +547,16 @@ void test("proxy banner warns only when the enabled proxy is down, and can be di
     await banner.waitFor({ state: "visible" });
     assert.match(await banner.innerText(), /proxy is turned on but isn’t running/);
 
+    const showSteps = banner.getByRole("button", { name: "Show how to start it", exact: true });
+    await showSteps.focus();
+    await page.keyboard.press("Enter");
+    const hideSteps = banner.getByRole("button", { name: "Hide steps", exact: true });
+    assert.equal(await hideSteps.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await hideSteps.getAttribute("aria-expanded"), "true");
+    await page.keyboard.press("Enter");
+    assert.equal(await showSteps.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await showSteps.getAttribute("aria-expanded"), "false");
+
     await banner.getByRole("button", { name: "Dismiss" }).click();
     await banner.waitFor({ state: "detached" });
     await setProxyState("not-detected");

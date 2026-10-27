@@ -42,6 +42,7 @@ export interface BannerHandle {
 const TONE_ORDER: Record<BannerTone, number> = { error: 0, warning: 1, info: 2 };
 
 function renderActions(row: HTMLElement, actions: readonly BannerAction[]): void {
+  const focusedIndex = Array.from(row.children).findIndex((child) => child === document.activeElement);
   row.replaceChildren();
   row.hidden = actions.length === 0;
   for (const action of actions) {
@@ -55,6 +56,8 @@ function renderActions(row: HTMLElement, actions: readonly BannerAction[]): void
     button.addEventListener("click", action.onClick);
     row.appendChild(button);
   }
+  // Updating a disclosure's label must not drop keyboard focus to the page.
+  if (focusedIndex >= 0) row.querySelectorAll("button")[focusedIndex]?.focus({ preventScroll: true });
 }
 
 /** Build a banner element without mounting it. */
