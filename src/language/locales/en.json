@@ -732,6 +732,7 @@
   "proxy-banner.hint": "Open Terminal · paste · press Enter · keep open",
   "proxy-banner.intro": "Run this command in your terminal and keep the window open:",
   "proxy-banner.warning": "Proxy not running · Some features won't work.",
+  "proxy.blocked_by_browser": "This needs the local proxy, but Excel on the web doesn't let add-ins reach this computer: your browser's Local Network Access protection blocks it, so enabling or starting the proxy won't help. Use Pi in Excel desktop for this provider.",
   "proxy.error.invalid": "Invalid Proxy URL: \"{url}\". Expected a full URL like {example}",
   "proxy.error.mixedContent": "Proxy URL is HTTP ({url}) but the add-in is served over HTTPS. Office webviews may block this as mixed content. Use {example} and run an HTTPS proxy. See {guide}.",
   "queue-display.followUpLabel": "Follow up",

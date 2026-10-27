@@ -732,6 +732,7 @@
   "proxy-banner.hint": "打开终端·粘贴·按回车·保持打开",
   "proxy-banner.intro": "在终端中运行此命令并保持该窗口打开：",
   "proxy-banner.warning": "代理未运行·某些功能将无法使用。",
+  "proxy.blocked_by_browser": "此操作需要本地代理，但网页版 Excel 不允许加载项访问这台电脑：浏览器的本地网络访问保护会阻止连接，因此启用或启动代理都无济于事。请在桌面版 Excel 中使用此提供商。",
   "proxy.error.invalid": "无效的代理 URL：“{url}”。应为完整 URL，例如 {example}",
   "proxy.error.mixedContent": "代理 URL 为 HTTP（{url}），但加载项通过 HTTPS 提供。Office WebView 可能将其视为混合内容而阻止。请使用 {example} 并运行 HTTPS 代理。参见 {guide}。",
   "queue-display.followUpLabel": "跟进",

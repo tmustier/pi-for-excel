@@ -19,6 +19,7 @@ function terminalAppName(): string {
   return t("platform.terminal.other");
 }
 import { isCorsError, isModuleLoadError } from "../auth/cors-error.js";
+import { isProxyBlockedByBrowser } from "../taskpane/proxy-status.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
@@ -976,7 +977,9 @@ export function buildProviderRow(
             (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg)));
 
           if (isLikelyCors) {
-            if (DEFAULT_PROXY_IS_REMOTE) {
+            if (isProxyBlockedByBrowser()) {
+              errorEl.textContent = t("proxy.blocked_by_browser");
+            } else if (DEFAULT_PROXY_IS_REMOTE) {
               errorEl.textContent = t("provider.cors_error_remote", { url: DEFAULT_PROXY_URL });
             } else {
               setSafeInnerHTML(
