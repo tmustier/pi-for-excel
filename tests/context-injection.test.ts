@@ -41,10 +41,11 @@ class FakeWorkbook {
       onMoved: handlerSlot("moved"),
       onVisibilityChanged: handlerSlot("visibility"),
     };
-    const context = { workbook: { worksheets }, sync: () => Promise.resolve() };
     const previous: unknown = Reflect.get(globalThis, "Excel");
     Reflect.set(globalThis, "Excel", {
-      run: <T>(callback: (ctx: unknown) => Promise<T>): Promise<T> => callback(context),
+      // A fresh context per run, as Office.js does.
+      run: <T>(callback: (ctx: unknown) => Promise<T>): Promise<T> =>
+        callback({ workbook: { worksheets }, sync: () => Promise.resolve() }),
     });
     return () => Reflect.set(globalThis, "Excel", previous);
   }
