@@ -66,26 +66,21 @@ const SELECTION_TIMEOUT_MS = 2000;
 
 const TIMED_OUT = Symbol("timed out");
 
-async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | typeof TIMED_OUT> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
-    timeoutId = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
-  });
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
-}
-
 /** Run one auto-context source; a failure or timeout is logged and yields null. */
 async function attempt<T>(what: string, run: () => Promise<T>, timeoutMs: number): Promise<T | null> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
-    const result = await withTimeout(run(), timeoutMs);
+    const promise = run();
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timeoutId = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+    });
+    const result = await Promise.race([promise, timeout]);
     if (result !== TIMED_OUT) return result;
     console.warn(`[auto-context] ${what} timed out after ${timeoutMs} ms`);
   } catch (error) {
     console.warn(`[auto-context] ${what} failed:`, getErrorMessage(error));
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
   return null;
 }
@@ -111,22 +106,14 @@ function isPrompt(message: AgentMessage | undefined): boolean {
   return message?.role === "user" || message?.role === "user-with-attachments";
 }
 
-function note(kind: AutoContextKind, text: string, extra: Partial<AutoContextMessage> = {}): AutoContextMessage {
+function note(kind: AutoContextKind, text: string, extra: Pick<AutoContextMessage, "key" | "workbookId"> = {}): AutoContextMessage {
   return { role: "autoContext", kind, text, timestamp: Date.now(), ...extra };
 }
 
-async function defaultWorkbookId(): Promise<string | null> {
-  return (await getWorkbookContext()).workbookId;
-}
-
-async function defaultFilesSummary(workbookId: string | null): Promise<FilesSummary | null> {
-  return getFilesWorkspace().getContextSummary(workbookId);
-}
-
 export function createAutoContext(sources: AutoContextSources): AutoContext {
-  const loadWorkbookId = sources.getWorkbookId ?? defaultWorkbookId;
+  const loadWorkbookId = sources.getWorkbookId ?? (async () => (await getWorkbookContext()).workbookId);
   const loadBlueprint = sources.getBlueprint ?? getBlueprint;
-  const loadFilesSummary = sources.getFilesSummary ?? defaultFilesSummary;
+  const loadFilesSummary = sources.getFilesSummary ?? ((workbookId) => getFilesWorkspace().getContextSummary(workbookId));
   const loadSelection = sources.readSelection ?? readSelectionContext;
   // Each runtime (chat tab) reads the shared edit log from its own cursor.
   let changeCursor = sources.changeTracker.cursor();
