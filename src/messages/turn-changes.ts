@@ -23,6 +23,7 @@ export const turnChangesSchema = Type.Object({
   turnId: Type.String(),
   timestamp: Type.Number(),
   outcome: StringEnum(["finished", "stopped", "failed"]),
+  ranOfficeJs: Type.Optional(Type.Boolean()),
   undoneBackupIds: Type.Optional(Type.Array(Type.String())),
   changes: Type.Array(Type.Object({
     address: Type.String(),
@@ -49,6 +50,7 @@ export function summarizeTurnChanges(args: {
   timestamp: number;
   outcome: TurnChangesMessage["outcome"];
   toolCallIds: ReadonlySet<string>;
+  ranOfficeJs?: boolean;
   audit: readonly WorkbookChangeAuditEntry[];
   backups: readonly Pick<WorkbookRecoverySnapshot, "id" | "at" | "toolCallId" | "address" | "changedCount">[];
 }): TurnChangesMessage | null {
@@ -67,8 +69,9 @@ export function summarizeTurnChanges(args: {
       for (const backup of saved) changes.push({ address: backup.address, changedCount: backup.changedCount, backupIds: [backup.id] });
     }
   }
-  return changes.length === 0 ? null : {
+  return changes.length === 0 && !args.ranOfficeJs ? null : {
     role: "turnChanges", turnId: args.turnId, timestamp: args.timestamp, outcome: args.outcome, changes,
+    ...(args.ranOfficeJs ? { ranOfficeJs: true } : {}),
   };
 }
 

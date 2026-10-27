@@ -30,12 +30,13 @@ registerMessageRenderer("turnChanges", {
       document.dispatchEvent(new CustomEvent("pi:turn-change-action", { detail: { action: name, summary: message } }));
     };
     return html`<div class="pi-turn-changes" data-outcome=${message.outcome} role="status">
-      <span>${t("turnChanges.summary", { ranges: addresses, count: message.changes.reduce((count, change) => count + change.changedCount, 0) })}</span>
+      ${message.changes.length > 0 ? html`<span>${t("turnChanges.summary", { ranges: addresses, count: message.changes.reduce((count, change) => count + change.changedCount, 0) })}</span>
       <span class="pi-turn-changes__actions">
         <button type="button" @click=${() => action("review")}>${t("turnChanges.review")}</button>
         <button type="button" ?disabled=${!hasBackups} @click=${() => action("undo")}>${t(message.undoneBackupIds?.length && !hasBackups ? "turnChanges.undone" : "turnChanges.undo")}</button>
-      </span>
+      </span>` : ""}
       ${partial ? html`<span class="pi-turn-changes__warning">${t("turnChanges.partial")}</span>` : ""}
+      ${message.ranOfficeJs ? html`<span class="pi-turn-changes__warning">${t("turnChanges.officeJsUncovered")}</span>` : ""}
     </div>`;
   },
 });

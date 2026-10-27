@@ -656,4 +656,12 @@ turnChangesList.messages = (["finished", "stopped", "failed"] as const).map((out
 }));
 turnChangesSection.append(turnChangesList);
 
+const turnCoverageSection = section("turn-coverage", "Turn undo coverage");
+const turnCoverageList = document.createElement("message-list");
+turnCoverageList.messages = [false, true].map((mixed): TurnChangesMessage => ({
+  role: "turnChanges", turnId: `gallery-coverage-${mixed}`, timestamp: 0, outcome: "finished", ranOfficeJs: true,
+  changes: mixed ? [{ address: "Sheet1!D7", changedCount: 1, backupIds: ["core-backup"] }] : [],
+}));
+turnCoverageSection.append(turnCoverageList);
+
 console.log("[ui-gallery] Rendered all sections");

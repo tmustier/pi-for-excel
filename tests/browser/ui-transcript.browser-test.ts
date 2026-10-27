@@ -309,3 +309,36 @@ void test("turn receipts render every ending and dispatch typed Review and Undo 
     await opened.finish();
   }
 });
+
+void test("Office.js-only and mixed turns explicitly disclose the limit of turn undo", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+    await page.evaluate(async () => {
+      const modulePath = "/src/messages/turn-changes.ts";
+      const { summarizeTurnChanges } = await import(modulePath);
+      const list = document.querySelector('[data-gallery="turn-changes"]')?.querySelector("message-list");
+      if (!list) throw new Error("Turn receipt gallery missing");
+      const shared = { timestamp: 1, outcome: "finished", ranOfficeJs: true, audit: [] };
+      list.messages = [
+        summarizeTurnChanges({ ...shared, turnId: "js-only", toolCallIds: new Set(["js"]), backups: [] }),
+        summarizeTurnChanges({ ...shared, turnId: "mixed", toolCallIds: new Set(["core", "js"]), backups: [
+          { id: "core-backup", at: 0, toolCallId: "core", address: "Sheet1!D7", changedCount: 1 },
+        ] }),
+      ];
+    });
+    const receipts = page.locator('[data-gallery="turn-changes"] .pi-turn-changes');
+    await page.waitForFunction(() => document.querySelectorAll('[data-gallery="turn-changes"] .pi-turn-changes').length === 2);
+    for (const receipt of await receipts.all()) {
+      assert.match(await receipt.innerText(), /Ran Office\.js code; not covered by Undo this turn\. Use \/backup/);
+    }
+    assert.equal(await receipts.first().getByRole("button", { name: "Undo this turn", exact: true }).count(), 0);
+    assert.doesNotMatch(await receipts.first().innerText(), /Changed.*Total: 0/);
+    await receipts.last().getByRole("button", { name: "Undo this turn", exact: true }).click();
+    assert.match(await receipts.last().innerText(), /Changed Sheet1!D7 · Total: 1/);
+    assert.match(await receipts.last().innerText(), /not covered by Undo this turn/);
+  } finally {
+    await opened.finish();
+  }
+});

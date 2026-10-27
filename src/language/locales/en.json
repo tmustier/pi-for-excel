@@ -1411,6 +1411,7 @@
   "turnChanges.undo": "Undo this turn",
   "turnChanges.undone": "Undone",
   "turnChanges.partial": "Some changes have no backup and can't be undone here.",
+  "turnChanges.officeJsUncovered": "Ran Office.js code; not covered by Undo this turn. Use /backup before running code for a full workbook backup.",
   "turnChanges.reviewTitle": "This turn's changes",
   "turnChanges.reviewChange": "{address} — {count} changed",
   "turnChanges.reviewBackups": "Backups: {ids}",
