@@ -393,3 +393,49 @@ void test("an expired login whose refresh fails asks the user to sign in again a
     assert.deepEqual(sentToAnthropic, [], "the expired token was sent to Anthropic");
   });
 });
+
+void test("GitHub Copilot login reaches its device code, and closing the code dialog stops the login", async () => {
+  await withTaskpane(async (page, context) => {
+    let tokenPolls = 0;
+    // In development GitHub's login endpoints go through Vite's /oauth-proxy/github route.
+    await context.route("**/oauth-proxy/github/login/device/code", (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        device_code: "device-1",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        interval: 1,
+        expires_in: 900,
+      }),
+    }));
+    await context.route("**/oauth-proxy/github/login/oauth/access_token", (route) => {
+      tokenPolls += 1;
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ error: "authorization_pending" }) });
+    });
+
+    await enterCommand(page, "/login");
+    await page.getByText("GitHub Copilot", { exact: true }).first().click();
+    await page.getByRole("button", { name: "Login with GitHub Copilot" }).click();
+    // GitHub Enterprise domain: blank means github.com.
+    const prompt = page.locator("#pi-prompt-overlay");
+    await prompt.locator("input").waitFor({ state: "visible" });
+    await prompt.getByRole("button", { name: /continue/i }).click();
+
+    await prompt.locator("code").filter({ hasText: "ABCD-1234" }).waitFor({ state: "visible" });
+    await expectPolls(() => tokenPolls > 0);
+
+    await page.keyboard.press("Escape");
+    await prompt.waitFor({ state: "detached" });
+    const pollsAtClose = tokenPolls;
+    await page.waitForTimeout(3_000);
+    assert.equal(tokenPolls, pollsAtClose, "the login kept polling after its dialog closed");
+    await page.getByRole("button", { name: "Login with GitHub Copilot" }).waitFor({ state: "visible" });
+  });
+});
+
+async function expectPolls(condition: () => boolean): Promise<void> {
+  for (let attempt = 0; attempt < 50 && !condition(); attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  assert.ok(condition(), "the login never polled for its token");
+}
