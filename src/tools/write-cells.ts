@@ -36,6 +36,8 @@ import {
   chunkRowsForWrite,
   classifySentValue,
   describeWriteObstacle,
+  formatInterruptedWrite,
+  formatStoppedAfterWrite,
   formatReplacedFormulas,
   formatVerificationNotes,
   formatVerificationProblems,
@@ -352,11 +354,6 @@ interface InterruptedWriteArgs {
   finalizeDependencies: MutationFinalizeDependencies;
 }
 
-function rowSpan(block: WriteBlock, offset: number, count: number): string {
-  const first = block.startRow + offset;
-  return count === 1 ? `row ${first}` : `rows ${first}–${first + count - 1}`;
-}
-
 /**
  * The write stopped partway (Stop, or an Excel failure): say exactly what is
  * in the workbook. Rows that landed stay, and are backed up and audited.
@@ -369,6 +366,14 @@ async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolRe
   const reason = cause.kind === "failed" ? cause.failure.reason : "";
   const errorCode = cause.kind === "failed" && cause.failure.code ? { errorCode: cause.failure.code } : {};
   const stopped = cause.kind === "stopped" ? { stopped: true } : {};
+  const text = formatInterruptedWrite({
+    cause: cause.kind === "stopped" ? cause : { kind: "failed", reason },
+    block,
+    sheetName: inspection?.sheetName ?? null,
+    fullAddr,
+    writtenRows,
+    uncertainRows,
+  });
 
   if (!inspection || writtenRows + uncertainRows === 0) {
     await finalizeMutationOperation(args.finalizeDependencies, {
@@ -382,44 +387,16 @@ async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolRe
         summary: cause.kind === "stopped" ? "stopped before writing" : `error: ${reason}`,
       },
     });
-    return errorResult(
-      cause.kind === "stopped"
-        ? `⏹ **Stopped before writing** — nothing changed in ${fullAddr}.`
-        : `Error writing cells — nothing was written to ${fullAddr}. ${reason}`,
-      { kind: "write_cells", blocked: false, address: fullAddr, ...errorCode, ...stopped, ...(cause.kind === "stopped" ? { writtenCount: 0 } : {}) },
-    );
+    return errorResult(text, {
+      kind: "write_cells", blocked: false, address: fullAddr, ...errorCode, ...stopped,
+      ...(cause.kind === "stopped" ? { writtenCount: 0 } : {}),
+    });
   }
 
-  const sheet = inspection.sheetName;
-  const writtenAddr = qualifiedAddress(sheet, blockAddress(block, 0, writtenRows));
   const touchedRows = writtenRows + uncertainRows;
-  const touchedAddr = qualifiedAddress(sheet, blockAddress(block, 0, touchedRows));
-  const remainingRows = block.rowCount - touchedRows;
-  const lines: string[] = [];
+  const touchedAddr = qualifiedAddress(inspection.sheetName, blockAddress(block, 0, touchedRows));
 
-  if (writtenRows > 0) {
-    lines.push(cause.kind === "stopped"
-      ? `⏹ **Stopped after writing ${writtenAddr}** (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) — the change stands.`
-      : `⚠️ **Partly written** — ${writtenAddr} (${rowSpan(block, 0, writtenRows)} of ${fullAddr}) was written and stands.`);
-  } else {
-    lines.push(cause.kind === "stopped"
-      ? `⏹ **Stopped while writing** ${fullAddr}.`
-      : `⚠️ **Outcome unknown** for ${fullAddr}.`);
-  }
-  if (uncertainRows > 0) {
-    lines.push(
-      `${rowSpan(block, writtenRows, uncertainRows)} (${qualifiedAddress(sheet, blockAddress(block, writtenRows, uncertainRows))}) ` +
-      "may or may not have been written: Excel did not confirm that step.",
-    );
-  }
-  if (remainingRows > 0) {
-    lines.push(`The remaining ${remainingRows} row(s) were not written.`);
-  }
-  if (reason) lines.push(reason);
-  lines.push("");
-  lines.push(`Nothing was rolled back. Read ${touchedAddr} before retrying${remainingRows > 0 ? " the rest" : ""}.`);
-
-  const result = errorResult(lines.join("\n"), {
+  const result = errorResult(text, {
     kind: "write_cells",
     blocked: false,
     address: fullAddr,
@@ -598,8 +575,7 @@ function formatWritten(
     return {
       content: [{
         type: "text",
-        text: `⏹ **Stopped after writing ${fullAddr}** ${size} — the change stands. ` +
-          "It was not verified because Stop was pressed; read the range before relying on it.",
+        text: formatStoppedAfterWrite(fullAddr, block),
       }],
       details: {
         kind: "write_cells", blocked: false, address: fullAddr, verification: "failed", stopped: true,
