@@ -229,6 +229,57 @@ test("stub mode libreoffice endpoint returns derived output path", async (t) => 
   assert.equal(payload.converter, "stub");
 });
 
+test("real mode returns a failed run's exit code, stdout and single traceback", async (t) => {
+  const bridge = await startBridge({ PYTHON_BRIDGE_MODE: "real" });
+  t.after(async () => {
+    await bridge.stop();
+  });
+
+  const health = await (await fetch(`http://127.0.0.1:${bridge.port}/health`, requestInit("GET"))).json();
+  if (!health.python?.available) {
+    t.skip("python3 is not installed");
+    return;
+  }
+
+  const response = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/python-run`,
+    requestInit("POST", { code: "print('before')\nimport notamodule_xyz" }),
+  );
+
+  assert.equal(response.status, 400);
+  const payload = await response.json();
+  assert.equal(payload.ok, false);
+  assert.equal(payload.exit_code, 1);
+  assert.equal(payload.stdout, "before");
+  assert.match(payload.stderr, /ModuleNotFoundError: No module named 'notamodule_xyz'/u);
+  assert.equal(payload.stderr.match(/Traceback/gu)?.length, 1);
+  assert.match(payload.error, /ModuleNotFoundError/u);
+});
+
+test("real mode accepts input_json up to its documented limit", async (t) => {
+  const bridge = await startBridge({ PYTHON_BRIDGE_MODE: "real" });
+  t.after(async () => {
+    await bridge.stop();
+  });
+
+  const health = await (await fetch(`http://127.0.0.1:${bridge.port}/health`, requestInit("GET"))).json();
+  if (!health.python?.available) {
+    t.skip("python3 is not installed");
+    return;
+  }
+
+  // Larger than the 128 KB a single environment variable may hold on Linux.
+  const inputJson = JSON.stringify({ values: ["é".repeat(190_000)] });
+  const response = await fetch(
+    `http://127.0.0.1:${bridge.port}/v1/python-run`,
+    requestInit("POST", { code: "result = len(input_data['values'][0])", input_json: inputJson }),
+  );
+
+  assert.equal(response.status, 200);
+  const payload = await response.json();
+  assert.equal(payload.result_json, "190000");
+});
+
 test("python bridge rejects invalid python payloads", async (t) => {
   const bridge = await startBridge();
   t.after(async () => {

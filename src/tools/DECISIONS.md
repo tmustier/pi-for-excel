@@ -254,6 +254,8 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Default runtime (Pyodide):** `python_run` and `python_transform_range` run in-browser via Pyodide (WebAssembly) with zero setup. Standard library and pure-Python packages (numpy, pandas, scipy, etc.) auto-install via micropip. ~15MB cold-start on first use, cached by the browser thereafter.
 - **Power-user upgrade (native bridge):** when a bridge URL is configured (Settings → Experimental) — or when a bridge is reachable at the default URL (`https://localhost:3340`) — Python tools use the local `python3` process. This unlocks C extensions, filesystem access, and long-running scripts. `libreoffice_convert` requires the native bridge (no Pyodide equivalent).
 - **Fallback order:** native bridge (configured URL or reachable default URL) → Pyodide (if WebAssembly + Workers available) → error.
+  - Pyodide runs only when the default-URL bridge could not be reached (`fetch` rejected, `PythonBridgeUnreachableError`). Any bridge response, including a Python error, and any timeout end the call: the code ran (or may still be running) on the bridge, and re-running it in Pyodide could run it twice.
+  - A failed run reports the backend, the exception line, stderr and stdout (`formatPythonFailure`). The bridge returns `exit_code`, `stdout` and `stderr` with its 400 for a failed run.
 - **System prompt awareness:** the agent knows Python is available by default via Pyodide and only mentions the native bridge when the task requires native-only capabilities.
 - **Gate model:**
   - no `python-bridge` experiment flag.

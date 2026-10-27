@@ -38,6 +38,8 @@ export interface PyodideWorkerResponse {
 interface PyodideInterface {
   runPythonAsync(code: string): Promise<unknown>;
   loadPackage(names: string | string[]): Promise<void>;
+  /** Load the Pyodide-distribution packages the code imports (numpy, pandas, scipy, …). */
+  loadPackagesFromImports(code: string): Promise<void>;
   globals: {
     set(name: string, value: unknown): void;
     get(name: string): unknown;
@@ -149,7 +151,8 @@ function detectImports(code: string): string[] {
     "inspect", "dis", "ast", "code", "codeop",
     "pickle", "shelve", "marshal",
     "platform", "sysconfig", "site",
-    // Pyodide built-in packages (pre-compiled WASM)
+    // Pyodide distribution packages (pre-compiled WASM): not preloaded, but
+    // loadPackagesFromImports loads them, so micropip must not try PyPI for them.
     "numpy", "np",
     "pandas", "pd",
     "scipy",
@@ -180,7 +183,15 @@ async function handleRun(request: PyodideWorkerRequest): Promise<PyodideWorkerRe
     await py.loadPackage(request.packages);
   }
 
-  // Auto-detect and install missing packages via micropip
+  // Load distribution packages the code imports (numpy, pandas, scipy, …).
+  // If this fails the import itself raises a clear ModuleNotFoundError.
+  try {
+    await py.loadPackagesFromImports(request.code);
+  } catch {
+    // ignore: reported by the code's own import
+  }
+
+  // Auto-detect and install other missing packages via micropip
   const detectedPackages = detectImports(request.code);
   if (detectedPackages.length > 0) {
     try {
