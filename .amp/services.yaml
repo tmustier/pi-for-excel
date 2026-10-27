@@ -12,7 +12,7 @@ services:
       - url: /src/ui-gallery.html
         title: UI gallery
   proxy:
-    # CORS proxy + OAuth callback listeners (1455, 8085, ...). Required by
+    # CORS proxy; binds OAuth callback listeners (1455, 8085, ...) during logins. Required by
     # openai-codex, Google Code Assist/Antigravity, and Anthropic OAuth logins.
     command: npm run proxy:https
     port: 3003

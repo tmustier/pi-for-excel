@@ -80,6 +80,13 @@ const OAUTH_CALLBACK_SERVER_ENABLED = !["0", "false", "no"].includes(
   (process.env.OAUTH_CALLBACK_SERVER || "").trim().toLowerCase(),
 );
 const OAUTH_CALLBACK_CAPTURE_TTL_MS = 10 * 60 * 1000;
+// Callback ports belong to other apps too (1455 is the Codex CLI's), so a
+// listener is bound only while the taskpane polls for that provider's login
+// and released after a capture or once polling stops for this long.
+const OAUTH_CALLBACK_LISTENER_IDLE_MS = (() => {
+  const ms = Number.parseInt(process.env.OAUTH_CALLBACK_LISTENER_IDLE_MS || "", 10);
+  return Number.isInteger(ms) && ms > 0 ? ms : 60_000;
+})();
 const MAX_OAUTH_CALLBACK_CAPTURES = 32;
 const OAUTH_CALLBACK_PROVIDER_CONFIGS = [
   {
@@ -406,7 +413,7 @@ function buildOAuthCallbackHtml(config, capture) {
 </html>`;
 }
 
-function handleOAuthProviderCallbackRequest(configs, port, req, res) {
+function handleOAuthProviderCallbackRequest(entry, req, res) {
   const remote = req.socket?.remoteAddress;
   if (!isAllowedClientAddress(remote, [])) {
     res.statusCode = 403;
@@ -419,7 +426,7 @@ function handleOAuthProviderCallbackRequest(configs, port, req, res) {
   const rawUrl = req.url || "/";
   let callbackUrl;
   try {
-    callbackUrl = new URL(rawUrl, `http://${OAUTH_CALLBACK_HOST}:${port}`);
+    callbackUrl = new URL(rawUrl, `http://${OAUTH_CALLBACK_HOST}:${entry.port}`);
   } catch {
     res.statusCode = 400;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -427,7 +434,7 @@ function handleOAuthProviderCallbackRequest(configs, port, req, res) {
     return;
   }
 
-  const config = configs.find((candidate) => candidate.path === callbackUrl.pathname);
+  const config = entry.configs.find((candidate) => candidate.path === callbackUrl.pathname);
   if (!config) {
     res.statusCode = 404;
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
@@ -445,6 +452,8 @@ function handleOAuthProviderCallbackRequest(configs, port, req, res) {
 
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
+  // The login has its code: hand the port back as soon as the page is sent.
+  res.once("finish", () => releaseOAuthCallbackListener(entry));
   res.end(buildOAuthCallbackHtml(config, capture));
 }
 
@@ -484,6 +493,9 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
 
   const capture = oauthCallbackCaptures.get(oauthCallbackKey(providerId, state));
   if (!capture) {
+    // Polling means a Pi login is in progress: bind its callback port only now.
+    const listener = findOAuthCallbackListener(providerId);
+    if (listener) armOAuthCallbackListener(listener);
     sendJson(res, 200, { status: "pending" });
     return;
   }
@@ -874,44 +886,58 @@ function groupOAuthCallbackProvidersByPort() {
   return byPort;
 }
 
-const oauthCallbackServers = OAUTH_CALLBACK_SERVER_ENABLED
+const oauthCallbackListeners = OAUTH_CALLBACK_SERVER_ENABLED
   ? Array.from(groupOAuthCallbackProvidersByPort(), ([port, configs]) => ({
       port,
       configs,
-      server: http.createServer((req, res) => handleOAuthProviderCallbackRequest(configs, port, req, res)),
+      server: null,
+      idleTimer: null,
+      lastListenError: null,
     }))
   : [];
 
-function listenOAuthCallbackServer(entry) {
-  let cleanedUp = false;
-  const cleanup = () => {
-    if (cleanedUp) return;
-    cleanedUp = true;
-    entry.server.off("error", onError);
-    entry.server.off("listening", onListening);
-  };
-
-  const onError = (err) => {
-    cleanup();
-    const code = typeof err?.code === "string" ? err.code : "listen_error";
-    console.warn(`[pi-for-excel] OAuth callback capture listener unavailable (${code}).`);
-    console.warn("[pi-for-excel] Affected OAuth logins will still work with manual callback URL paste.");
-  };
-
-  const onListening = () => {
-    cleanup();
-    console.log("[pi-for-excel] OAuth callback capture listener started.");
-  };
-
-  entry.server.once("error", onError);
-  entry.server.once("listening", onListening);
-  entry.server.listen(entry.port, OAUTH_CALLBACK_HOST);
+function findOAuthCallbackListener(providerId) {
+  return oauthCallbackListeners.find((entry) => entry.configs.some((config) => config.providerId === providerId));
 }
 
-function listenOAuthCallbackServers() {
-  for (const entry of oauthCallbackServers) {
-    listenOAuthCallbackServer(entry);
-  }
+/** Bind the provider's callback port for an in-progress login, or extend its idle deadline. */
+function armOAuthCallbackListener(entry) {
+  clearTimeout(entry.idleTimer);
+  entry.idleTimer = setTimeout(() => releaseOAuthCallbackListener(entry), OAUTH_CALLBACK_LISTENER_IDLE_MS);
+  entry.idleTimer.unref();
+  if (entry.server) return;
+
+  const server = http.createServer((req, res) => handleOAuthProviderCallbackRequest(entry, req, res));
+  entry.server = server;
+
+  server.once("error", (err) => {
+    if (entry.server !== server) return;
+    entry.server = null;
+    // Another app (e.g. the Codex CLI) owns the port; leave it alone and retry on the next poll.
+    const code = typeof err?.code === "string" ? err.code : "listen_error";
+    if (entry.lastListenError === code) return;
+    entry.lastListenError = code;
+    console.warn(`[pi-for-excel] OAuth callback capture listener on port ${entry.port} unavailable (${code}).`);
+    console.warn("[pi-for-excel] Affected OAuth logins will still work with manual callback URL paste.");
+  });
+
+  server.once("listening", () => {
+    entry.lastListenError = null;
+    console.log(`[pi-for-excel] OAuth callback capture listener bound on port ${entry.port} for a login.`);
+  });
+
+  server.listen(entry.port, OAUTH_CALLBACK_HOST);
+}
+
+function releaseOAuthCallbackListener(entry) {
+  clearTimeout(entry.idleTimer);
+  entry.idleTimer = null;
+  const server = entry.server;
+  if (!server) return;
+  entry.server = null;
+  server.close();
+  server.closeAllConnections();
+  console.log(`[pi-for-excel] OAuth callback capture listener on port ${entry.port} released.`);
 }
 
 function closeServer(server) {
@@ -1011,4 +1037,3 @@ async function listen(port) {
 }
 
 await listen(PORT);
-listenOAuthCallbackServers();

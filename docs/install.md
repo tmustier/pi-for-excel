@@ -181,7 +181,7 @@ curl -k -i -s \
 Notes:
 - Keep the proxy URL on **HTTPS** (`https://...`), not HTTP.
 - API-key providers generally work without proxy.
-- The local proxy also starts loopback-only callback listeners for browser OAuth flows so ChatGPT (`http://localhost:1455/auth/callback`), Anthropic (`http://localhost:53692/callback`), Google Code Assist (`http://localhost:8085/oauth2callback`), and Google Antigravity (`http://localhost:51121/oauth-callback`) can capture browser callbacks automatically. If a port is busy, the affected login still works via the manual URL paste fallback.
+- While a browser OAuth login is in progress, the local proxy binds a loopback-only callback listener so ChatGPT (`http://localhost:1455/auth/callback`), Anthropic (`http://localhost:53692/callback`), Google Code Assist (`http://localhost:8085/oauth2callback`), and Google Antigravity (`http://localhost:51121/oauth-callback`) can capture browser callbacks automatically. The listener is released once the callback is captured or about a minute after the login stops waiting, so other apps (such as the Codex CLI on port 1455) can use these ports the rest of the time. If a port is busy, the affected login still works via the manual URL paste fallback.
 - `3141` is the add-in/dev-server port; the local proxy normally uses `3003`.
 - GPT-5.6 Luna on the ChatGPT provider requires the current proxy's Codex WebSocket bridge. `https://localhost:3003/healthz` must advertise both `X-Pi-For-Excel-Proxy: 1` and `X-Pi-For-Excel-Codex-WebSocket-Bridge: 1`.
 - If an older proxy is running, stop that process and rerun `npx -y pi-for-excel-proxy@latest`; the current CLI intentionally refuses to reuse an outdated listener.
