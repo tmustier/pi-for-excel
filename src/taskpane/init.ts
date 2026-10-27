@@ -1102,8 +1102,11 @@ export async function initTaskpane(opts: {
                   .join("; ") + (request.overwrites.count > request.overwrites.sample.length ? "; …" : ""),
               })
               : null;
+            const title = deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange");
+            // Announced like every other approval (requestRuntimeToolApproval).
+            announce(t("announce.approval", { title }));
             return requestApproval({
-              title: deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange"),
+              title,
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
               ...(details ? { details } : {}),
               note: deletesBackups ? t("approval.note.deleteBackups") : t("approval.note.confirmMode"),
