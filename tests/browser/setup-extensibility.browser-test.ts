@@ -6,6 +6,45 @@ let env: TaskpaneServer;
 before(async () => { env = await startTaskpaneServer(); });
 after(async () => { await env.close(); });
 
+void test("native search follows a selected turn model after a schema-stable model switch", async () => {
+  const opened = await openTaskpane(env);
+  const { page } = opened;
+  try {
+    let nativeRequest = "";
+    await opened.context.route("**/api-proxy/openai/**", async (route) => {
+      nativeRequest = route.request().postData() ?? "";
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: { message: "Search fixture rejected", type: "invalid_request_error" } }) });
+    });
+    await connectFixtureProvider(page, "openai", "fixture-key");
+    await page.locator(".pi-status-model").click();
+    await page.getByPlaceholder("Search models…").fill("gpt-6-luna");
+    await page.getByRole("option").filter({ hasText: "gpt-6-luna" }).click();
+    await page.evaluate(async () => {
+      const streamPath = "/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";
+      const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+      const sidebarPath = "/src/ui/pi-sidebar.ts";
+      const { createAssistantMessageEventStream } = await import(/* @vite-ignore */ streamPath) as typeof import("@earendil-works/pi-ai/utils/event-stream");
+      const { fauxAssistantMessage } = await import(/* @vite-ignore */ fauxPath) as typeof import("@earendil-works/pi-ai/providers/faux");
+      const { PiSidebar } = await import(/* @vite-ignore */ sidebarPath) as typeof import("../../src/ui/pi-sidebar.ts");
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!(sidebar instanceof PiSidebar) || !sidebar.agent) throw new Error("sidebar missing");
+      let calls = 0;
+      sidebar.agent.streamFunction = () => {
+        const stream = createAssistantMessageEventStream();
+        const result = ++calls === 1
+          ? fauxAssistantMessage([{ type: "toolCall", id: "native-search", name: "web_search", arguments: { query: "official figures" } }], { stopReason: "toolUse" })
+          : fauxAssistantMessage("Search fixture finished");
+        stream.push({ type: "done", reason: result.stopReason === "toolUse" ? "toolUse" : "stop", message: result });
+        return stream;
+      };
+    });
+    await enterInput(page, "Search official figures");
+    await page.getByText("Search fixture finished", { exact: true }).waitFor();
+    assert.match(nativeRequest, /"model"\s*:\s*"gpt-6-luna"/);
+    assert.match(nativeRequest, /"type"\s*:\s*"web_search"/);
+  } finally { await opened.finish(); }
+});
+
 void test("no-provider send keeps the draft and opens labelled, no-setup-first provider choices", async () => {
   const opened = await openTaskpane(env);
   const { page } = opened;

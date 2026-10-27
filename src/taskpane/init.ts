@@ -1145,12 +1145,12 @@ export async function initTaskpane(opts: {
             ...approvalSource(),
           }),
           nativeSearch: async (query, signal) => {
-            // Capture the capability snapshot: a busy picker change applies
-            // to the next run, not the search already executing in this one.
-            if (!supportsNativeWebSearch(model)) return null;
-            const apiKey = await runtimeAgent?.getApiKey?.(model.provider);
+            // Handler identity survives schema-stable refreshes. Read the
+            // run's captured model, not the model from this capability build.
+            if (!supportsNativeWebSearch(nativeSearchModel)) return null;
+            const apiKey = await runtimeAgent?.getApiKey?.(nativeSearchModel.provider);
             if (!apiKey) return null;
-            return runNativeWebSearch({ model, apiKey, query, signal, sessionId, stream: streamFn });
+            return runNativeWebSearch({ model: nativeSearchModel, apiKey, query, signal, sessionId, stream: streamFn });
           },
         }),
         ...extensionTools,
@@ -1292,6 +1292,7 @@ export async function initTaskpane(opts: {
     const activeSelection = getActiveRuntime()?.agent.state.model;
     const initialModel = (activeSelection && modelRuntime.models.getModel(activeSelection.provider, activeSelection.id))
       ?? modelRefreshOwner.snapshot().defaultModel;
+    let nativeSearchModel = initialModel;
     const autoContext = createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId });
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
@@ -1487,6 +1488,9 @@ export async function initTaskpane(opts: {
         currentTurnId = crypto.randomUUID();
         currentTurnCalls = new Set();
         currentTurnRanOfficeJs = false;
+        // A busy picker updates state for the next run; the current run keeps
+        // the provider/model it started on, including its native search calls.
+        nativeSearchModel = modelRuntime.models.getModel(agent.state.model.provider, agent.state.model.id) ?? initialModel;
       }
       if (ev.type === "tool_execution_start") {
         toolTurns.set(ev.toolCallId, currentTurnId);
