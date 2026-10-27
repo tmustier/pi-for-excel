@@ -1,6 +1,6 @@
 # Verification: integration-fixes against the agent experience
 
-**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. The two builds do not differ in the code those rows exercise.
+**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. AUTO-09, STRUCT-01, TIME-01 and TIME-02 were then run on `e48d83c`, and EDIT-05 was routed to the Mac verification thread. The two builds do not differ in the code those rows exercise.
 
 **Setup.** The tests ran on Excel on the web in an orb (`node scripts/orb/excel-web-session.mjs --check`), with the dev server serving the branch checkout. The workbooks were anonymous guest workbooks: `orb-afa50678b930-20261027013600.xlsx`, then `…20261027022640.xlsx`. The fixture follows [README.md](README.md#how-to-run-a-pass): Dates, Merged, Protected, Tbl (table Sales, filtered to North), Spill, Valid, My Sheet, Calc, Co, and Big (200,001 × 5).
 
@@ -18,7 +18,7 @@ Every model request was captured from CDP `Network.requestWillBeSent` on the tas
 | Set | Pass | Fail | Blocked |
 | --- | ---: | ---: | ---: |
 | Bug triage B-01 to B-25 | 24 | 1 | 0 |
-| Checklist rows (foundations-and-reading, writing, hostility) | 119 | 2 | 5 |
+| Checklist rows (foundations-and-reading, writing, hostility) | 123 | 2 | 1 |
 | Analyst tasks | 3 succeeded | 2 partial | — |
 
 Regressions found on `a2b3f2d`:
@@ -74,7 +74,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | AUTO-06 | pass | `Big!A1:A5000`: a 1,201-char note. |
 | AUTO-07 | pass | Whole column described by address, size and sample. |
 | AUTO-08 | pass | Cell-edit mode gives "Unavailable: Excel is in cell-edit mode". |
-| AUTO-09 | blocked | Files workspace summary not rerun. |
+| AUTO-09 | pass | Rerun on e48d83c. With nothing relevant in the workspace (only `assistant-docs/`), `getContextSummary` returns `hasRelevantFiles: false`, and no Files note appeared in any of 60 captured requests. After `imports/probe-auto09.csv` was added, the next request carried `Files workspace (initial): imports/: 1 file (imports/probe-auto09.csv)`, and the agent named the file. |
 | AUTO-10 | pass | Pi's own write is not listed. |
 | AUTO-11 | pass | Edit on a sheet added after start is listed. |
 | AUTO-12 | pass | The edit note is kept in calls 2+ of the turn and in later turns. |
@@ -137,7 +137,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | FMT-02 | pass | |
 | FMT-03 | pass | Protection named. **a2b3f2d** stored a 0-change backup anyway; **e48d83c** stores none. |
 | FMT-04 | pass | |
-| STRUCT-01 | blocked | Not rerun. |
+| STRUCT-01 | pass | Rerun on e48d83c. The claim still holds: `modify_structure delete_rows Tbl` at row 3 deleted the filtered-out (hidden) "South, b" row and returned `Deleted 1 row(s) starting at row 3 in "Tbl".`, with a backup but no mention of the table, its filter or the hidden row. A read afterwards shows the table shrunk to A1:D6. This is still a hazard for the agent (see observations). |
 | STRUCT-02 | pass | |
 | STRUCT-03 | pass | "the workbook was not changed. Sheet "Protected" is protected …" |
 | STRUCT-04 | pass | |
@@ -173,7 +173,7 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | EDIT-02 | pass | After 58 s: "nothing was written … ask the user". |
 | EDIT-03 | pass | Real turn: about 17 s wait between calls, then completed with three reads. |
 | EDIT-04 | pass | Raw `onChanged.add` still fails in edit mode, as expected. The tracker registers at start. |
-| EDIT-05 | blocked | Desktop only. |
+| EDIT-05 | blocked | Desktop only; routed to the Mac verification thread. |
 | MOVE-01 | pass | User edit `Unknown`, Pi `ThisLocalAddin`, co-author `Remote`. |
 | MOVE-02 | pass | Product call: the result names the sheet (B-17). |
 | MOVE-03 | pass | Agent answered "You changed UserAdded2!F11 …" from the stored note. |
@@ -197,8 +197,8 @@ Both are fixed and verified on `e48d83c`. Open new bugs: 6, all low severity (se
 | STOP-01 | pass | Stop before the batch: J1:J10 unchanged, turn ended 2.7 s after Stop. The result says "outcome unknown … may still be applied", which is conservative but not exact. |
 | STOP-02 | pass | Stop after the batch: K11:K20 written, backup saved, turn ended 2.6 s after Stop. The result says "outcome unknown", not "the change stands" (N-4). |
 | STOP-03 | pass | Hung `Excel.run`: "Stopped by the user before Excel answered", 2.6 s. |
-| TIME-01 | blocked | The burst rerun was skipped to protect the shared host and rate limit. |
-| TIME-02 | blocked | A real host hang was not reproduced; simulated by a never-settling `Excel.run` (B-20). |
+| TIME-01 | pass | Rerun on e48d83c as a small burst. Probe calls make no model requests, so the shared login and its rate limit were not involved and no separate login was needed. Results: 30 parallel `read_range` of 500×5 pages in 5.1 s; 20 parallel `write_cells` serialized through the lock in 5.1 s, all 20 landed; 100 parallel raw 5,000-cell reads in 4.6 s; no errors. A `read_range` straight after the burst took 4.0 s. Overload shows as delay, not as a throttling error, as the claim says. |
+| TIME-02 | pass (simulated) | A real host hang can't be produced on purpose. The first pass got one only by firing 150 parallel 10,000-cell volatile-formula batches; that is not repeatable, needs a page reload to recover, and stalls the shared Excel on the web host and guest workbook for the other orbs. So `Excel.run` in the taskpane was replaced with a never-settling promise, which is the symptom of a hang as the code sees it. Rerun on e48d83c: `write_cells` returned `excel_timeout` with `isError` after 60.0 s. In a real turn, Stop ended a hung `read_range` 2.7 s after it was pressed ("Stopped by the user before Excel answered"). Once `Excel.run` was restored, the next read and the next turn worked, so the lock had been released. The same behavior was seen on a2b3f2d (B-20). |
 
 ### Prompt-cache prefix (`prefixChangeReasons`)
 
@@ -265,3 +265,6 @@ Also partial, from the SIZE-01 turns: a wrong Qty sum (8,965 vs 8,978) stated co
 - **The compaction summarizer shares the chat's `prompt_cache_key`.** Telemetry counts two `[systemPrompt, tools]` prefix changes per `/compact`.
 - **Text numbers look like numbers in the compact read.** A number stored as text (`"12"`) renders the same as a number, which led to task 5's missed AVERAGE bug. Only detailed mode shows `text (@)`.
 - **Failed `python_run` and read_range results keep `isError: false`.**
+- **A row delete by position in a filtered table removes a hidden row without saying so** (STRUCT-01). The agent cannot tell from the result that it deleted a row the user could not see.
+- **Structural changes made outside a Pi write window are attributed to the user.** Excel reports `RowInserted` and `RowDeleted` with `triggerSource: "Unknown"`, even from the add-in. Pi's own row insert was correctly left out of its own tab's note and listed under "By Pi in another chat tab" in the other tab. A probe delete made outside any tool call was listed "By the user". In the product this affects only add-in code with no write window, such as extensions.
+- **Routed elsewhere:** OJS-03 to #791; SIZE-01 and task 5's AVERAGE miss to #787.
