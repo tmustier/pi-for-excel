@@ -165,6 +165,9 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7 |
 | [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-156](#p-156-tab-from-an-open-dialog-in-excel-on-the-web-moves-focus-out-of-the-add-in) | Tab from an open dialog in Excel on the web moves focus out of the add-in | medium | dialogs | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Assigned to #789 (follow-up; not yet in the PR) |
+| [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Assigned to #793 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -1443,6 +1446,18 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`. Fixed in #790 (e65c3b7): audited reads no longer emit a change event. In Excel on the web: 199 "audit" events in 2 s before, 0 after, and Copy content works. Not yet re-checked on a Mac.
 - **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7
 
+### P-156: Tab from an open dialog in Excel on the web moves focus out of the add-in
+
+- **Where the user meets it:** Any open overlay dialog (Settings, Resume, approvals) in Excel on the web; press Tab from the card or its last control.
+- **What happens / what was expected:** Focus leaves the taskpane for the Excel page. Expected: focus stays trapped in the dialog.
+- **Reproduce:** Open any dialog in Excel on the web, Tab to its last control, press Tab.
+- **Why (from the code):** Office.js's window Tab handler ignores defaultPrevented and overrides the trap; the trap calls preventDefault but not stopPropagation (src/ui/overlay-dialog.ts:269-289).
+- **Severity:** `medium`. Keyboard users lose their place, with no visible way back into the dialog.
+- **Decision needed:** `fix`. Stop propagation in the focus trap.
+- **Raised by:** sessions-and-commands integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+
 ## Low
 
 ### P-106: The approval dialog uses two names for the mode and does not say where every change lands
@@ -2043,4 +2058,28 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Use #795's copyText.
 - **Raised by:** PROXY-10 (integration-fixes verification, setup cluster, 27 October 2026)
 - **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+
+### P-157: Ctrl+Z in one tab's composer brings back text typed in another tab
+
+- **Where the user meets it:** Composer, after typing in one tab and switching to another.
+- **What happens / what was expected:** Undo restores the other tab's text. Expected: undo history is per tab.
+- **Reproduce:** 1. Type in tab A. 2. Switch to tab B. 3. Press Ctrl+Z.
+- **Why (from the code):** All tabs share one textarea and so one browser undo history (src/taskpane/runtime-sidebar-binding.ts:25-26).
+- **Severity:** `low`. Confusing, and could leak a draft into the wrong chat, but the user sees it before sending.
+- **Decision needed:** `fix`. Clear or isolate the undo history on tab switch.
+- **Raised by:** sessions-and-commands integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
+- **Owner:** Assigned to #789 (follow-up; not yet in the PR)
+
+### P-158: After a stopped compaction the "Compacting…" toast stays up to 60 s
+
+- **Where the user meets it:** `/compact`, then Stop while it runs.
+- **What happens / what was expected:** The "Compacting…" toast stays for up to 60 s after "Compaction stopped". Expected: it is replaced at once.
+- **Reproduce:** 1. Run /compact on a long session. 2. Stop it.
+- **Why (from the code):** "Compaction stopped" is shown without the toast id of the "Compacting…" toast (src/commands/builtins/export.ts:851).
+- **Severity:** `low`. A stale status message.
+- **Decision needed:** `fix`. Give "Compaction stopped" the same toast id.
+- **Raised by:** sessions-and-commands integration verification, 27 October 2026
+- **Status:** Mostly fixed on integration-fixes e48d83c; this case remains.
 - **Owner:** Assigned to #793 (follow-up; not yet in the PR)

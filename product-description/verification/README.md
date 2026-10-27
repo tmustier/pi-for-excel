@@ -65,6 +65,7 @@ Second pass: 27 October 2026, on the `integration-fixes` branch (all open fix PR
 | Cluster | Items | Pass | Fail | Blocked |
 | --- | --- | --- | --- | --- |
 | [setup](integration-fixes/setup.md) | 134 | 132 | 2 | 0 |
+| [sessions-and-commands](integration-fixes/sessions-and-commands.md) | 129 | 127 | 0 | 2 |
 
 The other clusters are in progress.
 
