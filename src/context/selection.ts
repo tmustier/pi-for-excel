@@ -78,7 +78,7 @@ function formatGrid(blocks: readonly RowBlock[], startCol: number, colCount: num
     for (let r = 0; r < block.values.length; r++) {
       const cells = letters.map((_, c) => {
         const shown = formatDisplayedCell(block.values[r]?.[c], block.text[r]?.[c], block.numberFormats[r]?.[c]).text;
-        const text = shown.replace(/\r?\n/g, " ").replace(/\|/g, "\\|");
+        const text = shown.replace(/\r?\n/g, " ").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
         return text.length > maxCellChars ? `${text.slice(0, maxCellChars - 1)}…` : text;
       });
       const line = `| ${block.startRow + r + 1} | ${cells.join(" | ")} |`;

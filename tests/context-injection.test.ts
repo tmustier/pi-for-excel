@@ -10,6 +10,7 @@ import {
   type TranscriptContext,
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
+import { marked, type Tokens } from "marked";
 
 import { ChangeTracker, type PiWriteOrigin, type PiWriteWindow } from "../src/context/change-tracker.ts";
 import { readSelectionContext } from "../src/context/selection.ts";
@@ -320,6 +321,7 @@ function installSelection(options: {
   columnCount: number;
   used: { address: string; rowIndex: number; columnIndex: number; rowCount: number; columnCount: number } | null;
   fail?: { code: string; message: string };
+  values?: string[][];
 }): () => void {
   const sheet = {
     name: "Data",
@@ -327,7 +329,8 @@ function installSelection(options: {
     getRangeByIndexes: (row: number, col: number, rows: number, cols: number) => {
       // Long text in every cell: the sample must stay bounded regardless.
       const values = Array.from({ length: rows }, (_, r) =>
-        Array.from({ length: cols }, (_, c) => `Row ${row + r + 1} col ${col + c} ${"x".repeat(200)}`));
+        Array.from({ length: cols }, (_, c) => options.values?.[row + r]?.[col + c]
+          ?? `Row ${row + r + 1} col ${col + c} ${"x".repeat(200)}`));
       const formats = values.map((r) => r.map(() => "General"));
       return { values, formulas: values, text: values, numberFormat: formats, load: () => {} };
     },
@@ -344,6 +347,25 @@ function installSelection(options: {
 }
 
 const USED = { address: "Data!A1:Z5000", rowIndex: 0, columnIndex: 0, rowCount: 5000, columnCount: 26 };
+
+void test("selection Markdown keeps backslashes, pipes and neighboring cells without changing newline wording", async () => {
+  const range = { address: "Data!A1:D1", rowIndex: 0, columnIndex: 0, rowCount: 1, columnCount: 4 };
+  const uninstall = installSelection({
+    ...range,
+    used: range,
+    values: [[String.raw`back\|pipe`, "control", "two\nlines", String.raw`two\\|pipes`]],
+  });
+  try {
+    const { text } = await readSelectionContext();
+    const table = marked.lexer(text).find((token): token is Tokens.Table => token.type === "table");
+    assert.ok(table);
+    assert.deepEqual(table.rows[0]?.map((cell) => marked.parseInline(cell.text)), [
+      "1", String.raw`back\|pipe`, "control", "two lines", String.raw`two\\|pipes`,
+    ]);
+  } finally {
+    uninstall();
+  }
+});
 
 void test("a 5,000-row selection sends its size and a bounded sample, not every row", async () => {
   const uninstall = installSelection({ address: "Data!A1:A5000", rowIndex: 0, columnIndex: 0, rowCount: 5000, columnCount: 1, used: USED });
