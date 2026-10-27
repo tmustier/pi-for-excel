@@ -180,7 +180,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
 | [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Not reproduced on main ff15b31 (closed) |
 | [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (merged 27 October 2026) |
-| [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning |
+| [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Fixed in [#833](https://github.com/tmustier/pi-for-excel/pull/833) (merged 27 October 2026) |
 
 ## High
 
@@ -2250,5 +2250,5 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`.
 - **Raised by:** CL-01 implementation (#808), 27 October 2026
-- **Status:** Scope decision: not required for CL-01; #808 must say these changes are not covered.
-- **Owner:** Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning
+- **Status:** Fixed in #833 (3c259d6). The end-of-turn line now names the cells Office.js code changed, from host change events, and says they are not covered by Undo this turn. Undoing them is still not possible. Checked in a real Excel-on-the-web turn ("Office.js code changed Sheet1!X20, Sheet1!Y20:Y21; not covered by Undo this turn").
+- **Owner:** Fixed in [#833](https://github.com/tmustier/pi-for-excel/pull/833) (merged 27 October 2026)
