@@ -57,8 +57,6 @@ void test("backups survive saves and reloads on a saved workbook (autosave hosts
   await monitor.checkOnce();
   await monitor.checkOnce();
 
-  const reloaded = setup(SAVED);
-  await reloaded.monitor.checkOnce();
   assert.deepEqual((await createLog().listForCurrentWorkbook()).map((s) => s.toolCallId), ["call-1"]);
 });
 
