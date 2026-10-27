@@ -1,5 +1,7 @@
 # Host differences
 
+**Behavior update:** CC-04/05/08/10 shipped in [PR #802](https://github.com/tmustier/pi-for-excel/pull/802). The keyboard, answer-copy and theme notes describe the merged behavior; historical host observations below remain identified as such.
+
 ## Summary
 
 Pi for Excel is one web page that runs inside three different hosts: Excel desktop on macOS, where the taskpane is a WKWebView (Safari's engine); Excel desktop on Windows, where it is a WebView2 (Edge's engine); and Excel on the web, where it is an iframe inside the user's browser tab. The same code runs everywhere, and Pi almost never asks which host it is on. The differences the user meets come from the host instead: which Office.js features Excel provides, which browser features the webview allows (native dialogs, clipboard, downloads, popups, requests to `localhost`), which keys reach the taskpane before Excel or the browser takes them, how the workbook's location is reported, and whether Excel reports unsaved changes. This document lists those differences. macOS desktop is the reference host: it is the one the release checklist requires, Windows needs one pass, and Excel on the web is an optional sanity pass (`docs/release-smoke-test-checklist.md`). Installing the add-in on each host is covered by [docs/install.md](../../docs/install.md).
@@ -52,18 +54,20 @@ Pi uses the browser's own prompt in two places: renaming a tab by double-click o
 
 Excel and the browser see keys before the taskpane does, and keep some of them.
 
-- **Tab switching.** Left and Right arrows switch tabs when focus is not in a text field (confirmed on the web). For hosts that swallow plain arrows, Pi also accepts Cmd+Shift+[ and Cmd+Shift+] (macOS) and Ctrl+PageUp and Ctrl+PageDown (Windows). On Excel on the web, these fallback chords are the browser's own tab-switching shortcuts: Ctrl+PageUp/PageDown switched browser tabs and never reached Pi (confirmed in Chrome on Linux).
+- **Tab switching.** Plain Left/Right switch outside text fields. Ctrl+Alt+Left/Right (Control+Option on Mac) switch even from the composer. The old host-specific PageUp/bracket aliases are removed.
 - **Restore queued.** Some webviews turn Alt/Option+Up into PageUp; Pi accepts Alt/Option+PageUp for the same action.
-- **Browser-reserved chords.** On Excel on the web, Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl/Cmd+Shift+T are browser shortcuts that pages normally never receive: they open a browser tab, close the browser tab running Excel (and with it the taskpane), and reopen a closed browser tab. Confirmed with real key input in Chrome on Linux; the one exception seen was Ctrl+Shift+T reaching Pi when Chrome had no closed browser tab to reopen. A browser tab reopened after Ctrl+W comes back with Excel but without the taskpane. Pi's "+" button, the tab's close button, `/reopen` and the undo toast are the reliable paths there. Ctrl/Cmd+O does reach Pi. See [keyboard shortcuts](../ui/keyboard-shortcuts.md#what-excel-on-the-web-does-with-the-keys).
-- **Shift+Tab.** On Excel on the web, Office.js's own key handler in the taskpane frame moves focus on Tab and Shift+Tab even when Pi has cancelled the key, so Shift+Tab both changes the thinking level and moves focus backwards (confirmed). On desktop (read from code) it only changes the level.
-- **F6 and Shift+F6** move focus between the grid and the taskpane in Excel desktop; that is Excel's behavior, listed on Pi's shortcuts page. On Excel on the web F6 moved focus out of the page to the browser, not to the grid (confirmed).
+- **Browser-reserved chords.** Pi no longer binds Ctrl/Cmd+T/W/Shift+T. It uses Ctrl+Alt+N/W/Shift+T on all hosts, avoiding the browser-tab shortcuts previously observed in Chrome. Ctrl/Cmd+Z is never reopen, even during the close toast. Buttons, `/reopen` and the undo toast still work. See [keyboard shortcuts](../ui/keyboard-shortcuts.md#what-excel-on-the-web-does-with-the-keys).
+- **Shift+Tab.** The stacked turn change leaves it to reverse focus navigation. Thinking cycles with Ctrl+Alt+T (Control+Option+T on Mac), composer only. Modals suppress background shortcuts.
+- **F6 and Shift+F6** are host/browser behavior, not Pi bindings, and are no longer listed on Pi's page. On Excel on the web F6 moved focus out to the browser rather than the grid in the historical pass.
 - **Labels.** The shortcuts page shows macOS symbols (⌘, ⌥, ⇧) when the computer is a Mac, including Excel on the web in a Mac browser, and Windows names otherwise.
 
 See [keyboard shortcuts](../ui/keyboard-shortcuts.md) for the full list.
 
 ### Clipboard, downloads and popups
 
-- **Clipboard.** Copy actions use the browser clipboard. On Excel on the web the taskpane frame does not have the clipboard-write permission (confirmed: `writeText` fails with "The Clipboard API has been blocked because of a permissions policy applied to the current document"). There `/copy` shows nothing at all (no toast, no error; confirmed), the proxy banner's "Copy command" selects the command text instead so the user can copy it by hand (confirmed), and a code block's "Copy" still says "Copied!" because its older fallback copy method reports success (confirmed; what reached the clipboard was not checked).
+- **Clipboard.** Excel-web frames can deny the clipboard API by permissions policy. Answer, table and code copy use the shared `copyText` path: clipboard API, older copy method, then a selected-text manual-copy dialog. Tables become TSV for pasting into Excel cells. Manual fallback does not display a false success. Native clipboard delivery still needs host acceptance; browser tests verify exact fallback text. Other surfaces' historical clipboard findings below are outside CC-05.
+- **Answer references.** Completed prose links valid sheet-qualified A1 ranges on known workbook sheets; clicking uses Excel's own selection API on desktop and web. Code and ordinary links are untouched. See [message rendering](../ui/message-rendering.md#cell-links).
+- **Theme.** Follow Office is now the default, with Light/Dark overrides in Settings. No usable Office theme means light, not an OS fallback. The host snapshot is re-read each second. Dark native controls and tab-strip surfaces include the P-170 fixes. See [language and theme](../ui/language-and-theme.md#the-theme).
 - **Downloads** (manual backups, `/export`, downloading from the Files workspace) first open the file in a new window, because WKWebView ignores the usual download link, and fall back to a download link when the window is blocked. What the user then sees (a new browser tab, a save dialog, or the file in the default browser) is decided by the host. On Excel for Mac nothing happens at all: no window, no save dialog, no file, with Excel in front or not, while the success toast still shows (confirmed in Excel for Mac for `/export download`, `/backup`, `/backup restore` and the Files preview's "Download" and "Open ↗").
 - **OAuth popups.** Logging in with an account opens the provider's page in a new window, without a link back to Pi. The login is completed either by the local proxy catching the redirect or by the user pasting the final URL into Pi; see [welcome and login](../setup/welcome-and-login.md).
 
@@ -97,7 +101,7 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 | --- | --- | --- |
 | Stop (button or Escape) | Escape reaches the taskpane on every host when the taskpane has focus. | Same on every host. |
 | The user sends something else | Enter, Shift+Enter and Alt/Option+Enter work on every host. | Same. |
-| Tab switched, created, closed or reopened | On Excel on the web, Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl/Cmd+Shift+T act on the browser, not on Pi; double-click rename does nothing. | Ctrl/Cmd+W on the web closes Excel's browser tab, which ends the turn as if the taskpane went away. |
+| Tab switched, created, closed or reopened | Common Ctrl+Alt chords act inside Pi; old browser chords remain browser actions. | Busy close retains normal confirmation; switching does not stop work. |
 | An overlay or menu opens | Same everywhere; native prompts throw on the web. | Same. |
 | Model or thinking level changes | No host difference. | No host difference. |
 | The provider fails | The network error text differs by engine, which changes whether the CORS banner or "LLM error: …" is shown; see [provider errors and offline](provider-errors-and-offline.md). | Same. |

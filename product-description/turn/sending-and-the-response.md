@@ -2,6 +2,8 @@
 
 Behaviour as of [PR #803](https://github.com/tmustier/pi-for-excel/pull/803), implementing CL-03, CL-05, CC-01 and CC-02. Historical review observations about rotating hints and duplicate error banners no longer describe this version.
 
+**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802) shipped the completed-answer references and copy actions described below.
+
 ## Summary
 
 An accepted send puts the user's message into the tab's turn. Pi gathers workbook context, obtains credentials, asks the model, runs requested tools, and streams the answer until done, stopped or failed. The [composer](the-composer.md) owns drafting; [steering and the queue](steering-and-the-queue.md) owns messages sent while work is running.
@@ -55,6 +57,8 @@ The transcript follows new content unless the user deliberately scrolls up. Retu
 - **Done:** no further tool calls or waiting messages; the streaming cursor, working line and busy dot disappear.
 - **Aborted:** the partial answer remains with “Request aborted”; no failure banner is raised.
 - **Failed:** one inline plain-language explanation, Retry, a relevant fix action and collapsed diagnostic Details. No separate run-error banner. A failure belongs to its tab even if it happened in the background.
+
+Completed answer text offers **Copy answer**, and each markdown table offers **Copy table** as tab-separated text for pasting into Excel cells. Thinking and tool output are not copied as part of the answer. Valid sheet-qualified references on known workbook sheets become clickable in completed prose and select the range in Excel; code and ordinary links are unchanged. Clipboard failure opens the shared selected-text manual-copy dialog instead of claiming success. See [message rendering](../ui/message-rendering.md).
 
 As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (CL-01),
 each ending also shows a typed receipt when the turn changed the workbook:
