@@ -236,6 +236,10 @@ void test("dev rewrite routes OAuth hosts to dedicated proxies", () => {
     rewriteDevProxyUrl("https://console.anthropic.com/v1/oauth/token"),
     "/oauth-proxy/anthropic/v1/oauth/token",
   );
+  assert.equal(
+    rewriteDevProxyUrl("https://api.github.com/copilot_internal/v2/token"),
+    "/api-proxy/github/copilot_internal/v2/token",
+  );
 });
 
 void test("dev rewrite routes cloudcode hosts to dedicated proxies", () => {

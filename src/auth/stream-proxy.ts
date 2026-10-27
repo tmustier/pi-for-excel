@@ -71,6 +71,7 @@ function shouldProxyProvider(
   switch (p) {
     // Known to require proxy in browser webviews (CORS blocked)
     case "openai-codex":
+    case "github-copilot":
       return true;
 
     // Anthropic OAuth tokens are blocked by CORS; some orgs also block direct browser access.
