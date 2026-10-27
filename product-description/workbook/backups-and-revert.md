@@ -12,6 +12,58 @@ For anything other than the latest change, the user opens the gear menu and choo
 
 Saving, AutoSave and reloading the taskpane do not clear backups, on desktop or the web. Save As moves the open workbook's history to its new identity rather than wiping or copying it. The warning explains the remaining risk: "Backups stay on this computer through saves and Save As. The oldest are removed only above 512 MiB. Browser or Excel cache clearing and storage eviction can erase backups, chats, sign-ins and settings. Download a full backup for durable recovery."
 
+## Review and undo a turn (CL-01)
+
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808), every
+finished, stopped or failed turn that changed the workbook adds a receipt
+under its reply: **Changed {ranges} · Total: {count} · Review · Undo this
+turn**. Stopped and failed receipts have stronger amber/red accents. The
+receipt is typed data, not parsed reply text: it keeps the turn id, addresses,
+changed counts and backup ids. Backups carry the same turn id. Receipts save
+with the conversation and are not sent to the model.
+
+**Review** opens the exact changes, counts and backup ids. **Undo this turn**
+restores the turn's available backups in reverse workbook-write order,
+including overlapping ranges and backups left by a partially failed tool.
+The collector follows all metadata cursor pages; a turn with more than 50
+backups is not silently truncated.
+
+Every restore uses the same later-edit check as `/revert`: **Overwrite later
+edits?** names the cells and offers **Keep my edits** or **Restore anyway**.
+Keeping edits stops the remaining undo sequence. Completed restores stay
+recorded, so retrying Undo continues rather than applying them twice. Restores
+save ordinary inverse backups; those can be restored from Backups or `/revert`.
+An inverse-backup storage failure is reported, not hidden.
+
+If some changes have no backup, the receipt says so; Undo covers only the
+available backups and is disabled when none remain. It does not promise to
+reconstruct chart deletes, arbitrary Office.js changes or evicted backups.
+Those destructive actions have their own [consent boundary](confirm-mode-and-approvals.md).
+
+Any turn that actually starts direct Office.js code also gets an explicit,
+translated coverage notice: **Ran Office.js code; not covered by Undo this
+turn. Use /backup before running code for a full workbook backup.** This
+notice appears even for an Office.js-only turn with no core-tool backups;
+there is no misleading zero-change summary or Undo control in that case.
+Mixed turns retain Review/Undo for their core backups, but the warning stays
+visible in both the receipt and Review, including after those backups are
+undone. It is based on tool execution, not parsing the code or guessing ranges.
+Exact range tracking and automatic backup of arbitrary Office.js remain a
+separate follow-up.
+
+Verified in real Excel on the web with GPT-6 Luna: two overlapping writes,
+later manual edit cancellation and overwrite, reverse undo to the original
+blank cells, inverse `/revert`, and a stopped write whose receipt remained
+after reload. Public recovery tests cover all three endings and a 57-backup
+turn with partial undo/resume.
+
+Additional PR #808 acceptance used real GPT-6 Luna: an Office.js-only write
+set X8 to 88 and produced the uncovered notice without an Undo control; a
+mixed turn set X11 to 111 through `write_cells` and X12 to 112 through code.
+Undo restored only X11 to blank, left X12 at 112, and kept the warning. Review
+also displayed the same coverage limit. Values were independently read from
+Excel, not inferred from the answer.
+
 ## The interaction, event by event
 
 ```mermaid
