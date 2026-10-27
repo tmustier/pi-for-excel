@@ -113,13 +113,10 @@ are not overwritten. Default: silent H.264 MP4, at most 1600×1000, 15 fps,
 2 Mb/s ceiling (~15 MB/minute), CRF 28/JPEG 70 — **agent-default (not a user rule): 2026-10-27**.
 Keep clips short, inspect for secrets and readability, independently read back
 the workbook, and keep videos out of Git. `gh pr create/comment --attach`
-requires GitHub CLI 2.99+ and upload-capable credentials. The orb's 2.99.0
-exposes the flag but rejects its GitHub App user token; 2.103.3 reaches the
-upload endpoint, which also refuses this credential despite ADMIN repo access.
-Use a supported credential or upload the MP4 through GitHub's PR editor.
-In Amp, agents can instead publish the recording with `public_artifact_url`
-and put its public link in the PR. External MP4s are links, not inline players;
-publish and embed an animated GIF alongside the MP4 for an inline preview.
+requires GitHub CLI 2.99+ and credentials that support uploads. The orb's
+GitHub App token cannot upload attachments, so use GitHub's PR editor or
+publish the recording with Amp's `public_artifact_url`. Link the MP4 in the
+PR and embed an animated GIF for an inline preview.
 
 ## Gotchas
 

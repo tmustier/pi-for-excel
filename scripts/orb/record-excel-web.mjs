@@ -1,5 +1,6 @@
 // Record the already-open Excel workbook while a command runs. See docs/orb-excel-web.md.
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -53,12 +54,9 @@ try {
   const initial = await session.send("Page.captureScreenshot", { format: "jpeg", quality: 70 });
   fs.writeFileSync(path.join(temporary, "initial.jpg"), Buffer.from(initial.data, "base64"));
   const started = Date.now() / 1000;
-  const result = await new Promise((resolve, reject) => {
-    child = spawn(command, args, { stdio: "inherit" });
-    child.once("error", reject);
-    child.once("exit", (code, signal) => resolve({ code, signal }));
-    if (interrupted) child.kill(interrupted);
-  });
+  child = spawn(command, args, { stdio: "inherit" });
+  if (interrupted) child.kill(interrupted);
+  const [code, signal] = await once(child, "exit");
   const ended = Date.now() / 1000;
   await session.send("Page.stopScreencast");
   if (recordingError) throw recordingError;
@@ -75,7 +73,7 @@ try {
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   const encoded = spawnSync("ffmpeg", [
     "-hide_banner", "-loglevel", "error", "-n", "-f", "concat", "-safe", "0",
-    "-i", path.join(temporary, "frames.txt"),
+    "-i", path.join(temporary, "frames.txt"), "-t", Math.max(1 / 15, ended - started).toFixed(6),
     "-vf", "scale=w='min(1600,iw)':h='min(1000,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,fps=15",
     "-c:v", "libx264", "-preset", "fast", "-crf", "28", "-maxrate", "2M", "-bufsize", "4M",
     "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", destination,
@@ -83,7 +81,7 @@ try {
   if (encoded.error) throw encoded.error;
   if (encoded.status !== 0) throw new Error(`ffmpeg exited ${encoded.status}`);
   console.log(`Recorded ${frames.length} source frames; command took ${(ended - started).toFixed(2)}s: ${destination}`);
-  process.exitCode = result.signal ? 128 + os.constants.signals[result.signal] : result.code;
+  process.exitCode = signal ? 128 + os.constants.signals[signal] : code;
 } finally {
   process.removeListener("SIGINT", forwardSignal);
   process.removeListener("SIGTERM", forwardSignal);
