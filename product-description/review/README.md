@@ -15,7 +15,7 @@ Plain fixes were sent to the owning pull requests:
 | #792 | WT-06 |
 | #791 | WT-08 |
 | #793 | CC-06, CC-09 |
-| #794 | WT-02, WT-04, WT-07, WT-09 |
+| #794 | WT-02, WT-04, WT-07, WT-09 (done in 6c54a39) |
 | #795 | CL-02 |
 
 The calls below wait for the product owner.
