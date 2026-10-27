@@ -1994,9 +1994,9 @@ export async function initTaskpane(opts: {
 
   // ── Wire command menu to textarea ──
   const wireTextarea = () => {
-    const ta = sidebar.getTextarea();
-    if (ta) {
-      wireCommandMenu(ta);
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
     } else {
       requestAnimationFrame(wireTextarea);
     }

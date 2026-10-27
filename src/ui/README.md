@@ -152,5 +152,5 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 `taskpane.ts` creates the `Agent`, mounts `PiSidebar`, and wires:
 - `sidebar.onSend` / `sidebar.onAbort` → agent.prompt() / agent.abort()
 - Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
-- Slash command menu via `wireCommandMenu(sidebar.getTextarea())`
+- Slash command menu via `wireCommandMenu(sidebar.getInput())`
 - Session persistence (auto-save on message_end, auto-restore latest on init)

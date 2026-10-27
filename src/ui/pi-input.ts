@@ -18,6 +18,7 @@
 import { html, LitElement } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, state, query } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { FileText } from "lucide";
 
 import { t } from "../language/index.js";
@@ -46,6 +47,8 @@ export class PiInput extends LitElement {
   @query("textarea") private _textarea!: HTMLTextAreaElement;
 
   private _placeholderTimer: ReturnType<typeof setInterval> | undefined;
+  /** Bumped when another tab's draft is shown; renders a fresh textarea. */
+  private _draftOwner = 0;
 
   get value(): string { return this._value; }
   set value(v: string) {
@@ -59,6 +62,25 @@ export class PiInput extends LitElement {
   }
 
   getTextarea(): HTMLTextAreaElement { return this._textarea; }
+
+  /**
+   * Shows another tab's draft. The browser keeps one undo history per
+   * textarea, so the draft goes into a fresh textarea: Ctrl/Cmd+Z then never
+   * replays typing from the tab shown before.
+   */
+  loadDraft(text: string): void {
+    const hadFocus = this._textarea !== null && document.activeElement === this._textarea;
+    this._draftOwner += 1;
+    this._value = text;
+    this.requestUpdate();
+    void this.updateComplete.then(() => {
+      const ta = this._textarea;
+      if (!ta) return;
+      ta.value = this._value;
+      this._autoGrow();
+      if (hadFocus) ta.focus();
+    });
+  }
 
   clear(): void {
     this.value = "";
@@ -233,7 +255,7 @@ export class PiInput extends LitElement {
         >
           ${icon(FileText, "sm")}
         </button>
-        <textarea
+        ${keyed(this._draftOwner, html`<textarea
           class="pi-input-textarea"
           .value=${this._value}
           placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(getPlaceholderHintKey(this._placeholderIndex))}
@@ -244,7 +266,7 @@ export class PiInput extends LitElement {
           @change=${this._onInput}
           @keyup=${this._onInput}
           @keydown=${this._onKeydown}
-        ></textarea>
+        ></textarea>`)}
         ${this._isDragOver
           ? html`<div class="pi-input-drop-hint">${t("input.drop.hint")}</div>`
           : null}
