@@ -1,8 +1,10 @@
 # Message rendering
 
+**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802), CC-04 and CC-05 (not merged). Answer references and answer/table/code copy below describe that PR, not main.
+
 ## Summary
 
-Message rendering is how the transcript turns a conversation into something readable: user messages as right-aligned cards, Pi's answers as formatted text with code blocks and tables, results of workbook reads as Excel-style grids and dependency trees, and cell addresses in tool cards as links that select the cells in Excel. It is also what keeps that rendering safe: raw HTML is never rendered, images are never loaded, and only ordinary web, mail and phone links are clickable. This document owns how a message *looks* once its content exists. When content appears and how it streams is owned by [sending and the response](../turn/sending-and-the-response.md); tool cards as a whole, their headers and grouping, by [tool calls](../turn/tool-calls.md); thinking blocks by [thinking](../turn/thinking.md); compaction summaries by [context and compaction](../turn/context-and-compaction.md). Rendering is the same with or without a provider (restored sessions render offline) and on every host, except that cell links need Excel.
+Message rendering turns conversations into user cards, formatted answers, tool grids and dependency trees. Completed answers offer Copy answer and Copy table; qualified references in answer prose and cell addresses in tool cards select cells in Excel. Raw HTML stays literal, images are never loaded, and ordinary links retain their protocol allowlist. This document owns appearance and answer actions. Streaming belongs to [sending and the response](../turn/sending-and-the-response.md), tool cards to [tool calls](../turn/tool-calls.md), reasoning to [thinking](../turn/thinking.md), and summaries to [context and compaction](../turn/context-and-compaction.md). Restored sessions render offline; workbook navigation needs Excel.
 
 ## The simple case
 
@@ -50,13 +52,15 @@ Confirmed in the UI gallery for all four, and in Excel on the web in a live user
 
 Text follows GitHub-style markdown: headings, emphasis, strikethrough, ordered and unordered lists, block quotes, horizontal rules, inline code, fenced code and tables. A single line break inside a paragraph is not kept: two lines without a blank line between them run together into one paragraph. This applies to user messages as well, so a message written over several lines with Shift+Enter shows as one paragraph unless the lines are separated by blank lines or are list items. Confirmed in Excel on the web: a user message with "line one" and "line two" on separate lines showed "line one line two".
 
-Tables are wrapped in a horizontally scrolling box so a wide table does not widen the taskpane. They are ordinary HTML tables, not the Excel-style grid below.
+Tables are wrapped in a horizontally scrolling box so a wide table does not widen the taskpane. They are ordinary HTML tables, not the Excel-style grid below. Each table in a completed assistant answer has a "Copy table" button. It copies headers and rows as tab-separated text, with one line per row, so Excel pastes them into cells. Formatting is not copied; line breaks within a cell become spaces.
+
+Each completed assistant response containing text also has "Copy answer", shown on hover or keyboard focus (always visible where hover is unavailable). It copies the rendered answer text, with tables as tab-separated text, without thinking blocks, tool cards or action labels. These actions remain available on earlier answers while another response streams. They appear on a streaming response only after it completes.
 
 ### Code blocks
 
 A fenced code block becomes a code card: a bar with the language label and a "Copy" button (tooltip "Copy"), and the code below it in a monospace box that scrolls sideways. A fence without a language is labelled "text". JavaScript, TypeScript, Python, HTML, XML, CSS, JSON, Bash and SQL are syntax-highlighted by name; for any other label, or none, the highlighter guesses among those languages.
 
-Clicking "Copy" writes the code exactly as written to the clipboard. The label becomes "Copied!" with a check mark for 1.5 seconds. If the browser refuses the clipboard, Pi tries an older copy method; if that fails too, the label simply does not change and no error is shown. On Excel on the web, where the clipboard API is blocked in the taskpane, the label still became "Copied!" for about 1.5 s with no error (confirmed), so the older method reported success; whether the clipboard really received the code was not checked.
+Clicking "Copy" writes the code exactly as written to the clipboard. Answer, table and code copy share one path: clipboard API, then the older browser copy method, then a dialog with the text selected and instructions to press Ctrl/Cmd+C. "Copied!" is shown only when a browser copy method reports success; opening the manual-copy dialog is not reported as success. Code shows its check mark for 1.5 seconds; answer and table copy show a confirmation toast. If the user closes the manual dialog without copying, nothing was copied.
 
 A fence whose language label contains anything but letters, digits and underscores (`c++`, `objective-c`, `f#`) does not get a code card: it is shown as a plain preformatted block with no bar and no Copy button. Confirmed in the UI gallery and in Excel on the web (a `c++` fence in a user message and in Pi's answer).
 
@@ -80,9 +84,9 @@ The rest of a tool card's result is rendered by what it looks like: JSON as a hi
 
 Cell and range addresses inside tool cards are blue links: in card titles, in the humanized input ("Range", "Cell", "Start", "Source", "Position"), in before/after change tables, and in dependency trees. A list of several ranges becomes one link per range, with a shared sheet name shown once and "+N more" (not a link) after the first eight in places that cap the list.
 
-Clicking a link makes Excel activate the sheet and select the range, which scrolls it into view with Excel's normal selection highlight. Focus stays on the link in the taskpane; it does not move to the grid. Confirmed in Excel on the web (clicking "Sheet1!B3" moved the selection from A2 to B3, the tab stayed idle). For a multi-area address only the first area is selected. Nothing in the workbook changes: no backup is made, Excel's Undo is unaffected, and the tab does not become busy. Clicks closer together than 0.3 seconds are ignored. If the sheet no longer exists or the address is invalid, nothing happens and nothing is shown. Confirmed in Excel on the web: a link to the deleted sheet Data2 did nothing, showed no toast, and logged an unhandled "ItemNotFound" rejection.
+Clicking a link activates its sheet and selects its range with Excel's normal highlight, leaving focus in the taskpane. For a multi-area tool address only the first area is selected. No values change, no backup is made and the tab does not become busy. Clicks within 0.3 seconds are ignored. Navigation failures use the existing error toast; a deleted or renamed sheet no longer fails silently.
 
-Addresses in Pi's own text ("see Sheet1!B12") are not links; only tool cards have them.
+Completed assistant prose also links valid sheet-qualified A1 references on sheets that exist in the current workbook: for example Sheet1!B12, 'Q3 Plan'!C4:F9 and absolute references with dollar signs. The link selects the range using the same navigation as a tool card. Sheet names containing apostrophes are supported. Inline code, code fences, ordinary web links, unknown sheets and out-of-grid addresses stay unchanged. Bare B12, Q3 and FY24 stay plain text to avoid guessing whether prose is a cell address. References are resolved after completion, not on every streamed token. If workbook metadata cannot be read, the answer remains readable plain text. A sheet deleted after rendering produces the shared navigation-error toast when clicked.
 
 ### Attachments
 
@@ -136,7 +140,7 @@ Rendering never changes mid-message because of a variant; Ctrl/Cmd+O only shows 
 
 **Offline and provider errors.** Rendering is local. A link in a message opens only if the network is available.
 
-**Notifications.** None. Copy feedback is the button label, not a toast.
+**Notifications.** Answer and table copy confirm successful browser copying with "Copied!". Code copy uses its button label. Manual fallback opens a selectable-text dialog, not a success toast.
 
 **Settings and preferences.** None. There is no setting for fonts, line breaks or link behaviour.
 
@@ -158,10 +162,10 @@ Rendering never changes mid-message because of a variant; Ctrl/Cmd+O only shows 
 
 - Single line breaks collapse in user messages because the user's text is rendered as markdown without line-break preservation (`src/ui/messages/messages.ts` renders user text through `markdown-block`). Confirmed in a live user message in Excel on the web. A user's carefully line-broken message looks different from what they typed. May be worth treating as a bug.
 - Code fences with a language label containing `+`, `-` or `#` lose their code card and Copy button (`src/ui/messages/markdown-block.ts:120` only matches word characters). Confirmed in the UI gallery and in Excel on the web. Looks like a bug.
-- A cell link that fails (deleted or renamed sheet) does nothing and gives no feedback; the failure is an unhandled promise (`src/ui/cell-link.ts:82`, `:102`). Confirmed in Excel on the web (unhandled "ItemNotFound"). Probably worth a toast.
+- PR #802 shares the existing navigation error path between answer and tool links, including feedback for a sheet deleted after rendering.
 - "Copy CSV" and several tool-card labels are hard-coded English (`src/ui/render-csv-table.ts:70`, `src/ui/tool-renderers.ts:1183`), while the equivalent "(no output)" in the default card is translated.
 - Where links open on each host has not been checked; on Excel on the web they carry `target="_blank"`, so they would open a browser tab.
-- The code-block "Copy" reports "Copied!" on Excel on the web although the clipboard API is blocked there (the fallback `execCommand("copy")` path in the code block reports success). Whether anything reached the clipboard was not checked.
+- PR #802 routes answer, table and code copying through the same helper. Browser tests exercise refused clipboard methods and verify the manual dialog's exact TSV/code text, without a false success label. On its final stacked head, a real Excel-web turn produced the answer table and a range link; independent Office.js read-back verified B2:C4 and clicking its answer reference selected that range. Copy table followed by real Ctrl+V in the grid pasted the exact three rows and two columns into H12:I14, independently read back through Office.js. Native desktop clipboard paths still need host acceptance.
 - Attachment tiles were confirmed in Excel on the web by editing a stored session to carry attachments; no real session with attachments was available.
 - The data grid with "Copy CSV" appears only for CSV-mode reads. Pi's default read shows a markdown table instead, so most reads have no "Copy CSV".
 
