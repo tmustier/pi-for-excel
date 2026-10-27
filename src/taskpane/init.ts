@@ -1190,7 +1190,7 @@ export async function initTaskpane(opts: {
     const tab = createTabState();
     // Set when the user dismisses the connection dialog during this turn.
     let missingCredentialsFor: string | null = null;
-    // Set when this turn's login could not be refreshed and its token has expired.
+    // Display label when this turn's login could not be refreshed and its token has expired.
     let expiredLoginFor: string | null = null;
 
     // API key resolution
@@ -1200,7 +1200,7 @@ export async function initTaskpane(opts: {
         // Sending the stale token would only surface the provider's 401, and
         // returning no key lets pi-ai fall back to that same stored token.
         // Throwing fails the turn; the banner tells the user to sign in again.
-        expiredLoginFor = provider;
+        expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
         throw new Error(`The ${provider} login has expired and could not be refreshed.`);
       }
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
