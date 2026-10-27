@@ -39,6 +39,8 @@ export interface AutoContextSources {
   changeTracker: Pick<ChangeTracker, "cursor" | "describeSince">;
   /** The runtime's agent: stored notes are added to its transcript. */
   getAgent: () => Pick<Agent, "state"> | null | undefined;
+  /** This runtime (chat tab); its own workbook writes are not reported to it. */
+  runtimeId: string;
   getWorkbookId?: () => Promise<string | null>;
   getBlueprint?: (workbookId: string | null) => Promise<string>;
   getFilesSummary?: (workbookId: string | null) => Promise<FilesSummary | null>;
@@ -154,7 +156,7 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
       }
     }
 
-    const changes = sources.changeTracker.describeSince(changeCursor);
+    const changes = await sources.changeTracker.describeSince(changeCursor, sources.runtimeId);
     changeCursor = changes.cursor;
     if (changes.text) notes.push(note("changes", changes.text));
 

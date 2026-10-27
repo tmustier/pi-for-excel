@@ -10,6 +10,7 @@ import {
   type ExecutionMode,
 } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
+import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { getToolContextImpact, getToolExecutionMode, type ToolContextImpact } from "./execution-policy.js";
 import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
@@ -27,8 +28,23 @@ export interface WorkbookMutationEvent {
   revision: number;
 }
 
+/** When one of Pi's mutating tool calls held the workbook lock. */
+export interface WorkbookWriteWindow {
+  toolCallId: string;
+  toolName: string;
+  startedAt: number;
+  /** `Infinity` while the call runs; set when it settles. */
+  settledAt: number;
+}
+
 export interface WorkbookMutationObserver {
   onWriteCommitted?: (event: WorkbookMutationEvent) => void;
+  /**
+   * Every mutating call as it starts, committed or not (for telling Pi's edits
+   * from the user's). The wrapper sets `settledAt` on the same object when the
+   * call settles.
+   */
+  onWriteStarted?: (window: WorkbookWriteWindow) => void;
 }
 
 export interface MutationApprovalRequest {
@@ -84,6 +100,43 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
   const [first, ...rest] = result.content;
   if (!first || first.type !== "text") return result;
   return { ...result, content: [{ ...first, text: `${first.text}\n\n${STOPPED_AFTER_CHANGE_NOTE}` }, ...rest] };
+}
+
+/**
+ * After Stop, how long a tool call may take to finish by itself (and report
+ * precisely what it did) before the wrapper gives up on it.
+ */
+export const STOP_GRACE_MS = 500;
+
+/**
+ * Settle a tool call promptly after Stop, even when Excel never answers, so
+ * the workbook lock is released and the turn can end. The abandoned call may
+ * still complete in Excel; the error says so.
+ */
+function settleOnStop<T>(
+  work: Promise<T>,
+  signal: AbortSignal | undefined,
+  mode: "read" | "write",
+): Promise<T> {
+  if (!signal) return work;
+  return new Promise<T>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onAbort = () => {
+      cancelCellEditWaits();
+      timer = setTimeout(() => {
+        work.catch(() => {});
+        reject(mode === "write"
+          ? Object.assign(new Error("Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it."), { outcomeUnknown: true })
+          : new Error("Stopped by the user before Excel answered."));
+      }, STOP_GRACE_MS);
+    };
+    if (signal.aborted) onAbort();
+    else signal.addEventListener("abort", onAbort, { once: true });
+    work.then(resolve, reject).finally(() => {
+      if (timer !== undefined) clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    });
+  });
 }
 
 function isWorkbookCoordinatorParamsShape(value: unknown): value is Record<string, unknown> {
@@ -174,16 +227,59 @@ function wrapTool<TParameters extends TSchema, TDetails>(
     execute: (toolCallId, params, signal, onUpdate) => {
       const mode = getToolExecutionMode(tool.name, params);
       if (mode === "read") {
-        const earlierMutations = [...pendingMutations];
-        if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
-        return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
+        return coordinator.runRead(context, () => {
+          throwIfAborted(signal);
+          return settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "read");
+        });
       }
 
-      const running = run(mode, toolCallId, params, signal, onUpdate);
-      const settled = running.then(() => undefined, () => undefined);
-      pendingMutations.add(settled);
-      void settled.then(() => pendingMutations.delete(settled));
-      return running;
+      await requireMutationApprovalIfNeeded({
+        policy: executionPolicy,
+        toolName: tool.name,
+        params,
+      });
+
+      throwIfAborted(signal);
+
+      const out = await coordinator.runWrite(
+        context,
+        async () => {
+          throwIfAborted(signal);
+          const window: WorkbookWriteWindow = {
+            toolCallId,
+            toolName: tool.name,
+            startedAt: Date.now(),
+            settledAt: Number.POSITIVE_INFINITY,
+          };
+          try {
+            mutationObserver?.onWriteStarted?.(window);
+          } catch (error) {
+            console.warn("[pi] Workbook write observer failed:", getErrorMessage(error));
+          }
+          try {
+            return await settleOnStop(tool.execute(toolCallId, params, signal, onUpdate), signal, "write");
+          } finally {
+            window.settledAt = Date.now();
+          }
+        },
+      );
+
+      if (mutationObserver?.onWriteCommitted) {
+        const impact = getToolContextImpact(tool.name, params);
+        try {
+          mutationObserver.onWriteCommitted({
+            workbookId: contextWorkbookId,
+            sessionId,
+            toolName: tool.name,
+            impact,
+            revision: out.revision,
+          });
+        } catch (error) {
+          console.warn("[pi] Workbook mutation observer failed:", getErrorMessage(error));
+        }
+      }
+
+      return out.result;
     },
   };
 

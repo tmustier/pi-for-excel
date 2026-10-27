@@ -11,7 +11,7 @@ import {
 } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
-import { ChangeTracker } from "../src/context/change-tracker.ts";
+import { ChangeTracker, type PiWriteOrigin, type PiWriteWindow } from "../src/context/change-tracker.ts";
 import { readSelectionContext } from "../src/context/selection.ts";
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import { createAutoContext } from "../src/taskpane/context-injection.ts";
@@ -55,12 +55,17 @@ class FakeWorkbook {
     await (handler as (event: object) => Promise<void>)(event);
   }
 
-  edit(sheetId: string, address: string, triggerSource: "Unknown" | "ThisLocalAddin"): Promise<void> {
+  edit(
+    sheetId: string,
+    address: string,
+    triggerSource: "Unknown" | "ThisLocalAddin",
+    options: { source?: "Local" | "Remote"; changeType?: string } = {},
+  ): Promise<void> {
     return this.emit("changed", {
       worksheetId: sheetId,
       address,
-      changeType: "RangeEdited",
-      source: "Local",
+      changeType: options.changeType ?? "RangeEdited",
+      source: options.source ?? "Local",
       triggerSource,
     });
   }
@@ -115,6 +120,7 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
       parameters: schema,
       execute: async () => {
         // Pi's own write, then the user adds a sheet and edits it while Pi works.
+        tracker.notePiWrite({ toolCallId: "w", startedAt: Date.now(), settledAt: Date.now() + 5, address: "Data!C1" }, { kind: "runtime", runtimeId: "tab-a" });
         await workbook.edit("sheet-1", "C1", "ThisLocalAddin");
         if (!workbook.sheets.has("sheet-2")) {
           await workbook.addSheet("sheet-2", "Added");
@@ -132,6 +138,7 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
       ...createAutoContext({
         changeTracker: tracker,
         getAgent: () => runtime.agent,
+        runtimeId: "tab-a",
         getWorkbookId: () => Promise.resolve("wb-1"),
         getBlueprint: () => Promise.resolve(blueprint),
         getFilesSummary: () => Promise.resolve(null),
@@ -207,6 +214,7 @@ void test("every chat tab hears about the same user edit", async () => {
     const tab = () => createAutoContext({
       changeTracker: tracker,
       getAgent: () => undefined,
+      runtimeId: crypto.randomUUID(),
       getWorkbookId: () => Promise.resolve("wb-1"),
       getBlueprint: () => Promise.resolve(""),
       getFilesSummary: () => Promise.resolve(null),
@@ -231,8 +239,9 @@ void test("every chat tab hears about the same user edit", async () => {
 
 void test("the workbook note is re-sent after compaction removed it, and labelled so", async () => {
   const autoContext = createAutoContext({
-    changeTracker: { cursor: () => 0, describeSince: () => ({ text: null, cursor: 0 }) },
+    changeTracker: { cursor: () => 0, describeSince: () => Promise.resolve({ text: null, cursor: 0 }) },
     getAgent: () => undefined,
+    runtimeId: "tab-a",
     getWorkbookId: () => Promise.resolve("wb-1"),
     getBlueprint: () => Promise.resolve("1. **Data**"),
     getFilesSummary: () => Promise.resolve(null),
@@ -257,8 +266,9 @@ void test("the Files summary is sent again whenever it changes, and to every new
   let files = { summary: "### Workspace\n- a.csv", relevantSignature: "sig-1", hasRelevantFiles: true };
   const transcript: AgentMessage[] = [];
   const newTab = () => createAutoContext({
-    changeTracker: { cursor: () => 0, describeSince: () => ({ text: null, cursor: 0 }) },
+    changeTracker: { cursor: () => 0, describeSince: () => Promise.resolve({ text: null, cursor: 0 }) },
     getAgent: () => undefined,
+    runtimeId: "tab-a",
     getWorkbookId: () => Promise.resolve(null),
     getBlueprint: () => Promise.resolve(""),
     getFilesSummary: () => Promise.resolve(files),
@@ -359,6 +369,114 @@ void test("a selection that cannot be read says why instead of disappearing", as
     const { address, text } = await readSelectionContext();
     assert.equal(address, null);
     assert.match(text, /Unavailable: Excel is in cell-edit mode/u);
+  } finally {
+    uninstall();
+  }
+});
+
+void test("with a co-author present, Pi's own writes are left out and the co-author's edits are attributed to them", async () => {
+  const workbook = new FakeWorkbook();
+  const uninstall = workbook.install();
+  try {
+    let structureChanges = 0;
+    const tracker = new ChangeTracker({
+      onStructureChange: () => { structureChanges += 1; },
+      getPiWriteAddresses: (ids) => Promise.resolve(new Map(ids.map((id) => [id, ["Data!A6:B6"]]))),
+    });
+    await tracker.start();
+    const autoContext = createAutoContext({
+      changeTracker: tracker,
+      getAgent: () => undefined,
+      runtimeId: "tab-a",
+      getWorkbookId: () => Promise.resolve("wb-1"),
+      getBlueprint: () => Promise.resolve(""),
+      getFilesSummary: () => Promise.resolve(null),
+    });
+
+    // Once a co-author has joined, Pi's writes arrive as "Unknown", like the user's.
+    const window = { toolCallId: "call-1", toolName: "write_cells", startedAt: Date.now(), settledAt: Number.POSITIVE_INFINITY };
+    tracker.notePiWrite(window, { kind: "runtime", runtimeId: "tab-a" });
+    await workbook.edit("sheet-1", "A6:B6", "Unknown");
+    await workbook.edit("sheet-1", "D9", "Unknown"); // the user, while Pi wrote
+    await workbook.edit("sheet-1", "3:3", "Unknown", { source: "Remote", changeType: "RowInserted" });
+    await workbook.edit("sheet-1", "C2", "Unknown", { source: "Remote" });
+    window.settledAt = Date.now();
+
+    const request = { model: fauxProvider().getModel(), thinkingLevel: "off" as const, context: { messages: [] } };
+    const update = await autoContext.prepareRequest(request);
+    const note = (update?.context?.messages ?? []).find((message) => message.role === "autoContext");
+    const text = note?.role === "autoContext" ? note.text : "";
+
+    assert.doesNotMatch(text, /A6:B6/u, "Pi's own write is not reported");
+    assert.match(text, /By the user:\n- Data: D9\n/u);
+    assert.match(text, /By a co-author[^\n]*:\n- Data: 3:3 \(rows inserted\), C2/u);
+    assert.match(text, /A co-author inserted or deleted cells on Data: cells there may have moved/u);
+    assert.equal(structureChanges, 1, "the co-author's row insert rebuilds the blueprint");
+  } finally {
+    uninstall();
+  }
+});
+
+void test("a backup restore, another tab's write and an extension's write are reported; only this tab's own write is left out", async () => {
+  const workbook = new FakeWorkbook();
+  const uninstall = workbook.install();
+  try {
+    const tracker = new ChangeTracker();
+    await tracker.start();
+    const tab = (runtimeId: string) => createAutoContext({
+      changeTracker: tracker,
+      getAgent: () => undefined,
+      runtimeId,
+      getWorkbookId: () => Promise.resolve("wb-1"),
+      getBlueprint: () => Promise.resolve(""),
+      getFilesSummary: () => Promise.resolve(null),
+    });
+    const tabA = tab("tab-a");
+    const tabB = tab("tab-b");
+
+    // Writes are serialized by the workbook lock: one window at a time.
+    const write = async (origin: PiWriteOrigin, address: string, eventAddress = address) => {
+      await new Promise((resolve) => setTimeout(resolve, 2)); // writes take time
+      const window: PiWriteWindow = { toolCallId: crypto.randomUUID(), startedAt: Date.now(), settledAt: Number.POSITIVE_INFINITY, address: address.includes("!") ? address : `Data!${address}` };
+      tracker.notePiWrite(window, origin);
+      await workbook.edit("sheet-1", eventAddress, "ThisLocalAddin");
+      window.settledAt = Date.now();
+    };
+    await write({ kind: "runtime", runtimeId: "tab-a" }, "F3");
+    await write({ kind: "restore" }, "B2:D4");
+    // Tab A's write whose event names other cells than the recorded range (a row insert, say).
+    await write({ kind: "runtime", runtimeId: "tab-a" }, "Data!J1", "9:9");
+    // The user restores tab A's G7 write: listed once, as the restore.
+    await write({ kind: "runtime", runtimeId: "tab-a" }, "G7");
+    await write({ kind: "restore" }, "G7");
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    tracker.notePiWrite({ toolCallId: "far", startedAt: 0, settledAt: 1 }, { kind: "runtime", runtimeId: "tab-a" });
+    // An add-in write no window covers (an extension). Moves the clock past the grace window.
+    const realNow = Date.now;
+    Date.now = () => realNow() + 60_000;
+    try {
+      await workbook.edit("sheet-1", "E1", "ThisLocalAddin");
+    } finally {
+      Date.now = realNow;
+    }
+
+    const request = { model: fauxProvider().getModel(), thinkingLevel: "off" as const, context: { messages: [] } };
+    const noteFor = async (autoContext: ReturnType<typeof tab>) => {
+      const update = await autoContext.prepareRequest(request);
+      const note = (update?.context?.messages ?? []).find((message) => message.role === "autoContext");
+      return note?.role === "autoContext" ? note.text : "";
+    };
+    const a = await noteFor(tabA);
+    const b = await noteFor(tabB);
+
+    assert.doesNotMatch(a, /F3|9:9/u, "tab A's own writes are left out of its note");
+    assert.match(a, /Restored from a backup by the user[^\n]*\n- Data: B2:D4, G7\n/u);
+    assert.match(a, /By Pi outside this chat[^\n]*\n- Data: E1/u);
+    assert.doesNotMatch(a, /By the user/u);
+
+    assert.match(b, /By Pi in another chat tab:\n- Data: F3, 9:9\n/u);
+    assert.match(b, /Restored from a backup by the user[^\n]*\n- Data: B2:D4, G7\n/u);
+    assert.equal(b.match(/G7/gu)?.length, 1, "a cell is listed once, under whoever changed it last");
   } finally {
     uninstall();
   }
