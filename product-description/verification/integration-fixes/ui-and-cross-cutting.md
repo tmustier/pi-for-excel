@@ -13,7 +13,7 @@ How it ran:
 - **Model turns**: real turns on the shared ChatGPT login, mostly on GPT-6 Luna (GPT-6.1 Luna is not in the registry), plus a few on GPT-6.1 Sol. The shared credential was never logged out or refreshed.
 - **Screen reader**: no screen reader was available. Live regions were checked by recording `[aria-live]` regions and `role=alert`/`role=status` nodes with a MutationObserver, and by checking that the regions are not inert.
 
-**Result on `8099cd6`: 118 items, 105 pass, 0 fail, 13 blocked.** All 13 blocked items need Excel desktop (listed at the end). MULTI-10 was run with a throwaway stubbed OAuth grant in a separate browser context, so the shared login was never refreshed or logged out. Every item that failed on `main` now passes as its owning PR describes. Four checks that passed on `main` failed during the pass and are fixed on `8099cd6`: STATUS-14, STATUS-15, PROVIDER-11, and the focus part of UTIL-02. Three minor new bugs are still open (see below).
+**Result on `8099cd6`, rechecked on `cea7588`: 118 items, 105 pass, 0 fail, 13 blocked.** All 13 blocked items need Excel desktop (listed at the end). MULTI-10 was run with a throwaway stubbed OAuth grant in a separate browser context, so the shared login was never refreshed or logged out. Every item that failed on `main` now passes as its owning PR describes. Four checks that passed on `main` failed during the pass and are fixed on `8099cd6`: STATUS-14, STATUS-15, PROVIDER-11, and the focus part of UTIL-02. The three minor new bugs still open on `8099cd6` are fixed on `cea7588` (see "Retest on `cea7588`").
 
 ## Results
 
@@ -21,7 +21,7 @@ How it ran:
 | --- | --- | --- |
 | STATUS-01 | pass (#793) | The bar shows "π GPT-6.1 Sol", "High", "1%", "Auto". At 349 px the "/ 500k" limit is hidden by #793's one-row rule (`@container (max-width: 360px)`); the context popover still shows "3,494 / 500,000 tokens". |
 | STATUS-02 | pass (#793) | Model, thinking and context tooltips are as quoted. The mode tooltip is now "Auto: Pi applies workbook changes without asking. Click to change." (the mode control is a popover, #793). |
-| STATUS-03 | pass (#795) | While busy, the picker opens read-only: 7/7 rows are `aria-disabled`, with the note "Pi is working in this tab. Change the model when it finishes, or press Stop." A click leaves the model unchanged and shows no toast. New minor bug: rows stay disabled after the turn ends if the picker is still open (see below). |
+| STATUS-03 | pass (#795) | While busy, the picker opens read-only: 7/7 rows are `aria-disabled`, with the note "Pi is working in this tab. Change the model when it finishes, or press Stop." A click leaves the model unchanged and shows no toast. On `8099cd6`, rows stayed disabled after the turn ended if the picker was still open. Fixed on `cea7588` (#795 be2e666): with the picker left open, all 7 rows lost `aria-disabled` and the note hid when the turn ended, and picking GPT-6.1 Sol then worked without reopening. |
 | STATUS-04 | pass (#795) | GPT-6 Luna lists Off…Max with ✓ on High. GPT-4.1 mini (OpenAI (API)) lists only "Off ✓". Switching that tab from High clamps the level to Off (#795). |
 | STATUS-05 | pass | A real click on "Low" closes the popover, the label shows "Low", there is no toast, and focus returns to the trigger. |
 | STATUS-06 | pass | web-keys: Shift+Tab ×4 in the composer goes High → Extra high → Max → Min → Low, with the toast "Thinking: {level} (next turn)" each time. Focus stays in the composer. |
@@ -128,7 +128,7 @@ How it ran:
 | PROVIDER-12 | blocked | Needs Excel for Mac. |
 | HOST-01 | pass | OfficeOnline; ExcelApi 1.16–1.20 true, 1.21 false. |
 | HOST-02 | pass (#795) | The suspected bug is fixed: `/copy` gives "Copied to clipboard" (execCommand fallback). |
-| HOST-03 | pass | The proxy banner's "Show how to start it", then "Copy command", selects "npx pi-for-excel-proxy" (the clipboard is blocked). |
+| HOST-03 | pass (#793) | The proxy banner's "Show how to start it", then "Copy command". On `8099cd6` it only selected "npx pi-for-excel-proxy" (the frame denies `clipboard-write`). On `cea7588` (#793 c88b997, P-155) a real click falls back to `execCommand('copy')`, which returns true. The button reads "Copied" for 1.4 s and focus returns to it, and Ctrl+V into the composer pastes "npx pi-for-excel-proxy". |
 | HOST-04 | pass | See KEYS-05 to KEYS-08. |
 | HOST-05 | pass (#793) | Changed on purpose: on the web, Shift+Tab in the composer cycles the level and no longer moves focus. From other controls it moves focus back without cycling. |
 | HOST-06 | pass (#794) | `isDirty` is false, and backups are no longer cleared on opening (see PERSIST-07). |
@@ -155,7 +155,17 @@ These checks ran in the 349 px Excel on the web pane (screenshots inspected, kep
   - `.pi-announcer` is polite and atomic ("Pi finished in “Chat 3”.").
   - The disclosure banner is `role=status`.
   - On `8099cd6`, both live regions stay live (not inert) while an approval is open; on `e48d83c` they were made inert.
-  - Workbook approvals are still not announced (minor, see below).
+  - Workbook approvals were not announced on `8099cd6`. On `cea7588` they are (see below).
+
+## Retest on `cea7588`
+
+`integration-fixes` moved to `cea7588`. I checked it out, confirmed the dev server serves it (`command-copy.ts` has the `execCommand` fallback), and reloaded the Excel on the web pane (349 × 580). GPT-6 Luna ran the turns. All checks passed.
+
+- **TABS-05** (sessions cluster, P-162): pass. In #793 c88b997 the × is back in flow beside the title. With 7 tabs, every title is full and each × starts 8 px after its title, hovered or not (screenshot `cea7588-tabs-hover.png`). Real pointer clicks 3 px inside the right edge of 4 inactive titles each switched to that tab and put focus in the composer. One more click did the same with the slash menu open, and the menu closed. One misclick in my harness closed a tab: it measured the first tab while ‹ was still visible, and when ‹ hid at the scroll start the strip shifted 20 px left. A user who clicks ‹ to reach the start sees the same shift under the pointer. That is a minor, pre-existing layout shift, not counted.
+- **MENU-15** (sessions cluster, P-165): pass. With a toast showing, the toast region moves above the open menu (toast y 409–442, menu y 450–494; `bottom` follows `--pi-command-menu-offset`). `elementFromPoint` on the `/share-session` row hits the row, and a real click ran it ("Session sharing coming soon"). With `/` open, a pointer sweep from `/model` down to `/tools` moved the selection with the pointer, and the click opened Connections.
+- **PROXY-10** (setup cluster, P-155): pass. See HOST-03 above: "Copied" for 1.4 s, then "Copy command" again, and the clipboard holds the command.
+- **Confirm-mode workbook approval** (P-163): pass. The model asked "Confirm that you want me to enter 42 there" in text first. After "Yes, write it.", the approval "Allow this change to the workbook?" opened with focus on the card. 53 ms later the polite `.pi-announcer` (not inert) read "Pi is waiting for your approval: Allow this change to the workbook?" Escape declined it.
+- **STATUS-03** (#795 be2e666): pass. See the row.
 
 ## Regressions and new bugs
 
@@ -186,15 +196,15 @@ Fixed during the pass (each reported to its owner when found):
    - Repro: GPT-6 Luna, thinking Off, ask for 400 lakes, and stop the proxy after ~400 chars. The stream fails with ERR_INCOMPLETE_CHUNKED_ENCODING, a retry goes out 2 s later and fails with ERR_CONNECTION_REFUSED, and the final message has `content: []` and shows only "Error: Failed to fetch".
    - Cause: `retryTransientFailure` in `src/taskpane/action-queue.ts:240-270` dropped the failed response before retrying.
 
-Still open on `8099cd6` (all minor):
+Open on `8099cd6`, all minor, and fixed on `cea7588`:
 
-9. **The hover × draws over the tab title.** #793.
+9. **The hover × draws over the tab title.** #793; fixed on `cea7588` (#793 c88b997, P-162).
    - Repro: 7 tabs at 349 px, scroll to the start, hover "Chat 1" (52 px). It renders "Cha×1".
    - Cause: `src/ui/theme/components/tabs.css:255-273`; the × on an inactive tab overlays the title instead of taking space.
-10. **Workbook approvals are not announced.** #793.
+10. **Workbook approvals are not announced.** #793/#794; fixed on `cea7588` (integration fix, P-163).
     - Repro: Confirm mode, have Pi write a cell. The approval opens, and `.pi-announcer` keeps its previous text ("Pi finished.").
     - Cause: only the runtime-tool path calls `announce(t("announce.approval"))` (`src/taskpane/init.ts:1028`); the workbook path at `:1122` does not. Low impact, because the dialog takes focus.
-11. **The busy model picker stays read-only after the turn ends.** #795.
+11. **The busy model picker stays read-only after the turn ends.** #795; fixed on `cea7588` (#795 be2e666).
     - Repro: open the model control during a long answer and leave it open until the answer finishes. All rows stay `aria-disabled` and the note stays; the user must close and reopen the picker.
     - Code: the busy state is drawn once when the picker opens (`src/ui/model-selector-dialog.ts:261`).
 
