@@ -1,6 +1,6 @@
 # Integration verification: workbook
 
-This file reruns every item in [../workbook.md](../workbook.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there: fill_formula, the lock and Stop items (coordinator), the mode popover, Escape on Backups, the approval dialog's focus, refused format_cells and the backup-failure note. The rows give the result at `e48d83c` when the item was rerun there, and at `a2b3f2d` otherwise; the code behind those items did not change between the two builds. Both runs were on 27 October 2026, by an agent in an Amp orb.
+This file reruns every item in [../workbook.md](../workbook.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there: fill_formula, the lock and Stop items (coordinator), the mode popover, Escape on Backups, the approval dialog's focus, refused format_cells and the backup-failure note. The branch was then force-pushed to `8099cd6`, and the items whose code changed again were rerun there: the approval dialog and Settings (Tab, live regions, Stop Pi), Clear all, refused format_cells, Stop on reads and writes, the lock badges, modify_structure, read_range and blocked writes (see "Retest at `8099cd6`"). The rows give the result at the latest build where the item was rerun. Items not rerun did not change between the builds. All runs were on 27 October 2026, by an agent in an Amp orb.
 
 Expected behavior is the checklist as amended by the fix PRs and `goal.md` "Fixes in flight". Where a PR deliberately changed behavior, the PR wins, and the note says "changed (#NNN)".
 
@@ -14,7 +14,7 @@ How it ran:
 
 - Every item that failed on `main` and can run on the web now passes or behaves as its owning PR describes: WB-08, 13, 14, 21, 25; READ-10, 16; WRITE-10; APPROVE-03, 06, 13, 14, 17; REVERT-15, 16, 21, 22, 24, 26; BACKUP-06, 07. The other three `main` fails (BACKUP-08, 10, 11) are desktop downloads and are blocked here.
 - No item that passed on `main` regressed.
-- The pass found two new bugs; both are still open on `e48d83c` (see below).
+- The pass found three new bugs. The first two (#793 Tab trap, #794 Clear all count) are fixed at `8099cd6`. The third, an intermittent #792 loop where Pi repeats a structure change, was found at `8099cd6` and is open (see below).
 
 ## Results
 
@@ -31,7 +31,7 @@ How it ran:
 | WB-07 | pass | The close button was disabled, titled "Wait for workbook changes to complete", for the whole write window. In 100 ms samples it did not flicker back to enabled as it did on `main`. Same at `e48d83c`. |
 | WB-08 | pass, fixed (#794) | The writing tab never showed "Waiting" on itself, and its close button stayed disabled throughout: Chat 2 from 5.3 to 30.6 s, then Chat 1 from 30.6 to 55.8 s (`e48d83c`). |
 | WB-09 | pass, changed (#793) | The status bar shows "Changing workbook" while the active tab holds the lock, and "Waiting for workbook" while it waits. |
-| WB-10 | pass, changed (#791, #792, #789) | 6 parallel writes with `Excel.run` delayed 3 s; Escape once all 6 cards existed. AN1 (in Excel): "Stopped by the user while Excel was still working on this change. The outcome is unknown…". AN2–AN6: "Stopped before running; nothing changed in the workbook." All cards red; AN1:AN6 empty; transcript "Request aborted" (`e48d83c`). |
+| WB-10 | pass, changed (#791, #792, #789) | 6 parallel writes with `Excel.run` delayed 3 s; Escape once all 6 cards existed. At `8099cd6` the running write is no longer cut short (#792 d31bf82): AT1's header is "Stopped — nothing written", with "⏹ Stopped before writing — nothing changed in Sheet1!AT1." AT2–AT6: "Stopped before running; nothing changed in the workbook." All cards red; AT1:AT6 empty. Escape at 9.0 s, the in-flight batch returned at 11.0 s, turn idle at 13.7 s. (At `e48d83c`, AN1 said "Stopped by the user while Excel was still working…".) |
 | WB-11 | pass | `isDirty` was `false` after a write. |
 | WB-12 | pass | Click on the grid, Ctrl+S, wait 9 s: 19 backups before and after. |
 | WB-13 | pass, fixed (#794) | 19 backups before CDP `Page.reload` and 19 after 12 s. Tabs and mode were kept. |
@@ -65,7 +65,7 @@ How it ran:
 | READ-10 | pass, fixed (#793) | The failed read card has `data-state="error"` (red), like failed writes. |
 | READ-11 | pass, changed (#787) | `read_range AA1:AA5000` now returns one 500-row page with "Next page: read_range "Sheet1!AA501:AA1000"". A page over 50 KB (Big!A1:E500, 40-character text) is still cut: "[Output truncated: showing first 212 of 504 lines (50.0KB limit) …; full output saved to Files workspace: .tool-output/…]". |
 | READ-12 | pass | "zzz" on a hidden sheet: a search without a sheet name finds nothing; a search on that sheet finds "Big!G1: zzz". |
-| READ-13 | pass, changed (#792) | Read held 12 s; Escape at 4.7 s; the turn was idle at 5.4 s. Card: "Stopped by the user before Excel answered." (red), then "Request aborted". No workbook change. |
+| READ-13 | pass, changed (#792) | At `8099cd6`: read held 12 s, turn idle 0.9 s after Escape, card "Stopped by the user before Excel answered."; Escape 0.3–2.0 s after the card appeared gave the same. Earlier: read held 12 s; Escape at 4.7 s; the turn was idle at 5.4 s. Card: "Stopped by the user before Excel answered." (red), then "Request aborted". No workbook change. |
 | READ-14 | pass | Chat 2's write was held 20 s from 2.0 s; Chat 1's read completed at 5.4 s (`e48d83c`). |
 | READ-15 | pass | A second link clicked 140 ms later was ignored (selection B1:B2); one 630 ms later was honored (C1:C2). |
 | READ-16 | pass, fixed (#787) | Used range A1:AD21000 (AA1:AA21000 `=ROW()`). A search for 20999 without a sheet name returned "Sheet1!AA20999: 20999 ← =ROW()". |
@@ -79,7 +79,7 @@ How it ran:
 | WRITE-03 | pass | "Write Sheet1!A1 — blocked", "⛔ Write blocked — Sheet1!A1 contains 1 non-empty cell(s); nothing was written." A1 still 1. |
 | WRITE-04 | pass | "Format Sheet1!A1", "✓ Done"; backup "Format cells · Sheet1!A1". |
 | WRITE-05 | pass | See WB-24. |
-| WRITE-06 | pass | Header "Inserted 1 row(s) at row 10 in "Sheet1"."; backup "Modify structure · Sheet1!10:10". |
+| WRITE-06 | pass | Header "Inserted 1 row(s) at row 10 in "Sheet1"."; backup "Modify structure · Sheet1!10:10". At `8099cd6` fresh tabs inserted once (5 of 5), but once Pi repeated the insert 54 times in one turn: see new bug 3. |
 | WRITE-07 | pass | "2 edits" group. |
 | WRITE-08 | pass, changed (#789, #791) | See WB-10. The transcript says "Request aborted" instead of "Error: signal is aborted without reason". |
 | WRITE-09 | pass | The declined card is red (`data-state="error"`). |
@@ -163,6 +163,17 @@ How it ran:
 | BACKUP-12 | blocked | Desktop only. |
 | BACKUP-13 | pass | "Download backup" is hidden when there are no backups. |
 
+### Retest at `8099cd6`
+
+- APPROVE-11/12: the approval dialog still makes the page inert, but `#pi-toast` and `#pi-announcer` (aria-live) stay live (#794 515072d). A toast shown while the dialog was open was not inert either.
+- Bug 1 (Tab trap) is fixed (#793 aff33d6). From the approval card, Tab cycled × → Sheet1!AP1 link → Stop Pi → Decline → Allow once → ×, and Shift+Tab wrapped back. Settings wraps at both ends. `document.hasFocus()` stayed true throughout.
+- Bug 2 (Clear all count) is fixed (#794). With Backups open at "31 backups" while Chat 2 added 3, Clear all asked "This will delete 34 backups."
+- APPROVE-18: "Stop Pi" still closes the dialog, leaves nothing inert, and ends the turn ("Aborted").
+- Refused format_cells (protected sheet): error "… no formatting was applied. Sheet "Prot" is protected…", and no backup was stored (34 before and after). A successful format_cells still stores one (35).
+- WB-06–WB-09 (tabs.css changed): Chat 1 showed "Waiting" and "Waiting for workbook" while Chat 2 wrote; each writing tab's close button stayed disabled while it held the lock; all 8 cells were written.
+- READ-02/06/11 (read_range changed): empty range "All cells are empty."; detailed read lists "Formulas F1: =A1+D1"; Big!A1:A700 gives one 500-row page with "Next page: read_range "Big!A501:A700"".
+- WRITE-03/10: in Confirm mode, "Write Sheet1!A1 — blocked" with no dialog; A1 still 1.
+
 ### Other changes checked at `e48d83c`
 
 - A refused format_cells call stores no backup. Bolding A1 on a protected sheet gave "Error formatting Prot!A1 — no formatting was applied. Sheet "Prot" is protected…", and the backup count stayed at 26.
@@ -170,9 +181,9 @@ How it ran:
 
 ## Regressions and new bugs
 
-No checklist item regressed. Two new bugs were found; both are open on `e48d83c` and were sent to the owning threads.
+No checklist item regressed. Three new bugs were found and sent to the owning threads. Bugs 1 and 2 are fixed at `8099cd6`; bug 3 is open.
 
-### 1. Tab leaves the add-in from an overlay (#793; reached at once by #794's approval dialog)
+### 1. Tab leaves the add-in from an overlay (#793; reached at once by #794's approval dialog) — fixed at `8099cd6`
 
 On Excel on the web, Tab from the approval dialog's initial focus moves focus out of the Pi frame into Excel. So does Tab on "Allow once" and Shift+Tab on ×. A keyboard user cannot Tab to Stop Pi, Decline or Allow once. Settings leaks at its ends the same way: on `a2b3f2d`, Shift+Tab from × reached the status-bar mode button behind Settings.
 
@@ -183,9 +194,17 @@ Repro:
 
 Cause: `installOverlayFocus` calls `preventDefault()` and moves focus (`src/ui/overlay-dialog.ts:268-289`; 82078ec added the card case). However, Office.js (`excel-web-16.00.js`) has its own keydown handler for keyCode 9 that ignores `defaultPrevented`. It calls `OSF.OUtil.focusToNextTabbable(…, e.target, shift)`. When that finds no neighbour for `e.target` (the card, or the first or last control), it sends `ContextActivationManager_notifyHost(TabExit / TabExitShift)`. Verified fix: a document capture listener that calls `stopPropagation()` when `key === "Tab"` and `defaultPrevented`. With it, Tab cycled × → Stop Pi → Decline → Allow once → ×, and Shift+Tab wrapped from × to Allow once. Sent to #793 (owner) and #794.
 
-### 2. Backups "Clear all" confirms with a stale count (#794, minor)
+### 2. Backups "Clear all" confirms with a stale count (#794, minor) — fixed at `8099cd6`
 
 Repro: open `/history` with 28 backups and leave it open. Have Pi make 14 more writes. Click Clear all. The confirmation says "This will delete 28 backups.", but the toast says "Cleared 42 backups", and all 42 are gone. Opened fresh, the count is right. Cause: `src/commands/builtins/settings-pages/backups-page.ts:228-232` counts `allCheckpoints`, the list loaded when the dialog last loaded, while `onClear()` deletes everything stored. Re-read the count (or reload) before asking. Sent to #794.
+
+### 3. Pi repeats a structure change without end (#792, intermittent, open)
+
+Seen at `8099cd6`, GPT-6 Luna at Min. In one turn, "Use modify_structure to insert one row at row 12 of Sheet1. Nothing else." inserted row 12 **54 times** before Stop. Earlier in the same tab, four one-cell writes were repeated in four rounds while the other tab was widening the used range.
+
+Repro: in a long tab, ask Pi for one `insert_rows`. Fresh tabs inserted once (3 of 3), and a retry in the same long tabs inserted once too, so it is intermittent.
+
+Cause, from the captured model request (CDP `Fetch`): every `insert_rows` result is followed by a newly stored user-role note, "[Auto-context] Workbook structure (structure changed)…". Pi's own insert changed the structure, so that request had 57 such notes. The trailing selection note then ends: "(Background from Excel, not a message from the user: do not reply to it. Carry on with the user's request: "Use modify_structure to insert one row at row 12 of Sheet1. Nothing else.")". After a successful insert, the model therefore sees new user-side input plus its request restated, and inserts again; that changes the structure again. Code: `src/taskpane/context-injection.ts:219-223` (restated request, from 1df8db8, already in `e48d83c`) and the structure-note path. Possible fixes: don't store a structure note that Pi's own mutation in this turn caused, or don't restate the request after a tool result. Sent to #792. It is not specific to the combination: both pieces are #792's.
 
 ## Desktop items for the Mac
 
