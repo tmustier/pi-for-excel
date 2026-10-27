@@ -27,7 +27,7 @@ stateDiagram-v2
     browser --> ready : no workbook (tools unavailable)
 ```
 
-If Office.js is slow, Pi starts after 3 seconds anyway and keeps treating the host as Excel. If startup takes more than 60 seconds, the taskpane shows "Initialization failed: taskpane timeout". Outside Excel (the taskpane URL opened in a browser), Pi starts with no workbook; that mode is for development and UI testing.
+A silent Office.js has a readiness fallback. Slow startup shows delay feedback at 12 and 60 seconds instead of treating elapsed time alone as a fatal failure. Outside Excel, Pi can boot for development/UI inspection but workbook tools are unavailable.
 
 ## What differs, host by host
 
@@ -48,7 +48,7 @@ The manifest declares no minimum Office.js version. A workbook tool that needs a
 
 ### Native browser dialogs
 
-Pi uses the browser's own prompt in two places: renaming a tab by double-click or "Rename tab…" (see [renaming a tab](../sessions/renaming-a-tab.md)), and installing a plugin from a URL ("Extension name:"). On Excel on the web the first does nothing and the second fails with "Install failed: Function window.prompt is not supported.". On Excel for Mac both freeze the taskpane with no visible prompt until it is closed and Pi is opened again (confirmed in Excel for Mac). Every other dialog in Pi is drawn inside the taskpane and works on every host.
+Pi uses in-taskpane dialogs for tab renaming and extension naming, not `window.prompt`. They take/trap focus and block background shortcuts. The native-prompt freeze/throw observations below are historical host behavior, no longer Pi's name-entry path.
 
 ### Keyboard
 
@@ -68,7 +68,7 @@ See [keyboard shortcuts](../ui/keyboard-shortcuts.md) for the full list.
 - **Clipboard.** Excel-web frames can deny the clipboard API by permissions policy. Answer, table and code copy use the shared `copyText` path: clipboard API, older copy method, then a selected-text manual-copy dialog. Tables become TSV for pasting into Excel cells. Manual fallback does not display a false success. Native clipboard delivery still needs host acceptance; browser tests verify exact fallback text. Other surfaces' historical clipboard findings below are outside CC-05.
 - **Answer references.** Completed prose links valid sheet-qualified A1 ranges on known workbook sheets; clicking uses Excel's own selection API on desktop and web. Code and ordinary links are untouched. See [message rendering](../ui/message-rendering.md#cell-links).
 - **Theme.** Follow Office is now the default, with Light/Dark overrides in Settings. No usable Office theme means light, not an OS fallback. The host snapshot is re-read each second. Dark native controls and tab-strip surfaces include the P-170 fixes. See [language and theme](../ui/language-and-theme.md#the-theme).
-- **Downloads** (manual backups, `/export`, downloading from the Files workspace) first open the file in a new window, because WKWebView ignores the usual download link, and fall back to a download link when the window is blocked. What the user then sees (a new browser tab, a save dialog, or the file in the default browser) is decided by the host. On Excel for Mac nothing happens at all: no window, no save dialog, no file, with Excel in front or not, while the success toast still shows (confirmed in Excel for Mac for `/export download`, `/backup`, `/backup restore` and the Files preview's "Download" and "Open ↗").
+- **Downloads** use a single blob download link, without opening a spare browser tab first. Native Save-sheet/file delivery still depends on the host and needs desktop acceptance; the older popup-first observations below are historical, not proof of the current download path.
 - **OAuth popups.** Logging in with an account opens the provider's page in a new window, without a link back to Pi. The login is completed either by the local proxy catching the redirect or by the user pasting the final URL into Pi; see [welcome and login](../setup/welcome-and-login.md).
 
 ### The CORS proxy and local network access
@@ -88,11 +88,11 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | Providers that need the proxy need it on every host; on Excel on the web the proxy is also a local-network request. Error texts differ by engine. | Refused while busy, on every host. |
+| Model and provider | Proxy/local-network requirements and error text vary by host. | Busy choices apply next turn, not the running one. |
 | Thinking level | No host difference. | No host difference. |
 | Execution mode | No host difference. | No host difference. |
 | Files in the workspace, or an overlay open | The Files workspace's private storage and folder access depend on the engine; downloads open differently per host. Overlays are drawn inside the taskpane and behave the same everywhere. | No host difference. |
-| Tab state (new, restored, another tab busy) | On Excel on the web every workbook without an identity restores the same shared tab layout. | No host difference. |
+| Tab state (new, restored, another tab busy) | Location-less workbooks use document-scoped layouts, not one shared global slot. | No host difference. |
 | Host (desktop or web) | This document. | The host cannot change while the taskpane is open. |
 
 ## Cancel and interrupt
@@ -143,6 +143,8 @@ Pi recognises a workbook by its location (see [workbook identity](persistence-an
 - On Excel on the web, the uploaded add-in lives in the browser profile; a different browser or profile has neither the add-in nor any of Pi's data.
 
 ## Open questions and verification
+
+Native-prompt, popup-first download, global-layout and fatal slow-start observations below are historical, superseded by #793/#795/#796. This pass observed modal focus and disabled cross-origin folder connection in Excel-web; it did not repeat native desktop download acceptance. The merged #802 keyboard/copy/theme and #809 backup wording above is retained.
 
 Backup-specific observations below predate main #794 and [#809](https://github.com/tmustier/pi-for-excel/pull/809). Save/reload clearing is resolved; the current contract and new Mac/web acceptance are in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). Other historical host observations remain outside this storage update.
 

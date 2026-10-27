@@ -2,7 +2,7 @@
 
 ## Summary
 
-Each Pi taskpane is a separate copy of Pi. When the user has two workbooks open, each workbook window has its own taskpane, with its own tabs, its own turns, its own [workbook lock](../glossary.md#the-workbook), its own error banner, its own recently closed list and its own copy of most settings. What the taskpanes share is the add-in's storage on this computer: saved sessions, tab layouts, settings, logins, automatic backups and the Files workspace (see [persistence and restore](persistence-and-restore.md)). They do not talk to each other. Nothing locks a session, a tab layout or a workbook across taskpanes, nothing tells one taskpane that another changed something, and when two taskpanes write the same record, the later write wins whole. This document describes what the user sees in each arrangement: two workbooks at once, two taskpanes on the same workbook, the same session open twice, and co-authoring on Excel on the web. There is no control for any of it; it is how the product behaves whenever more than one taskpane is open.
+Each taskpane has separate tabs, live turns, drafts, inline failures and a [workbook lock](../glossary.md#the-workbook). Panes on the same browser origin share saved sessions, layouts, settings, credentials, automatic history and Files storage. Settings updates propagate, session conflicts preserve a copy, and automatic history uses shared transactions; none of this supplies a cross-pane or co-author workbook lock. Layouts still replace whole records. See [persistence and restore](persistence-and-restore.md).
 
 Automatic history is an exception to whole-record replacement: [#809](https://github.com/tmustier/pi-for-excel/pull/809) coordinates backup mutations through shared storage transactions. This does not synchronize loaded pages or lock the workbook across taskpanes.
 
@@ -12,7 +12,7 @@ The user has `Budget.xlsx` and `Forecast.xlsx` open in Excel desktop and opens P
 
 Each conversation is saved to the shared storage as its messages complete. When the user later opens the resume picker in Forecast, the Budget conversation is not in the default list; it appears under "Show sessions from all workbooks".
 
-A setting changed in one taskpane, for example switching the execution mode to Confirm, is saved for both, but the other taskpane keeps showing and using its old value until it is reopened.
+A shared setting changed in one taskpane, including Auto/Confirm, propagates through settings events and focus/visibility refresh. It does not stop or merge another pane's live turn.
 
 ## The interaction, event by event
 
@@ -41,7 +41,7 @@ Two workbooks with different [workbook identities](persistence-and-restore.md#wo
 
 Automatic backups do not collide as whole lists. Each backup has its own payload, and shared transactions serialize metadata, accounting and eviction. Budget and Forecast share the 512 MiB ceiling, so adding a backup in either can evict the oldest history from the other, but cannot accidentally overwrite the other's newer additions.
 
-Two workbooks *without* an identity (two new, unsaved workbooks, or any two workbooks on Excel on the web where no identity is available) share one tab-layout record. Each taskpane rewrites it whenever its own tabs change, so the next unsaved workbook to open Pi restores whichever taskpane changed its tabs last.
+Workbooks without a saved location use document-scoped layouts instead of one global slot. The older cross-workbook shared-layout collision is historical; concurrent panes on the same document can still replace its layout.
 
 ### Two taskpanes on the same workbook
 
@@ -58,15 +58,15 @@ This happens when one workbook is shown in two taskpanes at once, for example in
 
 A session can be open in two taskpanes: on the same workbook as above, or because the user resumed in one workbook a session that is open in another (the resume picker asks "Resume session from another workbook?"). Nothing prevents it and nothing marks it.
 
-Each taskpane holds the whole conversation in memory and rewrites the whole saved session every time one of its own messages completes. The two copies never merge:
+Each taskpane holds its own live conversation. Stored revisions are checked before saving; the live copies do not merge:
 
 - Each taskpane shows only its own turns. A message sent in one does not appear in the other.
-- In storage, the session is whatever the last taskpane to complete a message wrote. Turns that existed only in the other taskpane's copy are gone from storage, and from both taskpanes after a reload. The saved title, model and thinking level follow the same rule.
-- Closing the tab in either taskpane force-saves that taskpane's copy, which also overwrites the other's.
+- If another pane saved a newer revision, this pane saves its conversation under a new session ID and reports a conflict copy instead of destroying the newer record.
+- Closing force-saves using the same revision protection; it is not permission to replace a newer conversation.
 
 ### Concurrent saves
 
-Each save is a single storage transaction that writes the session together with its summary, so two taskpanes saving at the same moment cannot leave half a session. Sessions and tab layouts still have whole-record replacement behavior. Automatic history is different: payloads are independent records and additions, removals, identity moves and eviction serialize through shared transactions. Two panes migrating old history cannot duplicate it; a failed migration leaves the old source intact. This storage update does not change the audit log or Files tags.
+Session and summary save together, with revision checks preserving a conflict copy. Tab layouts still replace whole records. Automatic history has independent payloads: additions, removals, identity moves and eviction serialize through shared transactions. Two panes migrating old history cannot duplicate it; failed migration leaves the old source intact. This storage update does not change the audit log or Files tags.
 
 ## Modifiers
 
@@ -74,7 +74,7 @@ Each save is a single storage transaction that writes the session together with 
 | --- | --- | --- |
 | Model and provider | Each tab's model is its own. Logging in or out of a provider in one taskpane applies to the other's next request; the other's model picker and status bar may not reflect it until it reloads. | No cross-taskpane effect on a running turn until its next model request reads the credential. |
 | Thinking level | Per tab; no cross-taskpane effect. | No cross-taskpane effect. |
-| Execution mode | Saved for all taskpanes, but each taskpane reads it once at startup and keeps its own value. One taskpane can be in Auto while another is in Confirm. | A change in one taskpane does not affect a turn in another. |
+| Execution mode | Shared mode converges through settings/focus refresh. | Subsequent approval decisions use the refreshed mode; already-applied changes are not undone. |
 | Files in the workspace, or an overlay open | The Files workspace is shared: a file imported in one taskpane is on disk for the other, but the other's file list and workbook tags are from when it last loaded them. Overlays are per taskpane. | Same. |
 | Tab state (new, restored, another tab busy) | A tab busy in one taskpane has no effect on another taskpane: no busy dot, no "Locking…", no refusal. | Same. |
 | Host (desktop or web) | Desktop taskpanes on one computer share storage. Excel on the web shares storage between browser tabs of the same profile, never with desktop. | No effect. |
@@ -138,6 +138,8 @@ The document token Pi writes into a workbook without an identity is stored in th
 - Disabling the proxy in one taskpane stops the other from using it at its next request, but the other's proxy banner reflects only reachability, not the setting.
 
 ## Open questions and verification
+
+The old unsynchronized-mode, global-layout and destructive session-overwrite observations below are historical, superseded by #794/#795. Session saves now preserve a conflicting conversation as a copy; layouts remain whole-record replacement. These corrections retain #809's independent indexed history, migration and shared-ceiling contract, and do not claim new two-pane acceptance.
 
 Backup-specific observations below are historical, from before main #794 and [#809](https://github.com/tmustier/pi-for-excel/pull/809). Indexed storage now preserves concurrent additions, migration is single-winner, and opening a pane does not clear history. Native Chromium tests cover two simultaneous panes, paging and deletion; live Mac/web acceptance covers migration/reload/restore. Current evidence and remaining limitations are in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). The new backend closes on a database version change; older pre-upgrade builds still cannot open the upgraded origin.
 
