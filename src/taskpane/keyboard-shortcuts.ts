@@ -10,6 +10,8 @@ import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
+import { t } from "../language/index.js";
+import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
