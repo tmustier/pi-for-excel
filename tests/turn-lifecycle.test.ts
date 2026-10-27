@@ -181,6 +181,29 @@ void test("Stop during a retry wait keeps the failure and sends no further reque
   tab.queue.shutdown();
 });
 
+void test("a partial answer that failed mid-stream survives a retry that fails before streaming", async () => {
+  const tab = createTab([
+    fauxAssistantMessage("partial answer", { stopReason: "error", errorMessage: "network error" }),
+    fauxAssistantMessage("", { stopReason: "error", errorMessage: "Failed to fetch: network error" }),
+    fauxAssistantMessage("should not be requested"),
+  ]);
+
+  tab.queue.enqueuePrompt("hello");
+  await waitFor(() => tab.requests.length === 2 && tab.tab.activity !== null);
+  tab.queue.stop();
+  await waitFor(() => !tab.queue.isBusy());
+
+  assert.equal(tab.requests.length, 2);
+  const last = tab.agent.state.messages.at(-1);
+  assert.deepEqual(
+    last?.role === "assistant"
+      ? { text: last.content.map((part) => (part.type === "text" ? part.text : "")).join(""), stopReason: last.stopReason, error: last.errorMessage }
+      : null,
+    { text: "partial answer", stopReason: "error", error: "Failed to fetch: network error" },
+  );
+  tab.queue.shutdown();
+});
+
 void test("a quota or usage-limit failure is not retried", async () => {
   // The ChatGPT login reports every 429 as a usage limit that resets after minutes or hours.
   for (const errorMessage of ["insufficient_quota: billing", "You have hit your ChatGPT usage limit (plus plan). Try again in ~42 min."]) {
