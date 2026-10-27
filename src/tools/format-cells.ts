@@ -5,19 +5,20 @@
  * borders, alignment, column width.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FormatCellsDetails } from "./tool-details.js";
-import { excelRun, getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbook/recovery-states.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { resolveStyles } from "../conventions/index.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation, finalizeMutationRecoveryStep } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -539,7 +540,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           }
         }
 
-        const result = await excelRun((context) =>
+        const result = await runMutation((context) =>
           applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
         const fullAddr = result.isMultiRange
@@ -584,7 +585,6 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           },
           appendResultNote: appendMutationResultNote,
           unavailableReason: recoveryUnavailableReason,
-          unavailableNote: CHECKPOINT_SKIPPED_NOTE,
         });
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -602,7 +602,8 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
 
         return toolResult;
       } catch (e) {
-        const message = getErrorMessage(e);
+        const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
+        const message = failure.reason;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -617,8 +618,9 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         });
 
         return {
-          content: [{ type: "text", text: `Error formatting: ${message}` }],
+          content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}` }],
           details: { kind: "format_cells", address: params.range },
+          isError: true,
         };
       }
     },

@@ -3,7 +3,39 @@ import { test } from "node:test";
 
 import { createFetchPageTool } from "../src/tools/fetch-page.ts";
 import { createMcpTool } from "../src/tools/mcp.ts";
+import { createModifyStructureTool } from "../src/tools/modify-structure.ts";
 import { createWebSearchTool } from "../src/tools/web-search.ts";
+import { OfficeError } from "./fixtures/excel-write-host.ts";
+
+/** An Excel host whose structural edits fail with `failure`, as Excel on the web does on a protected sheet. */
+async function withFailingStructureHost<T>(failure: Error & { code: string }, action: () => Promise<T>): Promise<T> {
+  let failNextSync = false;
+  const sheet = {
+    id: "sheet-1",
+    name: "Protected",
+    load: (): void => {},
+    protection: { protected: failure.code === "AccessDenied", load: (): void => {} },
+    getRange: () => ({ insert: (): void => { failNextSync = true; } }),
+  };
+  const context = {
+    workbook: {
+      worksheets: { getItem: () => sheet, getActiveWorksheet: () => sheet },
+      protection: { protected: false, load: (): void => {} },
+    },
+    sync: (): Promise<void> => {
+      if (!failNextSync) return Promise.resolve();
+      failNextSync = false;
+      return Promise.reject(failure);
+    },
+  };
+  const previous = Reflect.get(globalThis, "Excel");
+  Reflect.set(globalThis, "Excel", { run: <R>(callback: (ctx: unknown) => Promise<R>): Promise<R> => callback(Object.create(context)) });
+  try {
+    return await action();
+  } finally {
+    Reflect.set(globalThis, "Excel", previous);
+  }
+}
 
 void test("error-path matrix: wrong web_search API key falls back to Jina with warning", async () => {
   const tool = createWebSearchTool({
@@ -200,4 +232,75 @@ void test("error-path matrix: mcp tool call handles mid-call network disconnect"
   assert.equal(details.operation, "tool");
   assert.equal(details.tool, "echo");
   assert.match(details.error ?? "", /networkerror/i);
+});
+
+void test("error-path matrix: a protected sheet is named as the reason, as a tool error", async () => {
+  const result = await withFailingStructureHost(
+    new OfficeError("AccessDenied", "You cannot perform the requested operation.", "Range.insert"),
+    () => createModifyStructureTool().execute("call-protected", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.match(text, /the workbook was not changed/u);
+  assert.match(text, /Sheet "Protected" is protected/u);
+  assert.doesNotMatch(text, /You cannot perform the requested operation/u);
+});
+
+void test("error-path matrix: cell-edit mode tells the agent to ask the user to leave the cell", async () => {
+  // Shape of excelRun's ExcelCellEditModeError (#792) when nothing had reached Excel. A raw
+  // InvalidOperationInCellEditMode no longer reaches tools: excelRun retries and then wraps it,
+  // and in this fake the sheet load before the insert succeeds, which excelRun reports as applied.
+  const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
+    code: "excel_cell_edit_mode",
+    waitedMs: 0,
+    earlierStepReachedExcel: false,
+  });
+  const result = await withFailingStructureHost(
+    gaveUp,
+    () => createModifyStructureTool().execute("call-edit-mode", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.match(text, /the workbook was not changed\. Excel is in cell-edit mode: the user is typing in a cell/u);
+  assert.match(text, /Ask the user to finish editing the cell, then retry\./u);
+});
+
+void test("error-path matrix: cell-edit mode after an earlier step reached Excel does not claim nothing changed", async () => {
+  // Shape of excelRun's ExcelCellEditModeError (#792): it gives up without retrying once a sync succeeded.
+  const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
+    code: "excel_cell_edit_mode",
+    waitedMs: 0,
+    earlierStepReachedExcel: true,
+  });
+  const result = await withFailingStructureHost(
+    gaveUp,
+    () => createModifyStructureTool().execute("call-edit-mode-late", { action: "insert_rows", sheet: "Protected", position: 3 }),
+  );
+  const text = result.content[0]?.type === "text" ? result.content[0].text : "";
+
+  assert.equal(result.isError, true);
+  assert.doesNotMatch(text, /was not changed/u);
+  assert.match(text, /part of this change may already be in the workbook; check it before retrying/u);
+  assert.match(text, /Excel is in cell-edit mode/u);
+});
+
+void test("error-path matrix: comments without range says range is required instead of a JavaScript error", async () => {
+  const { createCommentsTool } = await import("../src/tools/comments.ts");
+  const dispatched: string[] = [];
+  const tool = createCommentsTool({
+    dispatchAction: (params) => { dispatched.push(params.range); return Promise.resolve({ text: "ok" }); },
+    captureCommentThread: () => Promise.reject(new Error("must not touch the workbook")),
+  });
+  const result = await tool.execute(
+    "comments-no-range",
+    // @ts-expect-error -- a misnamed parameter, as a model sent it: `cell` instead of `range`
+    { action: "add", cell: "A1", content: "hi" },
+  );
+
+  assert.equal(result.isError, true);
+  const first = result.content[0];
+  assert.match(first?.type === "text" ? first.text : "", /`range` is required.*Received parameters: action, cell, content\. Nothing was changed\./u);
+  assert.deepEqual(dispatched, []);
 });

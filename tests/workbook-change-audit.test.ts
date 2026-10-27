@@ -535,7 +535,10 @@ void test("view_settings tool appends audit entries for mutate success and failu
   });
 
   assert.match(firstText(errorResult), /sheet is required for activate/u);
-  assert.match(firstText(errorResult), /Backup not created/u);
+  // Nothing changed, so the failure is an error result and says so, with no backup note.
+  assert.equal(errorResult.isError, true);
+  assert.match(firstText(errorResult), /the view was not changed/u);
+  assert.doesNotMatch(firstText(errorResult), /Backup not created/u);
   assert.equal(errorAuditCapture.entries.length, 1);
   assert.equal(errorAuditCapture.entries[0]?.toolName, "view_settings");
   assert.equal(errorAuditCapture.entries[0]?.blocked, true);

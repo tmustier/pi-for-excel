@@ -69,7 +69,16 @@ class RangeStoreRange {
       Array.from({ length: this.columnCount }, () => "General"));
   }
 
+  // The write path inspects these before writing; this store has no merges,
+  // spills, protection or validation.
+  readonly hasSpill = false;
+  readonly dataValidation = { valid: true, load: (_properties?: string): void => {} };
+
   load(_properties?: string | string[]): void {}
+
+  getTables(_fullyContained?: boolean): { items: Array<{ name: string }>; load: (properties?: string) => void } {
+    return { items: [], load: () => {} };
+  }
 
   get values(): unknown[][] {
     return this.store.readGrid(this.parsed, "value");
@@ -373,7 +382,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
     });
     assert.match(firstText(first), /Written to/u);
     assert.equal(first.details.recovery?.status, "not_available");
-    assert.match(firstText(first), /backup not created/iu);
+    assert.match(firstText(first), /No backup was saved, so `workbook_history` cannot restore this change\. Pi could not identify this workbook/u);
     assert.match(firstText(await read.execute("read-first-write", {
       range: "Sheet1!A1",
       mode: "csv",
@@ -472,7 +481,7 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
       snapshot_id: overwriteSnapshotId,
     });
     assert.match(firstText(restored), /Restored backup/u);
-    assert.equal(restored.details.address, "Sheet1!A1:A1");
+    assert.equal(restored.details.address, "Sheet1!A1");
     assert.equal(restored.details.restoredSnapshotId, overwriteSnapshotId);
     const readRestored = await read.execute("read-restored", { range: "Sheet1!A1", mode: "csv" });
     assert.match(firstText(readRestored), /Name/u);

@@ -5,10 +5,11 @@
  * Handles threaded replies via the Excel CommentReply API.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -19,12 +20,11 @@ import {
   type AppendCommentThreadRecoverySnapshotArgs,
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
-import { getErrorMessage } from "../utils/errors.js";
 import type { CommentsDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -143,6 +143,19 @@ export function createCommentsTool(
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<CommentsDetails>> => {
+      // Schema validation normally rejects a missing range; check here too so a
+      // misnamed parameter (e.g. `cell`) gets a usable answer, not a JavaScript error.
+      if (typeof params.range !== "string" || params.range.trim() === "") {
+        return {
+          content: [{
+            type: "text",
+            text: `Error (${params.action}): \`range\` is required — the target cell, e.g. "A1" or "Sheet2!B3". ` +
+              `Received parameters: ${Object.keys(params).join(", ")}. Nothing was changed.`,
+          }],
+          details: { kind: "comments", action: params.action, address: "" },
+          isError: true,
+        };
+      }
       const isMutation = isMutatingCommentsAction(params.action);
       const mutationFinalizeDependencies: MutationFinalizeDependencies = {
         appendAuditEntry: (entry) => resolvedDependencies.appendAuditEntry(entry),
@@ -188,7 +201,6 @@ export function createCommentsTool(
             }),
             appendResultNote: appendMutationResultNote,
             unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
           }
           : undefined;
 
@@ -207,7 +219,8 @@ export function createCommentsTool(
 
         return output;
       } catch (e) {
-        const message = getErrorMessage(e);
+        const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
+        const message = failure.reason;
 
         if (isMutation) {
           await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -224,12 +237,16 @@ export function createCommentsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action} on "${params.range}"): ${message}` }],
+          content: [{
+            type: "text",
+            text: `Error (${params.action} on "${params.range}")${isMutation ? unchangedClause(failure, "comments were not changed") : ""}. ${message}`,
+          }],
           details: {
             kind: "comments",
             action: params.action,
             address: params.range,
           },
+          isError: true,
         };
       }
     },
@@ -258,7 +275,7 @@ async function dispatchAction(params: Params): Promise<CommentsDispatchResult> {
 // ── Action implementations ───────────────────────────────────────────
 
 async function executeRead(ref: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     range.load("address");
     sheet.load("name");
@@ -352,7 +369,7 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
 }
 
 async function executeAdd(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -370,7 +387,7 @@ async function executeAdd(ref: string, content: string): Promise<CommentsDispatc
 }
 
 async function executeUpdate(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -389,7 +406,7 @@ async function executeUpdate(ref: string, content: string): Promise<CommentsDisp
 }
 
 async function executeReply(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -408,7 +425,7 @@ async function executeReply(ref: string, content: string): Promise<CommentsDispa
 }
 
 async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -431,7 +448,7 @@ async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
 }
 
 async function executeSetResolved(ref: string, resolved: boolean): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");

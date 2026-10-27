@@ -26,8 +26,8 @@ import {
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
-import { getErrorMessage } from "../utils/errors.js";
 import { findErrors } from "../utils/format.js";
+import { formatReplacedFormulas, replacedFormulas, toCellGrid, writeBlockFromAddress } from "./mutation/range-write.js";
 import {
   callDefaultPythonBridge,
   getDefaultPythonBridgeConfig,
@@ -39,9 +39,10 @@ import {
 import { countOccupiedCells } from "./write-cells.js";
 import type { PythonTransformRangeDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
+  tooLargeToBackUpReason,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
@@ -571,10 +572,20 @@ export function createPythonTransformRangeTool(
             })
             : undefined;
 
-        const successText =
-          changes && changes.changedCount > 0
-            ? `${formatSuccessMessage(sourceAddress, writeResult)}\n\nChanged cell(s): ${changes.changedCount}.`
-            : formatSuccessMessage(sourceAddress, writeResult);
+        const lostFormulas = writeResult.beforeFormulas && writeResult.readBackFormulas
+          ? replacedFormulas(
+            writeBlockFromAddress(parsedOutput.address),
+            toCellGrid(writeResult.beforeFormulas),
+            toCellGrid(writeResult.readBackFormulas),
+          )
+          : [];
+        const lostFormulasLine = formatReplacedFormulas(outputSheetName, lostFormulas);
+
+        const successText = [
+          formatSuccessMessage(sourceAddress, writeResult),
+          ...(lostFormulasLine ? [lostFormulasLine] : []),
+          ...(changes && changes.changedCount > 0 ? [`Changed cell(s): ${changes.changedCount}.`] : []),
+        ].join("\n\n");
 
         const successResult: AgentToolResult<PythonTransformRangeDetails> = {
           content: [{
@@ -590,6 +601,7 @@ export function createPythonTransformRangeTool(
             rowsWritten: writeResult.rowsWritten,
             colsWritten: writeResult.colsWritten,
             formulaErrorCount: writeResult.formulaErrorCount,
+            ...(lostFormulas.length > 0 ? { formulasReplacedCount: lostFormulas.length } : {}),
             ...(changes !== undefined ? { changes } : {}),
           },
         };
@@ -623,14 +635,19 @@ export function createPythonTransformRangeTool(
               });
             },
             appendResultNote: appendMutationResultNote,
-            unavailableReason: CHECKPOINT_SKIPPED_REASON,
-            unavailableNote: CHECKPOINT_SKIPPED_NOTE,
+            unavailableReason: writeResult.rowsWritten * writeResult.colsWritten > MAX_RECOVERY_CELLS
+              ? tooLargeToBackUpReason(writeResult.rowsWritten * writeResult.colsWritten)
+              : CHECKPOINT_SKIPPED_REASON,
           },
         });
 
         return successResult;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const parsed = parseExcelError(error);
+        // Excel failures get a specific reason; bridge/Python failures keep their message.
+        const message = parsed.code
+          ? (await describeExcelFailure(parsed)).reason
+          : parsed.message;
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"
           : undefined;
@@ -648,6 +665,7 @@ export function createPythonTransformRangeTool(
             error: message,
             ...(skillHint !== undefined ? { skillHint } : {}),
           },
+          isError: true,
         };
       }
     },

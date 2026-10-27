@@ -66,6 +66,20 @@ const mutationDetailsProperties = {
   formulaErrorCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
+  /** How the write was checked: every cell (`full`), both ends plus a whole-range scan (`sampled`), or not at all (`failed`). */
+  verification: Type.Optional(StringEnum(["full", "sampled", "failed"])),
+  /** Cells that do not hold the value sent (merged cells, spills, …). */
+  notWrittenCount: Type.Optional(Type.Number()),
+  /** Text values Excel converted to numbers, dates or booleans. */
+  convertedCount: Type.Optional(Type.Number()),
+  /** Cells that held a formula and now hold a constant. */
+  formulasReplacedCount: Type.Optional(Type.Number()),
+  /** Written values that violate the cells' data validation. */
+  invalidCount: Type.Optional(Type.Number()),
+  /** Workbook calculation mode, present only when it is not Automatic. */
+  calculationMode: Type.Optional(Type.String()),
+  /** Office.js error code when the call failed. */
+  errorCode: Type.Optional(Type.String()),
   /** The user pressed Stop during the call; the text says what was written before it. */
   stopped: Type.Optional(Type.Boolean()),
   /** With `stopped`: cells confirmed written before Stop took effect; 0 means nothing changed. */
@@ -109,6 +123,8 @@ export const modifyStructureDetailsSchema = Type.Object({
   kind: Type.Literal("modify_structure"),
   action: Type.Optional(Type.String()),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
+  /** delete_rows: rows that were hidden (by a filter or by hand) when they were deleted. */
+  hiddenRowsDeleted: Type.Optional(Type.Number()),
 });
 
 export type ModifyStructureDetails = Static<typeof modifyStructureDetailsSchema>;
@@ -312,6 +328,8 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   rowsWritten: Type.Optional(Type.Number()),
   colsWritten: Type.Optional(Type.Number()),
   formulaErrorCount: Type.Optional(Type.Number()),
+  /** Cells that held a formula and now hold a constant. */
+  formulasReplacedCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
   /** Stop was pressed; the result says what was written before it took effect. */

@@ -4,20 +4,21 @@
  * Scope: on-screen worksheet view/navigation only (not print/page layout).
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, parseCell, qualifiedAddress } from "../excel/helpers.js";
+import { parseCell, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
 } from "../audit/workbook-change-audit.js";
-import { getErrorMessage } from "../utils/errors.js";
 import {
   NON_CHECKPOINTED_MUTATION_NOTE,
   NON_CHECKPOINTED_MUTATION_REASON,
   recoveryCheckpointUnavailable,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -185,22 +186,28 @@ export function createViewSettingsTool(
 
         return output;
       } catch (e) {
-        const message = getErrorMessage(e);
         const outputAddress = params.range ?? params.sheet;
+        const failure = await describeExcelFailure(parseExcelError(e), {
+          ...(params.sheet !== undefined ? { sheet: params.sheet } : {}),
+          ...(params.range !== undefined ? { range: params.range } : {}),
+        });
+        const message = failure.reason;
 
         if (!isMutation) {
           return {
             content: [{ type: "text", text: `Error: ${message}` }],
             details: undefined,
+            isError: true,
           };
         }
 
         const output: AgentToolResult<ViewSettingsDetails> = {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action})${unchangedClause(failure, "the view was not changed")}. ${message}` }],
           details: buildMutationDetails({
             action: params.action,
             ...(outputAddress !== undefined ? { address: outputAddress } : {}),
           }),
+          isError: true,
         };
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
@@ -213,13 +220,6 @@ export function createViewSettingsTool(
             changes: [],
             summary: `error: ${message}`,
           },
-          recovery: {
-            result: output,
-            appendRecoverySnapshot: () => Promise.resolve(null),
-            appendResultNote: appendMutationResultNote,
-            unavailableReason: NON_CHECKPOINTED_MUTATION_REASON,
-            unavailableNote: NON_CHECKPOINTED_MUTATION_NOTE,
-          },
         });
 
         return output;
@@ -229,7 +229,7 @@ export function createViewSettingsTool(
 }
 
 async function executeViewSettingsAction(params: Params): Promise<ViewSettingsActionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const sheet = params.sheet
       ? context.workbook.worksheets.getItem(params.sheet)
       : context.workbook.worksheets.getActiveWorksheet();
