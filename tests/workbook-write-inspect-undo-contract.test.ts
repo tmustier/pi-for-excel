@@ -45,8 +45,12 @@ function parseRange(address: string): ParsedRange {
   return { startCol: start.col, startRow: start.row, endCol: end.col, endRow: end.row };
 }
 
+const NULL_OBJECT = { isNullObject: true, load: (_properties?: string) => undefined };
+
 class RangeStoreRange {
   readonly address: string;
+  readonly rowIndex: number;
+  readonly columnIndex: number;
   readonly rowCount: number;
   readonly columnCount: number;
   readonly numberFormat: unknown[][];
@@ -57,6 +61,8 @@ class RangeStoreRange {
     this.store = store;
     this.address = address.includes("!") ? address.slice(address.indexOf("!") + 1) : address;
     this.parsed = parseRange(this.address);
+    this.rowIndex = this.parsed.startRow;
+    this.columnIndex = this.parsed.startCol;
     this.rowCount = this.parsed.endRow - this.parsed.startRow + 1;
     this.columnCount = this.parsed.endCol - this.parsed.startCol + 1;
     this.numberFormat = Array.from({ length: this.rowCount }, () =>
@@ -76,6 +82,28 @@ class RangeStoreRange {
   get formulas(): unknown[][] {
     return this.store.readGrid(this.parsed, "formula");
   }
+
+  get formulasR1C1(): unknown[][] {
+    return this.formulas;
+  }
+
+  get text(): string[][] {
+    return this.values.map((row) => row.map((value) => (typeof value === "string" || typeof value === "number" ? String(value) : "")));
+  }
+
+  readonly format = { protection: { locked: true, load: (_properties?: string) => undefined } };
+
+  getMergedAreasOrNullObject(): typeof NULL_OBJECT {
+    return NULL_OBJECT;
+  }
+
+  getSpecialCellsOrNullObject(): typeof NULL_OBJECT {
+    return NULL_OBJECT;
+  }
+
+  getSpillingToRangeOrNullObject(): typeof NULL_OBJECT {
+    return NULL_OBJECT;
+  }
 }
 
 class RangeStoreSheet {
@@ -87,10 +115,32 @@ class RangeStoreSheet {
     this.store = store;
   }
 
+  readonly isNullObject = false;
+  readonly protection = { protected: false, load: (_properties?: string) => undefined };
+  readonly tables = { items: [] as unknown[], load: (_properties?: string) => undefined };
+  readonly autoFilter = {
+    enabled: false,
+    isDataFiltered: false,
+    load: (_properties?: string) => undefined,
+    getRangeOrNullObject: () => NULL_OBJECT,
+  };
+
   load(_properties?: string | string[]): void {}
 
   getRange(address: string): RangeStoreRange {
     return new RangeStoreRange(this.store, address);
+  }
+
+  getRangeByIndexes(rowIndex: number, columnIndex: number, rowCount: number, columnCount: number): RangeStoreRange {
+    const letter = (col: number): string => String.fromCharCode(65 + col);
+    return new RangeStoreRange(
+      this.store,
+      `${letter(columnIndex)}${rowIndex + 1}:${letter(columnIndex + columnCount - 1)}${rowIndex + rowCount}`,
+    );
+  }
+
+  getUsedRangeOrNullObject(): typeof NULL_OBJECT {
+    return NULL_OBJECT;
   }
 }
 
@@ -99,8 +149,11 @@ class RangeStore {
   readonly sheet = new RangeStoreSheet(this);
   readonly context = {
     workbook: {
+      application: { calculationMode: "Automatic", load: (_properties?: string) => undefined },
       worksheets: {
         getActiveWorksheet: (): RangeStoreSheet => this.sheet,
+        getItemOrNullObject: (name: string): RangeStoreSheet | typeof NULL_OBJECT =>
+          name === this.sheet.name ? this.sheet : NULL_OBJECT,
         getItem: (name: string): RangeStoreSheet => {
           if (name !== this.sheet.name) throw new Error(`Worksheet not found: ${name}`);
           return this.sheet;

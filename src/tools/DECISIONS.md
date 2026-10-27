@@ -60,6 +60,26 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Compact/detailed tables:** render an Excel-style markdown grid with **column letters** and **row numbers** (instead of treating the first data row as a table header).
 - **Empty ranges:** if a range has **no values, formulas, or errors**, return `_All cells are empty._` (omit the table) to avoid confusing "blank header" visuals.
 - **Rationale:** improves readability in the sidebar UI and avoids ambiguous tables for 1-row or empty ranges.
+- **Bounded reads:** a page holds at most 500 rows / 2,500 cells (100 columns). Whole-column/row addresses (`A:A`, `3:5`) and any range larger than a page are clipped to the sheet's used range (values only) first. A larger target returns its first page plus the exact range to read next (`Next page: read_range "Big!A501:E1000"`); no `offset` parameter, so the tool schema stays as it was. A load that still hits Excel's response-size limit (long text) halves its rows and retries.
+- **Displayed values:** compact/detailed tables show each cell as the user sees it (`range.text`). When the display hides the stored value (dates, rounded currency), the stored value follows in brackets: `01/01/2024 [45292]`, `£98,765.43 [98765.4321]`; a legend line appears once. Displays that denote the value exactly (`12.5%`, `£1,234.50`), General-format cells and `####` overflow show one value. CSV mode stays raw.
+- **Numbers and text:** numbers render with `String()` (0 is `0`; no scientific notation for small or large values). `formatAsMarkdownTable` escapes `\`, `|` and line breaks (`\n`) in every cell, so cell text cannot split the grid.
+- **Sheet state notes (`sheet-state.ts`):** for the page read, one line each, only when present: manual calculation mode, sheet protection with the cells' locked state, hidden (filtered) rows and columns, tables touching the range and whether a filter is applied, sheet AutoFilter, merged areas, spill ranges (formula cells that can spill, up to 100 checked), data validation rules. A state read that fails adds an "(Some sheet state could not be read …)" line instead of failing the read.
+- **Summaries first:** notes, formulas and errors come before the table, so head truncation cuts table rows rather than the summary. Formulas filled down a column collapse to one entry by R1C1 (`F2:F833: =C2*2 (filled, 832 cells)`); formula, error and number-format lists are capped with a `+N more` count.
+- **Value notes:** numbers stored as text (strings Excel would read as numbers, e.g. `"12"`, `"1,200"`, `"40%"`; not zero-padded codes like `"00123"`) are listed, because the grid shows them like numbers and SUM/AVERAGE skip them. A page with 50+ numbers in a column gets exact column sums for the page (up to 10 columns) and a line telling the agent to compute other aggregates (execute_office_js `context.workbook.functions`, python_run) instead of adding values itself. Real turns on GPT-6 Luna summed 1,000 paged rows wrong (8,965 vs 8,978) without it. Result text only; tool schemas unchanged.
+- **Sheet resolution:** the sheet is resolved once, before any range work. An address without a sheet uses the active sheet and the result says so (`Sheet: "Model" (the active sheet; …)`); an unknown sheet fails with the list of sheet names.
+
+## Workbook search (`search_workbook`)
+- **Chunked scan:** each sheet's used range is loaded in row chunks of about 100k cells (halved on a response-size error) instead of one used-range load, which failed for the whole workbook once any sheet was large. Each chunk loads only the searched grid; the other grid (formulas or values) is loaded only for chunks with a match. Context rows are loaded across chunk boundaries.
+- **Bound:** one search scans at most 5M cells and says where it stopped.
+- **Unknown sheet:** `sheet` naming a missing sheet fails with the list of sheet names instead of reporting no matches.
+
+## Sheet overview (`get_workbook_overview {sheet}`)
+- **No used-range values:** the preview reads only its first 5 rows × 20 columns (as displayed), so a 200k-row sheet previews like a small one.
+- **Labels follow the used range:** the preview's row numbers and column letters start where the used range starts, and `Headers` is the first row of the used range (not row 1), named when it is not row 1: `Headers (row 5): Region, Q1, Q2`. Same in the workbook-level overview.
+- **Sheet state:** the same notes as `read_range` for the used range, plus frozen panes. The workbook-level tool result appends a `### Current state` section (calculation mode when not Automatic, protected sheets), read fresh per call. These stay out of `buildOverview()`: that text is the cached auto-context blueprint, which only refreshes on structure changes, and protection or calculation-mode changes are not structure changes.
+
+## Dependency ranges (`trace_dependencies`)
+- **Ranges are not collapsed:** a precedent/dependent range of up to 16 cells is traced cell by cell (`SUM(E2:E3)` → E2 and E3); a larger range becomes one range node whose values are not loaded (`Mid50k!C2:C3000 (range, values not traced)`). Previously only the first cell was kept.
 
 ## Default formatting assumption
 - **System prompt:** "Default font for formatting is Arial 10 unless user specifies otherwise."

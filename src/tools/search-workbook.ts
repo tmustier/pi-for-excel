@@ -9,13 +9,14 @@ import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
+  cellAddress,
   colToLetter,
   excelRun,
-  parseCell,
-  parseRangeRef,
+  isResponsePayloadLimitMessage,
   qualifiedAddress,
 } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { escapeMarkdownCell } from "../utils/format.js";
 
 const schema = Type.Object({
   query: Type.String({
@@ -61,6 +62,11 @@ type Params = Static<typeof schema>;
 type SearchCellValue = string | number | boolean | null;
 type LoadedSearchCell = SearchCellValue | undefined;
 
+/** Cells per load (values and formulas). Well inside the ~5 MB response limit for typical cells. */
+const SEARCH_CHUNK_CELLS = 100_000;
+/** Upper bound on one search, so a huge workbook answers in seconds rather than minutes. */
+const MAX_SEARCH_CELLS = 5_000_000;
+
 const searchCellMatrixSchema = Type.Refine(
   Type.Unsafe<SearchCellValue[][]>({}),
   (value) => Array.isArray(value) && value.every(Array.isArray),
@@ -77,6 +83,9 @@ interface SearchMatch {
 
 interface SearchRangeOptions {
   sheetName: string;
+  /** Rows of `values` to search; rows outside this window are loaded only as match context. */
+  searchRowStart: number;
+  searchRowEnd: number;
   values: SearchCellValue[][];
   formulas: SearchCellValue[][];
   start: { col: number; row: number };
@@ -103,7 +112,7 @@ function searchableValue(value: LoadedSearchCell): string | null {
 function contextCellText(value: LoadedSearchCell): string {
   const text = searchableValue(value) ?? "";
   const bounded = text.length > 20 ? `${text.substring(0, 20)}…` : text;
-  return bounded.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+  return escapeMarkdownCell(bounded);
 }
 
 function buildContextPreview(
@@ -144,7 +153,7 @@ function searchLoadedRange(options: SearchRangeOptions): SearchRangeResult {
   const matches: SearchMatch[] = [];
   let totalMatches = options.matchesBeforeRange;
 
-  for (let row = 0; row < options.values.length; row += 1) {
+  for (let row = options.searchRowStart; row < options.searchRowEnd; row += 1) {
     const valueRow = options.values[row] ?? [];
     const formulaRow = options.formulas[row] ?? [];
 
@@ -200,9 +209,10 @@ function renderSearchMatches(matches: SearchMatch[], query: string, hasMore: boo
 
   for (const match of matches) {
     const address = qualifiedAddress(match.sheet, match.address);
-    const value = typeof match.value === "string" && match.value.length > 60
+    const raw = typeof match.value === "string" && match.value.length > 60
       ? `${match.value.substring(0, 60)}…`
       : String(match.value);
+    const value = raw.replace(/\r\n|\r|\n/gu, "\\n");
     const formula = match.formula ? ` ← ${match.formula}` : "";
     lines.push(`- **${address}**: ${value}${formula}`);
     if (match.context) lines.push(match.context);
@@ -250,6 +260,8 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
           const allMatches: SearchMatch[] = [];
           let totalMatches = 0;
           let hasMore = false;
+          let scannedCells = 0;
+          let stoppedAt: string | undefined;
           const sheets = context.workbook.worksheets;
           sheets.load("items/name,items/visibility");
           await context.sync();
@@ -258,50 +270,91 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             ? sheets.items.filter((s) => s.name === params.sheet)
             : sheets.items.filter((s) => s.visibility === "Visible");
 
-          for (const sheet of targetSheets) {
-            const used = sheet.getUsedRangeOrNullObject();
-            used.load("values,formulas,address");
-            await context.sync();
+          if (params.sheet && targetSheets.length === 0) {
+            const names = sheets.items.map((item) => `"${item.name}"`).join(", ");
+            throw new Error(`Sheet "${params.sheet}" not found. Sheets in this workbook: ${names}.`);
+          }
 
+          sheetLoop: for (const sheet of targetSheets) {
+            const used = sheet.getUsedRangeOrNullObject(true);
+            used.load("rowIndex,columnIndex,rowCount,columnCount");
+            await context.sync();
             if (used.isNullObject) continue;
 
-            const values = Value.Parse(searchCellMatrixSchema, used.values);
-            const formulas = Value.Parse(searchCellMatrixSchema, used.formulas);
+            // Load the sheet in row chunks: one used-range load of a big sheet
+            // exceeds the host's response size limit.
+            let chunkRows = Math.max(1, Math.floor(SEARCH_CHUNK_CELLS / used.columnCount));
+            let row = 0;
+            while (row < used.rowCount) {
+              if (scannedCells >= MAX_SEARCH_CELLS) {
+                stoppedAt = `${qualifiedAddress(sheet.name, cellAddress(used.columnIndex, used.rowIndex + row + 1))}`;
+                break sheetLoop;
+              }
+              const rows = Math.min(chunkRows, used.rowCount - row);
+              const loadStart = Math.max(0, row - contextRows);
+              const loadEnd = Math.min(used.rowCount, row + rows + contextRows);
+              const chunk = sheet.getRangeByIndexes(
+                used.rowIndex + loadStart,
+                used.columnIndex,
+                loadEnd - loadStart,
+                used.columnCount,
+              );
+              // Load only the searched grid; the other one is fetched for chunks with a match.
+              chunk.load(searchFormulas ? "formulas" : "values");
+              try {
+                await context.sync();
+              } catch (error) {
+                if (chunkRows > 1 && isResponsePayloadLimitMessage(getErrorMessage(error))) {
+                  chunkRows = Math.ceil(chunkRows / 2);
+                  continue;
+                }
+                throw error;
+              }
 
-            const cellPart = parseRangeRef(used.address).address;
-            const colonIndex = cellPart.indexOf(":");
-            const startCell = colonIndex >= 0 ? cellPart.slice(0, colonIndex) : cellPart;
-            let start;
-            try {
-              start = parseCell(startCell);
-            } catch {
-              continue;
-            }
-
-            const rangeResult = searchLoadedRange({
-              sheetName: sheet.name,
-              values,
-              formulas,
-              start,
-              searchFormulas,
-              queryLower,
-              ...(regex !== undefined ? { regex } : {}),
-              contextRows,
-              offset,
-              matchesBeforeRange: totalMatches,
-              resultCapacity: maxResults - allMatches.length,
-            });
-            allMatches.push(...rangeResult.matches);
-            totalMatches = rangeResult.totalMatches;
-            if (rangeResult.hasMore) {
-              hasMore = true;
-              break;
+              const searched = Value.Parse(searchCellMatrixSchema, searchFormulas ? chunk.formulas : chunk.values);
+              const window = {
+                sheetName: sheet.name,
+                searchRowStart: row - loadStart,
+                searchRowEnd: row - loadStart + rows,
+                start: { col: used.columnIndex, row: used.rowIndex + loadStart + 1 },
+                searchFormulas,
+                queryLower,
+                ...(regex !== undefined ? { regex } : {}),
+                contextRows,
+                offset,
+                matchesBeforeRange: totalMatches,
+                resultCapacity: maxResults - allMatches.length,
+              };
+              const probe = searchLoadedRange({ ...window, values: searched, formulas: searched });
+              let rangeResult = probe;
+              if (probe.totalMatches > totalMatches) {
+                chunk.load(searchFormulas ? "values" : "formulas");
+                await context.sync();
+                const other = Value.Parse(searchCellMatrixSchema, searchFormulas ? chunk.values : chunk.formulas);
+                rangeResult = searchLoadedRange({
+                  ...window,
+                  values: searchFormulas ? other : searched,
+                  formulas: searchFormulas ? searched : other,
+                });
+              }
+              allMatches.push(...rangeResult.matches);
+              totalMatches = rangeResult.totalMatches;
+              scannedCells += rows * used.columnCount;
+              if (rangeResult.hasMore) {
+                hasMore = true;
+                break sheetLoop;
+              }
+              row += rows;
             }
           }
-          return { matches: allMatches, hasMore, totalMatches };
+          return { matches: allMatches, hasMore, totalMatches, stoppedAt };
         });
 
-        const { matches, hasMore, totalMatches } = result;
+        const { matches, hasMore, totalMatches, stoppedAt } = result;
+        const stoppedNote = stoppedAt
+          ? `\n\nStopped after scanning ${MAX_SEARCH_CELLS.toLocaleString("en-US")} cells, before ${stoppedAt}. ` +
+            "Pass sheet to search a specific sheet."
+          : "";
 
         if (matches.length === 0) {
           const scope = params.sheet ? `in "${params.sheet}"` : "in any sheet";
@@ -310,13 +363,13 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             ? ` after offset ${offset} (total matches: ${totalMatches})`
             : "";
           return {
-            content: [{ type: "text", text: `No matches for "${params.query}" ${scope}${offsetNote} (searched ${mode}).` }],
+            content: [{ type: "text", text: `No matches for "${params.query}" ${scope}${offsetNote} (searched ${mode}).${stoppedNote}` }],
             details: undefined,
           };
         }
 
         return {
-          content: [{ type: "text", text: renderSearchMatches(matches, params.query, hasMore, offset) }],
+          content: [{ type: "text", text: renderSearchMatches(matches, params.query, hasMore, offset) + stoppedNote }],
           details: undefined,
         };
       } catch (e) {
