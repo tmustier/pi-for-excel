@@ -1031,6 +1031,8 @@ export async function initTaskpane(opts: {
         if (agent.state.messages !== before) {
           // Redraw the context meter for the smaller history and save it now,
           // so a reload right after compaction does not bring the old one back.
+          // Forced: compaction can archive every user message into the
+          // summary, which a "has the chat started" save gate would skip.
           document.dispatchEvent(new CustomEvent("pi:status-update"));
           await savePersistence();
         }
@@ -1067,7 +1069,7 @@ export async function initTaskpane(opts: {
         showToast(t("sessions.toast.saveFailed", { error: message }));
       },
     });
-    savePersistence = () => persistence.saveSession();
+    savePersistence = () => persistence.saveSession({ force: true });
 
     runtimeSessionId = persistence.getSessionId();
     await refreshRuntimeCapabilities();
