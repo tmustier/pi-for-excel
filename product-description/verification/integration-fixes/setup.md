@@ -107,7 +107,7 @@ How it ran:
 | SETTINGS-11 | pass | "Confirm mode." / "Auto mode."; the status bar follows. |
 | SETTINGS-12 | pass (#796) | The toast is now in the language being left ("Language changed. Reloading..." going to Chinese, "语言已更改，正在重新加载…" going back to English); reload at 1.05 s; the UI switched both ways. |
 | SETTINGS-13 | pass | "1 connected" and gateway row "4" (four gateways). |
-| SETTINGS-14 | pass (#793) | Changed: F2 no longer reaches the composer behind Settings, so `/settings` cannot be typed while Settings is open. On e48d83c: on the web, the first Tab from the Settings body leaves the add-in frame (same on a2b3f2d), see new bug 3 below. |
+| SETTINGS-14 | pass (#793) | Changed: F2 no longer reaches the composer behind Settings, so `/settings` cannot be typed while Settings is open. On e48d83c: on the web, the first Tab from the Settings body left the add-in frame (same on a2b3f2d); fixed on 8099cd6, see bug 3 below. |
 | SETTINGS-15 | pass (#790) | Changed: Save in Rules (opened from the root page) shows "Rules saved" and closes Settings; it no longer returns to the root. The row reads "On: All my files". Rule cleared afterwards. Desktop not rerun. |
 | SETTINGS-16 | pass (#795) | "Proxy" now has a subtitle: "Some providers and logins can't be reached straight from Excel. The proxy relays those requests." |
 | GATEWAY-01 | pass | All fields and placeholders. |
@@ -190,6 +190,21 @@ No bug found here appears only in the combination, so the integration thread was
 - **Observed:** the keydown is not prevented, and the browser default moves focus out of the add-in iframe (`document.hasFocus()` false, activeElement BODY). The standalone top-level page tabs to the first row correctly.
 - **Cause:** `installOverlayFocus` takes over Tab only when focus is outside the card, on its first or last element, or on the card itself (`src/ui/overlay-dialog.ts:281-289`; e48d83c added the card case for this exact symptom). The shell focuses its body, an inner tabindex=-1 element, which none of those cases covers.
 - **Owner:** #793. Seen with CDP key events; a repeat with a physical keyboard would confirm. Sent to the #793 thread.
+
+## Rerun on 8099cd6 (27 October 2026)
+
+`integration-fixes` was force-pushed to `8099cd6`. I retested the setup-relevant changes: #793 @ aff33d6 (overlays own every Tab; Escape in a text field steps out to the card) and #796 @ 45c6646 (the Local Network Access message in login and turn errors). The web session was confirmed to serve the new `overlay-escape.ts`. **Result: 133 pass, 1 fail (PROXY-10, unchanged), 0 blocked.**
+
+- **Bug 3 is fixed.** On the web, Tab from the Settings body moves through Close, Model providers, Custom gateway, Proxy and the switch, with `document.hasFocus()` true throughout. 30 Tabs and 5 Shift+Tabs stay inside the shell.
+- **The Escape change holds up.** PICKER-06: the first Escape now moves focus to the picker card (on a2b3f2d it fell to BODY), and the second closes and returns focus to the opener. LOGIN-20: the first Escape moves focus from the URL field to the prompt card, and the second closes. LOGIN-03, SETTINGS-08 and SETTINGS-09/GATEWAY-17 (guards on Escape) and PROXY-21 still pass.
+- **#796's turn error passes.** Production build on a non-loopback origin, with `document.featurePolicy` stubbed to deny `loopback-network` and the proxy unreachable. A failed turn shows "This needs the local proxy, but Excel on the web doesn't let add-ins reach this computer: … Use Pi in Excel desktop for this provider." The control without the stub shows the CORS banner.
+- **Still pass:** PROXY-06, -07, -09, -11, -12 and -14; SETTINGS-01, -07 and -16; GATEWAY-19; LOGIN-18 and -19.
+
+### 4. New: the production proxy gate ignores the browser block (#796)
+
+- **Repro:** production build on a non-loopback origin, with loopback-network denied as above and no proxy. On the welcome card, open GitHub Copilot, press Login, then Continue (Anthropic behaves the same).
+- **Observed:** the proxy gate ("One more step before login … npx pi-for-excel-proxy … Retry") still appears, and Retry only says the helper was not detected. The new `proxy.blocked_by_browser` login message (`src/ui/provider-login.ts:980`) is unreachable in production. The gate at `src/ui/provider-login.ts:871-874` runs first and does not check `isProxyBlockedByBrowser()`.
+- **Owner:** #796. No checklist item covers it (LOGIN-22 assumes a reachable-in-principle proxy). Sent to the #796 thread.
 
 ## Desktop items to hand to the Mac
 
