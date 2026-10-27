@@ -138,7 +138,7 @@ How it ran:
 | PROXY-07 | pass on e48d83c (fail on a2b3f2d) | #793 should show the banner only while the proxy is enabled. A banner already on screen stays after the switch is turned off (70 s+, still saying the proxy "is turned on"); it goes only after a reload. See below. |
 | PROXY-08 | pass (#793) | "Show how to start it" expands to "Hide steps", with the command, the copy button, "Open Terminal · paste · press Enter · keep open" and the install link. |
 | PROXY-09 | pass | The banner disappeared as soon as the URL was set back to 3003 (the page re-check, #795). |
-| PROXY-10 | **fail** | On Excel on the web the copy button never turns into a check, and nothing is copied: the command text is selected instead. The frame denies `clipboard-write`. The code is unchanged from `main`. See below. |
+| PROXY-10 | pass on cea7588 (fail before) | On Excel on the web the copy button never turns into a check, and nothing is copied: the command text is selected instead. The frame denies `clipboard-write`. The code is unchanged from `main`. See below. |
 | PROXY-11 | pass (#795) | Suspected bug fixed: right after the change, "⚠ Proxy is enabled at https://localhost:3999 but is not currently reachable." |
 | PROXY-12 | pass (#795) | Fixed in reverse too: after setting 3003 and turning the switch on, "✓ Proxy connected at https://localhost:3003" within 0.6 s. |
 | PROXY-13 | pass | See LOGIN-05. |
@@ -205,6 +205,17 @@ No bug found here appears only in the combination, so the integration thread was
 - **Repro:** production build on a non-loopback origin, with loopback-network denied as above and no proxy. On the welcome card, open GitHub Copilot, press Login, then Continue (Anthropic behaves the same).
 - **Observed:** the proxy gate ("One more step before login … npx pi-for-excel-proxy … Retry") still appears, and Retry only says the helper was not detected. The new `proxy.blocked_by_browser` login message (`src/ui/provider-login.ts:980`) is unreachable in production. The gate at `src/ui/provider-login.ts:871-874` runs first and does not check `isProxyBlockedByBrowser()`.
 - **Owner:** #796. No checklist item covers it (LOGIN-22 assumes a reachable-in-principle proxy). Sent to the #796 thread.
+
+## Rerun on cea7588 (27 October 2026)
+
+`integration-fixes` was force-pushed to `cea7588`. I rechecked the two open setup findings. **Result: 134 pass, 0 fail, 0 blocked.**
+
+- **PROXY-10 now passes (#793 c88b997).** On Excel on the web (served `command-copy.ts` confirmed new), with the banner showing for a 3999 URL, the copy button read \"Copied\" after 0.1 s and 1.0 s, and \"Copy command\" again by 1.7 s. A `copy` event fired with `npx pi-for-excel-proxy`, and focus stayed on the button. Restoring 3003 removed the banner.
+- **Bug 4 is fixed (#796 d609e2b).** This was a production build on a non-loopback origin with the proxy unreachable. With `document.featurePolicy` stubbed to deny `loopback-network`, Login for Anthropic, GitHub Copilot and OpenAI (ChatGPT) shows no gate. Each row shows \"This needs the local proxy, but Excel on the web doesn't let add-ins reach this computer: … Use Pi in Excel desktop for this provider.\", the button resets to \"Login with …\", and no browser tab opens.
+- **Controls:**
+  - Same build without the stub: all three still show the \"One more step before login\" gate.
+  - With a reachable helper: Anthropic and ChatGPT go to their login prompts and sign-in tabs, and Copilot asks for the Enterprise domain.
+- #795 be2e666 (a picker opened while busy unlocks when the turn ends) was not run separately here.
 
 ## Desktop items to hand to the Mac
 
