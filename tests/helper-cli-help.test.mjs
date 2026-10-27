@@ -10,27 +10,20 @@ import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
-for (const [pkg, bin] of [
-  ["proxy", "pi-for-excel-proxy"],
-  ["python-bridge", "pi-for-excel-python-bridge"],
-  ["tmux-bridge", "pi-for-excel-tmux-bridge"],
-]) {
-  for (const flag of ["--help", "-h"]) {
-    test(`${bin} ${flag} prints usage and exits without side effects`, () => {
+for (const pkg of ["proxy", "python-bridge", "tmux-bridge"]) {
+  const bin = `pi-for-excel-${pkg}`;
+  for (const args of [["--help"], ["-h"], ["--install-missing", "--http", "--help"]]) {
+    test(`${bin} ${args.join(" ")} prints usage and exits without side effects`, (t) => {
       const home = mkdtempSync(path.join(tmpdir(), "pi-cli-help-"));
-      try {
-        const result = spawnSync(process.execPath, [path.join(root, "pkg", pkg, "cli.mjs"), flag], {
-          encoding: "utf8",
-          env: { ...process.env, HOME: home, USERPROFILE: home },
-          timeout: 5000,
-        });
-        assert.equal(result.signal, null, "process must exit on its own");
-        assert.equal(result.status, 0, result.stderr);
-        assert.match(result.stdout, new RegExp(`^Usage: npx ${bin} `));
-        assert.deepEqual(readdirSync(home), []);
-      } finally {
-        rmSync(home, { recursive: true, force: true });
-      }
+      t.after(() => rmSync(home, { recursive: true, force: true }));
+      const result = spawnSync(process.execPath, [path.join(root, "pkg", pkg, "cli.mjs"), ...args], {
+        encoding: "utf8",
+        env: { ...process.env, HOME: home, USERPROFILE: home },
+        timeout: 5000,
+      });
+      assert.equal(result.status, 0, result.error?.message ?? result.stderr);
+      assert.match(result.stdout, new RegExp(`^Usage: npx ${bin} `));
+      assert.deepEqual(readdirSync(home), []);
     });
   }
 }

@@ -356,7 +356,8 @@ function startBridge(bridgeArgs) {
   });
 }
 
-const HELP_TEXT = `Usage: npx pi-for-excel-python-bridge [--https | --http] [--install-missing]
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  console.log(`Usage: npx pi-for-excel-python-bridge [--https | --http] [--install-missing]
 
 Local bridge that lets Pi for Excel run Python and LibreOffice conversions.
 
@@ -374,11 +375,7 @@ Environment:
   PYTHON_BRIDGE_PYTHON_BIN        Python executable to use
   PYTHON_BRIDGE_LIBREOFFICE_BIN   Absolute path to soffice
   PYTHON_BRIDGE_TOKEN             Require this bearer token
-  ALLOWED_ORIGINS                 Comma-separated origins allowed to call the bridge`;
-
-const cliArgs = process.argv.slice(2);
-if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
-  console.log(HELP_TEXT);
+  ALLOWED_ORIGINS                 Comma-separated origins allowed to call the bridge`);
   process.exit(0);
 }
 

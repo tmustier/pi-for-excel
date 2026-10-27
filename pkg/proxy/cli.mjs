@@ -322,7 +322,8 @@ function startProxy(proxyArgs) {
   });
 }
 
-const HELP_TEXT = `Usage: npx pi-for-excel-proxy [--https | --http]
+if (process.argv.slice(2).some((arg) => arg === "--help" || arg === "-h")) {
+  console.log(`Usage: npx pi-for-excel-proxy [--https | --http]
 
 Local CORS proxy for Pi for Excel logins and provider requests.
 
@@ -340,11 +341,7 @@ Environment:
   ALLOWED_ORIGINS         Comma-separated origins allowed to use the proxy
   ALLOWED_TARGET_HOSTS    Comma-separated upstream hosts allowed
 
-Then in Pi for Excel: /settings → Proxy, enable it, and set the URL it prints.`;
-
-const cliArgs = process.argv.slice(2);
-if (cliArgs.includes("--help") || cliArgs.includes("-h")) {
-  console.log(HELP_TEXT);
+Then in Pi for Excel: /settings → Proxy, enable it, and set the URL it prints.`);
   process.exit(0);
 }
 
