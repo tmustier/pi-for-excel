@@ -8,12 +8,13 @@ Anti-slop lint is a small, reviewed set of deterministic restrictions. It is not
 
 ## Enabled rules
 
-The repository enables four rules as errors:
+The repository enables five rules as errors:
 
 - `oxc/no-accumulating-spread` prevents quadratic array or object copies inside reducers.
 - `anti-slop/no-reduce-accumulator-copy` covers equivalent copies through `Object.assign`, `concat`, `slice` and related APIs.
 - `anti-slop/no-module-mocking` keeps tests on real dependency seams. Pass a faithful fake through an interface or callback instead of replacing an imported module.
 - `anti-slop/no-widen-then-assert` rejects values that are deliberately widened and then asserted back to a narrower type. Preserve inference or parse the value at its boundary.
+- `pi-for-excel/no-never-assertion-in-tests` rejects `as never` and `<never>` assertions in `.test.*`, `.spec.*`, `__tests__/` and `*.browser-test.ts` files. Enter invalid inputs through the public parsing boundary or use a faithful typed fake; `never` annotations, `as const` and non-test files remain allowed. This repository-specific rule lives in our own plugin; the vendored anti-slop snapshot is unchanged.
 
 `tests/anti-slop-lint.test.mjs` invokes the pinned Oxlint CLI against temporary TS and MJS fixtures. Its negative cases assert every enabled diagnostic, so disabling any enabled rule makes the contract fail. Its positive cases protect mutation-based accumulation and injected fakes. Temporary fixtures are always removed.
 

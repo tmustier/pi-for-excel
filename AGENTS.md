@@ -95,6 +95,8 @@ The Excel lane runs entirely in the background, including opening the pane after
 
 ### Amp orbs (Excel on the web)
 
+Never print a secret's value. Refer to credentials (`PI_EXCEL_WEB_AUTH_JSON`, `PI_EXCEL_WEB_FOLDER_LINK`, `auth.json`, tokens) by name. To inspect the environment, print names only (`env | cut -d= -f1`); do not run `env`, `printenv`, `set` or `set -x`, or `cat` a credential file, and never paste a value into a message, log, commit or report.
+
 Orbs cannot run desktop Excel. `.agents/setup` and `.amp/services.yaml` prepare
 the dev server, CORS proxy and trusted localhost certs.
 `node scripts/orb/excel-web-session.mjs --check` then opens Pi in Excel on the
