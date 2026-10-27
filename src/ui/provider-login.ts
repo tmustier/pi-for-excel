@@ -370,7 +370,10 @@ function normalizeApiKeyForProvider(
  * Copilot). The login flow keeps polling in the background, so the dialog
  * only informs the user; the caller closes it when login settles.
  */
-function showDeviceCodeDialog(info: { userCode: string; verificationUri: string }): () => void {
+function showDeviceCodeDialog(
+  info: { userCode: string; verificationUri: string },
+  onClose: () => void,
+): () => void {
   closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
 
   const dialog = createOverlayDialog({
@@ -415,6 +418,9 @@ function showDeviceCodeDialog(info: { userCode: string; verificationUri: string 
   helper.textContent = t("provider.device_code.helper", { uri: info.verificationUri });
 
   dialog.card.append(title, message, codeRow, helper);
+  // Closing the dialog (Escape, ×, backdrop) cancels the login instead of
+  // leaving it polling in the background.
+  dialog.addCleanup(onClose);
   dialog.mount();
 
   return () => dialog.close();
@@ -875,6 +881,7 @@ export function buildProviderRow(
           }
 
           const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
+          const loginAbort = new AbortController();
           const authUrlRef: { current: string | null } = { current: null };
 
           let cred;
@@ -891,7 +898,7 @@ export function buildProviderRow(
                 // page and show the user code to enter there.
                 const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
-                deviceCodeDialogRef.close = showDeviceCodeDialog(info);
+                deviceCodeDialogRef.close = showDeviceCodeDialog(info, () => loginAbort.abort());
               },
               onSelect: (prompt) =>
                 promptForSelect({
@@ -934,7 +941,16 @@ export function buildProviderRow(
                 return value;
               },
               onProgress: (msg) => { oauthBtn.textContent = msg; },
+              signal: loginAbort.signal,
             });
+          } catch (error) {
+            if (loginAbort.signal.aborted) {
+              // The user closed the device-code dialog: the login is cancelled.
+              oauthBtn.textContent = t("provider.login_with", { label });
+              oauthBtn.style.opacity = "1";
+              return;
+            }
+            throw error;
           } finally {
             deviceCodeDialogRef.close?.();
           }
