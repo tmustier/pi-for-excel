@@ -1,5 +1,7 @@
 # The composer
 
+Dropped-file attachments and no-provider draft retention revised for SE-09/02 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811).
+
 Turn controls and hints revised for CL-03 / CC-01 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). Enter remains steer, not interruption; Alt/Option+Enter remains follow-up.
 
 ## Summary
@@ -31,7 +33,7 @@ stateDiagram-v2
     drafting --> blurred : Escape while idle (draft kept)
     blurred --> drafting : F2, click, or tab switch (focus back)
     empty --> dropping : drag files over the card
-    dropping --> empty : drop (files imported to Files, toast)
+    dropping --> drafting : drop (files imported to Files and attached as chips)
     dropping --> empty : drag leaves (nothing)
 ```
 
@@ -43,7 +45,7 @@ The text area accepts plain text of any length. There is no character limit and 
 - **Placeholders.** While idle and empty, four prompts rotate every 8 seconds: "Ask about this workbook…", "Type / for commands…", "Have Pi edit this workbook…", "Summarize this workbook…". Rotation pauses while there is draft text. While responding the fixed hint is "Enter to steer · Alt+Enter for a follow-up" (Option on Mac), consistent with the Shortcuts page.
 - **The send button.** Shown dimmed (and announced as disabled) when the draft is empty or only whitespace; full colour as soon as it contains a visible character. It is never truly disabled: clicking it while dimmed does nothing because there is nothing to send.
 - **Shift+Enter** inserts a newline. Enter with any other modifier (Ctrl/Cmd, Alt/Option) is treated as Enter while the tab is idle. Confirmed in Excel on the web: Shift+Enter between two lines, then Alt+Enter, sent both lines as one message.
-- **Paste.** Pasting text inserts it as typed text, newlines included. Pasting an image or a file does nothing: the composer has no attachments, and nothing pasted becomes an attachment or a file in the Files workspace. Images reach Pi only through tools and the [Files workspace](../files/the-files-workspace.md). Confirmed in Excel on the web: pasting a PNG changed nothing.
+- **Paste.** Pasting text inserts it as typed text, newlines included. Pasting an image or file still does not attach it; attachments here are created by dropping files. Pi reads attached files through the [Files workspace](../files/the-files-workspace.md).
 - **The slash prefix.** When the draft starts with `/` and has no newline, the [command menu](../commands/the-command-menu.md) opens above the composer, filtered by what follows the slash. From then until it closes, the command menu owns the arrow keys, Enter, Tab and Escape. It closes when the draft gains a newline, stops starting with `/`, or matches no command.
 
 Each tab has its own composer draft. Switching tabs swaps drafts and caret state; a saved draft is restored after reload or reopening its session.
@@ -52,7 +54,8 @@ Each tab has its own composer draft. Switching tabs swaps drafts and caret state
 
 Enter (or the send button) ends without sending anything when:
 
-- **The draft is empty or whitespace.** Nothing happens. The whitespace stays in the composer.
+- **The draft is empty or whitespace and has no attachments.** Nothing happens. With attachment chips, an attachment-only message can be sent.
+- **No provider is connected.** The welcome provider choices reopen; the draft and chips remain, and no turn starts.
 - **The draft starts with `/` and names a known command.** The command runs locally (or queues, for `/compact`) and clears the composer only if accepted. A busy-refused command keeps the draft, whether chosen by click or keyboard. `/model`, `/settings`, `/login`, `/copy`, `/export`, `/backup` and `/revert` are available while busy; a busy model picker is read-only. See [the command menu](../commands/the-command-menu.md).
 - **The draft starts with `/` and names no known command.** Pi reports the unknown command and keeps the text for correction; neither Enter nor Send quietly turns it into a model message.
 - **There is no active tab.** The toast says "No active session" and the composer clears. This only happens during startup or teardown.
@@ -78,7 +81,9 @@ The composer stays enabled. The user can type, paste, edit and drop files at any
 
 **The Files button** (a document icon, labeled "Browse files") opens the [Files workspace](../files/the-files-workspace.md) overlay. It works while busy. Clicking it does not take focus away from the text area first, so the draft and caret are where they were when the overlay closes.
 
-**Dropping files.** Dragging files over the composer highlights it and shows "Drop files to import to file workspace". A drop imports files into Files, not into the message: the draft is untouched and nothing is sent. Imports are saved at the top level and tagged to an identified workbook. Same-name imports keep both files, adding a suffix such as ` (2)` before the extension, and report the rename. The toast reports imported files or a failure. Drops outside the composer are handled by the host, not Pi.
+**Dropping files.** Dragging over the composer highlights it and shows "Drop files to attach to this message". A drop imports files to Files and adds removable attachment chips to this tab's draft; it does not send immediately. Same-name imports keep both files, adding a suffix such as ` (2)` before the extension; the chip carries the actual renamed path. Each chip's remove button is labelled "Remove attachment {path}". Removing a chip detaches it without deleting the library file. The toast says "Attached {count} file(s) to this message" or reports a failure. Dropping while another tab becomes active keeps the attachments with the originating draft. Drops outside the composer are handled by the host.
+
+On accepted message submission, the text names the attached Files paths and explicitly asks Pi to read them as part of the message. Chips then clear. A refused send keeps them, and a slash command does not consume them. Attachment paths are saved per session alongside the draft and survive reload or reopening; ordinary Files imports outside the composer do not attach themselves.
 
 ### After sending
 
@@ -88,10 +93,10 @@ The composer clears after an accepted send and keeps focus. When the turn ends, 
 
 | Modifier | Set before | Changed while busy |
 | --- | --- | --- |
-| Model and provider | No effect on the composer. With no connected provider the composer still sends; the connection dialog appears afterwards (see [sending and the response](sending-and-the-response.md#sent)). | No effect on the draft. |
+| Model and provider | With no connected provider, send opens welcome choices and retains text and chips. | No effect on the draft. |
 | Thinking level | No effect. | Ctrl+Alt/Option+T cycles from the composer; Shift+Tab only moves focus. See [thinking](thinking.md). |
 | Execution mode | No effect. | No effect. |
-| Files in the workspace, or an overlay open | Files are not attachments. A modal holds focus and disables F2 behind it; the composer keeps its draft. | Imports are available to subsequent tools. |
+| Files in the workspace, or an overlay open | Dropped files attach to this message; library files alone do not. A modal holds focus; the composer keeps its draft. | Imports remain available to tools; only attached paths are named in this send. |
 | Tab state (new, restored, another tab busy) | Each tab keeps its own draft; a new tab starts empty and a restored tab loads its saved draft. | Another tab's activity, compaction and draft stay in that tab. |
 | Host (desktop or web) | The busy placeholder says Alt on Windows/Linux, Option on Mac. Dropping files depends on the host delivering file drops. | No effect. |
 
@@ -128,7 +133,7 @@ After an interrupt the draft remains with its tab; reopening loads the last save
 
 **Offline and provider errors.** No interaction. The composer works offline; sending fails later.
 
-**Notifications.** Toasts for dropped files ("Imported {n} file(s) into Files.", "No files were imported.", "Import failed: {error}"), for "No active session", and for commands refused while busy.
+**Notifications.** Toasts for dropped files ("Attached {count} file(s) to this message", "No files were imported.", "Import failed: {error}"), for "No active session", and for commands refused while busy.
 
 **Settings and preferences.** No interaction. There is no setting for the send key, placeholders or auto-grow.
 

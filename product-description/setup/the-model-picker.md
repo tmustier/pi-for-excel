@@ -1,8 +1,12 @@
 # The model picker
 
+No-provider entry revised for SE-02 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811). Without a connection, the model control reads "Connect a provider" and opens the welcome provider choices instead of an empty model picker. The draft stays unsent. Busy-selection timing belongs to the preceding tabs/models PR.
+
 ## Summary
 
 As of [PR #805](https://github.com/tmustier/pi-for-excel/pull/805) (CL-11), the status-bar model control and `/model` open the same editable picker, including while Pi is busy. A choice always stays in the target tab. "Fork model switch into new tab" is removed, and any old stored preference is ignored. Use Duplicate tab when a separate conversation is wanted.
+
+With no provider connected, the status-bar control reads "Connect a provider" and both it and `/model` open welcome choices instead. The draft stays unsent.
 
 `/default-models` is no longer registered; there is no promised Ctrl+P model shortcut.
 
@@ -37,6 +41,8 @@ No choice clones messages or creates a tab, and there are no fork-generated titl
 Neither is an entry point: the placeholder command is removed and Pi does not promise a model shortcut on Ctrl+P.
 
 ## Edge cases
+
+- With no provider connected, "Connect a provider" opens welcome choices; an internal fallback model is not presented as usable.
 
 Several choices before the next run collapse to the last choice. Closing the target while the picker is open does not redirect the choice to a different tab. Old fork preferences are ignored.
 

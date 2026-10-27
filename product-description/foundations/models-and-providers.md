@@ -1,8 +1,10 @@
 # Models and providers
 
+Provider prerequisites, empty connection state and swap/billing notices revised for SE-01/02/06 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811).
+
 ## Summary
 
-A provider is the service that runs the model Pi talks to; a model is the specific engine a tab uses. This document owns the words every other document uses for them: *provider*, *connected*, *credential*, *model of a tab*, *default model*, *thinking level*, *context window* and *model-switch behavior*. It also owns the rules for how a tab gets its model, what happens to that model when providers are connected or disconnected, and what changing it does. The surfaces where the user meets these rules are described elsewhere: the first-run screen and login paths in [welcome and login](../setup/welcome-and-login.md), the model control and `/model` in [the model picker](../setup/the-model-picker.md), Settings → Model providers in [settings](../setup/settings.md), gateways in [custom gateways](../setup/custom-gateways.md), and the CORS helper in [the proxy](../setup/the-proxy.md). Nothing in this document needs a turn; a tab always has a model, even when no provider is connected, and that model is shown in the status bar on every host.
+A provider is the service that runs the model Pi talks to; a model is the engine a tab uses. Each tab keeps its own model and thinking level. Connecting, disconnecting and picking models need no turn. With no provider connected, the status bar says "Connect a provider", never the internal bootstrap model. The user-facing setup belongs to [welcome and login](../setup/welcome-and-login.md), [the model picker](../setup/the-model-picker.md), [settings](../setup/settings.md), [custom gateways](../setup/custom-gateways.md) and [the proxy](../setup/the-proxy.md).
 
 ## The simple case
 
@@ -16,14 +18,14 @@ Months later they disconnect ChatGPT in Settings and connect Anthropic. Idle tab
 
 ```mermaid
 stateDiagram-v2
-    [*] --> no_provider : first run (fallback model shown)
+    [*] --> no_provider : first run (Connect a provider)
     no_provider --> connected : login or API key saved (credential stored)
-    no_provider --> asking : send a message (connection dialog)
-    asking --> connected : connect in the dialog (credential stored, turn continues)
-    asking --> no_provider : dismiss (turn fails)
+    no_provider --> asking : send or model control (welcome choices; draft kept)
+    asking --> connected : connect (credential stored; draft waits for send)
+    asking --> no_provider : dismiss (nothing sent)
     connected --> connected : pick a model (tab model changed or forked)
     connected --> swapped : tab's provider disconnected while tab idle (default model applied)
-    swapped --> connected : swap shown in status bar (nothing announced)
+    swapped --> connected : status bar and swap toast
     connected --> no_provider : last provider disconnected (tab keeps its model)
 ```
 
@@ -44,14 +46,15 @@ The providers offered, in the order shown:
 
 | Label in the UI | How it connects | Notes |
 | --- | --- | --- |
-| Anthropic ("Claude Pro/Max") | OAuth or API key | OAuth needs the [CORS proxy](../setup/the-proxy.md). |
+| OpenAI (API) ("API key") | API key | "Paste an API key: no setup". |
+| Google Gemini (API) ("API key") | API key | "Paste an API key: no setup". |
+| DeepSeek, Mistral, Groq, xAI / Grok | API key | "Paste an API key: no setup". |
+| Anthropic ("Claude Pro/Max") | OAuth or API key | Sign-in needs the local helper; subscription billing warning is described in [welcome and login](../setup/welcome-and-login.md#committing-a-credential). |
 | OpenAI (ChatGPT) ("Plus/Pro subscription") | OAuth, or a pasted access token | Called OpenAI Codex in the code (`openai-codex`). Login needs the proxy. Model requests go through it when it is on; in Excel on the web they also worked with it off. |
 | Google Code Assist ("Gemini via Google account") | OAuth, or pasted credential JSON | Always needs the proxy. |
 | Google Antigravity ("Gemini/Claude/GPT-OSS") | OAuth, or pasted credential JSON | Always needs the proxy. |
 | GitHub Copilot | Device-code login, or a token | Login needs the proxy; model requests go direct. |
-| OpenAI (API) ("API key") | API key | Direct. |
-| Google Gemini (API) ("API key") | API key | Direct. |
-| DeepSeek, Amazon Bedrock, Mistral, Groq, xAI / Grok | API key | Direct. |
+| Amazon Bedrock | AWS credentials | "Needs AWS credentials and setup". |
 
 Two more kinds of provider are not in that list. **Custom gateways** are OpenAI-compatible endpoints the user adds in Settings → "Custom gateway"; each appears as its own provider named "Gateway · {name}" with exactly one model ([custom gateways](../setup/custom-gateways.md)). **Extension providers** are added by an installed extension; their credentials are entered in the extension's own connection card, never in the connection dialog. Both are out of the default configuration except gateways, which any user can add.
 
@@ -96,9 +99,9 @@ The thinking level is not adjusted when the model changes in place. If the new m
 Whenever the set of connected providers changes (a login, a disconnect, a gateway saved, edited or deleted, an extension loaded or unloaded, credentials restored at startup), Pi re-checks every tab:
 
 - A tab whose provider is still connected keeps its model. If the provider's catalogue now describes that model differently (a new context window, new thinking levels), the tab picks up the new description silently.
-- An idle tab whose provider is no longer connected is moved to the new default model, with its thinking level reset ("High" for a reasoning model, "Off" otherwise). Nothing announces this; the status bar simply shows the new model. Confirmed in Excel on the web: disconnecting Google Gemini (API) moved an idle tab from "Gemini 2.5 Flash-Lite" to "GPT-6.1 Sol", and deleting a gateway moved the tab using it the same way, both without a toast.
+- An idle tab whose provider is no longer connected is moved to the new default model, with its thinking level reset ("High" for a reasoning model, "Off" otherwise). A toast says "This chat now uses {model} ({provider} disconnected)".
 - A busy tab is never changed; it is re-checked when its turn or queued action ends.
-- If no provider is connected at all, nothing is swapped: tabs keep their models, and the next send opens the connection dialog for that model's provider.
+- If no provider is connected at all, tabs retain an internal model for restoration, but it is not presented as usable: the model control reads "Connect a provider". Clicking it or sending reopens the welcome choices, keeping the draft and attachments without starting a turn.
 
 > Technical note: this exists because the first tab of a fresh install is created before any login, on the fallback OpenAI (API) model. Without the swap, a user who then logged in with ChatGPT was asked for an OpenAI API key on their first message (issue #553). The swap is not saved to the session until the session next saves, and a reload brings back the old model without swapping it again (see [Open questions](#open-questions-and-verification)).
 
@@ -179,9 +182,9 @@ Changes to providers take effect at the next boundary: a busy tab finishes its t
 
 ## Edge cases
 
-- The status bar shows the model's display name, not its provider. "GPT-6.1 Sol" from OpenAI (API) and from OpenAI (ChatGPT) look identical; only the picker's provider tag ("openai" or "openai-codex") tells them apart.
-- With no provider connected, "Select model" lists nothing ("No matching models"), because it only lists connected providers' models.
-- Disconnecting the provider of the active, idle tab changes its model the moment the provider list refreshes, without a toast.
+- The existing API/ChatGPT status-bar tags disambiguate the two OpenAI routes when both are connected; they are retained, not replaced.
+- With no provider connected, the model control opens welcome choices rather than an empty picker.
+- Disconnecting the provider of the active idle tab changes its model when the provider list refreshes and announces the automatic swap.
 - Renaming a custom gateway changes its provider name, so tabs using it are treated as disconnected and moved to the default model (see Open questions).
 - A forked tab is a new session; the source tab keeps its model and is not saved again by the fork.
 - Duplicating a tab ("Duplicate tab") copies its model and thinking level; it is not a model switch and ignores the fork setting.

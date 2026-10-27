@@ -1,5 +1,7 @@
 # Settings
 
+Subscription billing preference revised for SE-06 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811); it is independent of the theme and model-selection changes in the preceding stack.
+
 **CL-11/CL-12 update:** [PR #805](https://github.com/tmustier/pi-for-excel/pull/805) removes "Fork model switch into new tab". Old stored values are ignored: a model choice always stays in the current conversation and can be made while busy for the next turn. `/settings` and `/login` are local actions and remain available while busy.
 
 ## Summary
@@ -50,6 +52,7 @@ Focus moves to the page body so that Tab starts inside the page.
 
 - **"Auto mode"** ("Pi applies changes immediately without asking"), on by default. Turning it off switches the [execution mode](../workbook/confirm-mode-and-approvals.md) to Confirm; the toast says "Confirm mode." or "Auto mode.". The switch follows changes made elsewhere (the status bar, `/yolo`) while the page is open. On failure: "Couldn't update execution mode." and the switch flips back.
 - **"Language / 语言"**, a list with "English" and "中文（简体）· AI 翻译". Choosing the other language shows "Language changed. Reloading..." and reloads the taskpane a second later. See [language and theme](../ui/language-and-theme.md).
+- **"Anthropic subscription warning"**, on by default, with "Warn once per session about extra-usage billing for Claude Pro/Max sign-in". Turning it off hides the warning and suppresses it across sessions on this computer; it never changes a model prompt. A failed save restores the toggle and says "Couldn’t save the warning preference. Try again." See [welcome and login](welcome-and-login.md#committing-a-credential).
 
 "Rules & data": **"Rules & conventions"** ("Guidance Pi follows in every chat") and **"Backups"** ("Snapshots saved before Pi changes data").
 
