@@ -54,6 +54,7 @@ class FakeCoordinator implements WorkbookCoordinator {
       revision: this.revision,
       queuedWrites: 0,
       activeWrite: null,
+      queued: [],
     };
   }
 
@@ -175,7 +176,7 @@ void test("unsupported-host tools bypass workbook coordinator and fail fast", as
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(true);
       },
@@ -215,7 +216,7 @@ void test("safe execution mode blocks mutate calls when approval is denied", asy
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(false);
       },
@@ -224,7 +225,7 @@ void test("safe execution mode blocks mutate calls when approval is denied", asy
 
   await assert.rejects(
     () => wrapped.execute("tc-safe-block", { range: "Sheet1!A1", values: [[1]] }),
-    /Mutation cancelled by user \(Confirm mode\)\./u,
+    /declined this workbook change/u,
   );
 
   assert.equal(approvalCalls, 1);
@@ -274,7 +275,7 @@ void test("safe execution mode skips approval prompts for read tools", async () 
     invalidatedWorkbookIds,
     executionPolicy: {
       getExecutionMode: () => Promise.resolve("safe"),
-      requestMutationApproval: () => {
+      requestToolApproval: () => {
         approvalCalls += 1;
         return Promise.resolve(true);
       },
@@ -412,3 +413,227 @@ void test("write failures do not emit mutation events", async () => {
   assert.deepEqual(invalidatedWorkbookIds, []);
 });
 
+
+void test("a read issued after a write in the same batch sees the written value", async () => {
+  let cell = "old";
+  let finishWrite: () => void = () => {};
+  const writeTool = makeTool("write_cells", () => new Promise((resolve) => {
+    finishWrite = () => {
+      cell = "new";
+      resolve({ content: [{ type: "text", text: "written" }], details: { echo: "write" } });
+    };
+  }));
+  const readTool = makeTool("read_range", () => Promise.resolve({
+    content: [{ type: "text", text: cell }],
+    details: { echo: cell },
+  }));
+  const [write, read, laterWrite] = withWorkbookCoordinator(
+    [writeTool, readTool, makeTool("format_cells")],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!write || !read || !laterWrite) throw new Error("Wrapped tools missing");
+
+  // The agent loop starts a batch's calls in order, then lets them run concurrently.
+  const writing = write.execute("w", {});
+  const reading = read.execute("r", {});
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  finishWrite();
+
+  const [, readResult] = await Promise.all([writing, reading]);
+  assert.deepEqual(readResult.details, { echo: "new" });
+
+  // A read issued before a write does not wait for it.
+  let releaseLater: () => void = () => {};
+  const blockingWrite = makeTool("write_cells", () => new Promise((resolve) => {
+    releaseLater = () => resolve({ content: [{ type: "text", text: "late" }], details: { echo: "late" } });
+  }));
+  const [readFirst, writeSecond] = withWorkbookCoordinator(
+    [readTool, blockingWrite],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!readFirst || !writeSecond) throw new Error("Wrapped tools missing");
+  const earlyRead = readFirst.execute("r2", {});
+  const pendingWrite = writeSecond.execute("w2", {});
+  assert.deepEqual((await earlyRead).details, { echo: "new" });
+  releaseLater();
+  await pendingWrite;
+});
+
+void test("Stop tells the agent whether a mutation ran", async () => {
+  const stopped = new AbortController();
+  stopped.abort();
+  const [beforeRun] = withWorkbookCoordinator([makeTool("format_cells")], new FakeCoordinator(), createContextProvider("wb-1"));
+  if (!beforeRun) throw new Error("Wrapped tool missing");
+  await assert.rejects(beforeRun.execute("s1", {}, stopped.signal), /Stopped before running; nothing changed in the workbook\./u);
+
+  // Stop pressed while a one-batch mutation runs: its change stands, and the result says so.
+  const during = new AbortController();
+  const [whileRunning] = withWorkbookCoordinator(
+    [makeTool("format_cells", () => {
+      during.abort();
+      return Promise.resolve({ content: [{ type: "text", text: "Formatted A1." }], details: { echo: "ok" } });
+    })],
+    new FakeCoordinator(),
+    createContextProvider("wb-1"),
+  );
+  if (!whileRunning) throw new Error("Wrapped tool missing");
+  const result = await whileRunning.execute("s2", {}, during.signal);
+  const first = result.content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Formatted A1.\n\n⏹ Stop was pressed while this ran; the change above was already applied and stands.");
+});
+
+void test("Stop settles a write Excel never answers, so the workbook lock is released", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const coordinator = new FakeCoordinator();
+  const windows: Array<{ toolCallId: string; settledAt: number }> = [];
+  const [hung] = withWorkbookCoordinator(
+    [makeTool("write_cells", () => new Promise(() => {}))],
+    coordinator,
+    createContextProvider("url_sha256:abc"),
+    { onWriteStarted: (window) => windows.push(window) },
+  );
+  if (!hung) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = hung.execute("tc-hung", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(windows[0]?.settledAt, Number.POSITIVE_INFINITY, "write window open while the call runs");
+  controller.abort();
+  t.mock.timers.tick(10_000);
+
+  await assert.rejects(call, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Stopped by the user while Excel was still working.*outcome is unknown/u);
+    assert.equal(Reflect.get(error, "outcomeUnknown"), true);
+    return true;
+  });
+  assert.equal(windows[0]?.toolCallId, "tc-hung");
+  assert.ok(Number.isFinite(windows[0]?.settledAt), "write window closed");
+});
+
+void test("a write that finishes a few seconds after Stop reports its own result", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const [slow] = withWorkbookCoordinator(
+    [makeTool("write_cells", () => new Promise((resolve) => {
+      setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing Calc!K11:K20; backup fae5e5d3" }], details: { echo: "slow" } }), 6_000);
+    }))],
+    new FakeCoordinator(),
+    createContextProvider("url_sha256:abc"),
+  );
+  if (!slow) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = slow.execute("tc-slow", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(6_000);
+
+  const result = await call;
+  const first = result.content[0];
+  // #791's wrapper may append a note that the change stands; the tool's own report comes first.
+  assert.ok((first?.type === "text" ? first.text : "").startsWith("Stopped after writing Calc!K11:K20; backup fae5e5d3"));
+});
+
+void test("a tool that reports its own Stop result is not cut short by the wrapper", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const tool = Object.assign(makeTool("write_cells", () => new Promise((resolve) => {
+    setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e" }], details: { echo: "slow" } }), 20_000);
+  })), { reportsStop: true as const });
+  const [wrapped] = withWorkbookCoordinator([tool], new FakeCoordinator(), createContextProvider("url_sha256:abc"));
+  if (!wrapped) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = wrapped.execute("tc-reports", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(20_000);
+
+  const first = (await call).content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e");
+});
+
+void test("deleting backups asks even in Auto mode, before taking the workbook lock", async () => {
+  const coordinator = new FakeCoordinator();
+  const reasons: string[] = [];
+  let ran = 0;
+
+  const wrapped = wrapSingleTool({
+    tool: makeTool("workbook_history", () => {
+      ran += 1;
+      return Promise.resolve({ content: [{ type: "text", text: "Cleared" }], details: { echo: "cleared" } });
+    }),
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:auto-history"),
+    mutationEvents: [],
+    invalidatedWorkbookIds: [],
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("yolo"),
+      requestToolApproval: (request) => {
+        reasons.push(request.reason);
+        // Nothing holds or waits for the lock while the user decides.
+        assert.equal(coordinator.readCalls.length + coordinator.writeCalls.length, 0);
+        return Promise.resolve(false);
+      },
+    },
+  });
+
+  await assert.rejects(() => wrapped.execute("tc-clear", { action: "clear" }), /declined/u);
+  assert.deepEqual(reasons, ["always"]);
+  assert.equal(ran, 0);
+
+  // Listing backups never asks.
+  await wrapped.execute("tc-list", { action: "list" });
+  assert.deepEqual(reasons, ["always"]);
+  assert.equal(ran, 1);
+});
+
+void test("Confirm mode does not ask about a write the tool would refuse anyway", async () => {
+  const coordinator = new FakeCoordinator();
+  let approvals = 0;
+  let executed = 0;
+  const refusing = {
+    ...makeTool("write_cells", () => {
+      executed += 1;
+      return Promise.resolve({ content: [{ type: "text", text: "written" }], details: { echo: "written" } });
+    }),
+    checkBeforeApproval: (_id: string, params: { occupied?: boolean; allow?: boolean }) => Promise.resolve(
+      params.occupied
+        ? params.allow
+          ? { overwrites: { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] } }
+          : { refused: { content: [{ type: "text" as const, text: "⛔ Write blocked" }], details: { echo: "blocked" } } }
+        : null,
+    ),
+  };
+  const asked: unknown[] = [];
+  const wrapped = wrapSingleTool({
+    tool: refusing,
+    coordinator,
+    contextProvider: createContextProvider("url_sha256:precheck"),
+    mutationEvents: [],
+    invalidatedWorkbookIds: [],
+    executionPolicy: {
+      getExecutionMode: () => Promise.resolve("safe"),
+      requestToolApproval: (request) => {
+        approvals += 1;
+        asked.push(request.overwrites);
+        return Promise.resolve(true);
+      },
+    },
+  });
+
+  const blocked = await wrapped.execute("tc-blocked", { occupied: true });
+  assert.match(JSON.stringify(blocked.content), /Write blocked/u);
+  assert.equal(approvals, 0);
+  assert.equal(executed, 0);
+  assert.equal(coordinator.writeCalls.length, 0);
+
+  await wrapped.execute("tc-ok", { occupied: false });
+  assert.equal(approvals, 1);
+  assert.equal(executed, 1);
+
+  // An allowed overwrite asks, and the approval names what it replaces.
+  await wrapped.execute("tc-overwrite", { occupied: true, allow: true });
+  assert.deepEqual(asked, [undefined, { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] }]);
+});

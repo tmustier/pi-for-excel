@@ -7,21 +7,7 @@
 
 import { t } from "../../../language/index.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
-
-// ---------------------------------------------------------------------------
-// Platform detection
-// ---------------------------------------------------------------------------
-
-function isMacPlatform(): boolean {
-  if (typeof navigator === "undefined") return false;
-
-  // navigator.platform is deprecated but widely supported; userAgentData
-  // is the modern replacement but not available in all WebViews yet.
-  const ua = navigator.userAgent ?? "";
-  const platform = navigator.platform ?? "";
-
-  return platform.startsWith("Mac") || ua.includes("Macintosh");
-}
+import { isMacPlatform, isOfficeOnline } from "../../../utils/platform.js";
 
 // ---------------------------------------------------------------------------
 // Shortcut data
@@ -31,6 +17,8 @@ interface ShortcutEntry {
   mac: string;
   win: string;
   description: string;
+  /** The browser takes this chord in Excel on the web, so it is not listed there. */
+  browserReserved?: boolean;
 }
 
 interface ShortcutGroup {
@@ -53,16 +41,18 @@ function getShortcutGroups(): readonly ShortcutGroup[] {
         { mac: "⌥ Enter", win: "Alt+Enter", description: t("shortcuts.desc.queue") },
         { mac: "⌥ ↑", win: "Alt+↑", description: t("shortcuts.desc.restore_queue") },
         { mac: "⇧ Tab", win: "Shift+Tab", description: t("shortcuts.desc.cycle_thinking") },
+        { mac: "⌘ O", win: "Ctrl+O", description: t("shortcuts.desc.toggle_details") },
       ],
     },
     {
       title: t("shortcuts.section.tabs"),
       shortcuts: [
-        { mac: "⌘ T", win: "Ctrl+T", description: t("shortcuts.desc.new_tab") },
-        { mac: "⌘ W", win: "Ctrl+W", description: t("shortcuts.desc.close_tab") },
-        { mac: "⌘ ⇧ T", win: "Ctrl+Shift+T", description: t("shortcuts.desc.reopen_tab") },
+        { mac: "⌘ T", win: "Ctrl+T", description: t("shortcuts.desc.new_tab"), browserReserved: true },
+        { mac: "⌘ W", win: "Ctrl+W", description: t("shortcuts.desc.close_tab"), browserReserved: true },
+        { mac: "⌘ ⇧ T", win: "Ctrl+Shift+T", description: t("shortcuts.desc.reopen_tab"), browserReserved: true },
         same("← →", t("shortcuts.desc.switch_tabs")),
-        { mac: "⌘ ⇧ [  /  ⌘ ⇧ ]", win: "Ctrl+PgUp / PgDn", description: t("shortcuts.desc.prev_next_tab") },
+        { mac: "⌘ ⇧ [  /  ⌘ ⇧ ]", win: "Ctrl+PgUp / PgDn", description: t("shortcuts.desc.prev_next_tab"), browserReserved: true },
+        { mac: "⇧ F10", win: "Shift+F10", description: t("shortcuts.desc.tab_menu") },
       ],
     },
     {
@@ -71,8 +61,6 @@ function getShortcutGroups(): readonly ShortcutGroup[] {
         same("/", t("shortcuts.desc.command_menu")),
         same("↑ ↓", t("shortcuts.desc.navigate_menu")),
         same("F2", t("shortcuts.desc.focus_input")),
-        same("F6", t("shortcuts.desc.toggle_focus")),
-        { mac: "⇧ F6", win: "Shift+F6", description: t("shortcuts.desc.toggle_focus_reverse") },
       ],
     },
     {
@@ -96,9 +84,17 @@ export function createShortcutsPage(): SettingsShellPage {
     subtitle: () => t("shortcuts.subtitle"),
     render: (ctx) => {
       const mac = isMacPlatform();
+      const web = isOfficeOnline();
 
       const list = document.createElement("div");
       list.className = "pi-shortcuts-list";
+
+      if (web) {
+        const note = document.createElement("p");
+        note.className = "pi-shortcuts-note";
+        note.textContent = t("shortcuts.webNote");
+        list.appendChild(note);
+      }
 
       for (const group of getShortcutGroups()) {
         const section = document.createElement("div");
@@ -109,7 +105,7 @@ export function createShortcutsPage(): SettingsShellPage {
         header.textContent = group.title;
         section.appendChild(header);
 
-        for (const shortcut of group.shortcuts) {
+        for (const shortcut of group.shortcuts.filter((entry) => !(web && entry.browserReserved))) {
           const row = document.createElement("div");
           row.className = "pi-shortcuts-row";
 

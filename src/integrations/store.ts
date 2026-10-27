@@ -166,15 +166,12 @@ export async function setIntegrationEnabledInScope(args: {
   integrationId: string;
   enabled: boolean;
   knownIntegrationIds: readonly string[];
+  applyDefaultsWhenUnconfigured?: boolean;
 }): Promise<void> {
   const { settings, scope, identifier, integrationId, enabled, knownIntegrationIds } = args;
-  const key = scope === "session"
-    ? sessionIntegrationsKey(identifier)
-    : workbookIntegrationsKey(identifier);
-  const raw = await settings.get(key);
-  const existing = raw == null && scope === "workbook"
-    ? normalizeIntegrationIds(getDefaultEnabledIntegrationIds(), knownIntegrationIds)
-    : normalizeIntegrationIds(raw, knownIntegrationIds);
+  const existing = await readScopeIntegrationIds(
+    settings, scope, identifier, knownIntegrationIds, args.applyDefaultsWhenUnconfigured === true,
+  );
 
   const nextSet = new Set<string>(existing);
   if (enabled) {

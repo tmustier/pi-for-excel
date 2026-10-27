@@ -72,6 +72,8 @@ export const PersistedWorkbookRecoverySnapshotSchema = Type.Union([
     snapshotKind: Type.Optional(Type.Literal("range_values")),
     beforeValues: RecoveryGridSchema,
     beforeFormulas: RecoveryGridSchema,
+    /** What Pi's change left in the range; restore compares it to find later edits. */
+    afterFormulas: Type.Optional(RecoveryGridSchema),
   }),
   Type.Object({
     ...persistedSnapshotBase,
@@ -153,6 +155,9 @@ function toSnapshot(persisted: PersistedWorkbookRecoverySnapshot): WorkbookRecov
     snapshotKind: persisted.snapshotKind ?? "range_values",
   };
 
+  if ("afterFormulas" in persisted && persisted.afterFormulas !== undefined) {
+    snapshot.afterFormulas = cloneGrid(persisted.afterFormulas);
+  }
   if (persisted.workbookId !== undefined) snapshot.workbookId = persisted.workbookId;
   if (persisted.workbookLabel !== undefined) snapshot.workbookLabel = persisted.workbookLabel;
   if (persisted.restoredFromSnapshotId !== undefined) {
@@ -215,12 +220,12 @@ export function parsePersistedSnapshots(
 }
 
 function toPersistedSnapshot(snapshot: WorkbookRecoverySnapshot): PersistedWorkbookRecoverySnapshot {
-  const { snapshotKind: kind, beforeValues, beforeFormulas, ...rest } = snapshot;
+  const { snapshotKind: kind, beforeValues, beforeFormulas, afterFormulas, ...rest } = snapshot;
   const snapshotKind = kind ?? "range_values";
 
   switch (snapshotKind) {
     case "range_values":
-      return { ...rest, snapshotKind, beforeValues, beforeFormulas };
+      return { ...rest, snapshotKind, beforeValues, beforeFormulas, ...(afterFormulas ? { afterFormulas } : {}) };
     case "format_cells_state":
       return { ...rest, snapshotKind, beforeValues, beforeFormulas, formatRangeState: requireState(snapshot.formatRangeState, snapshotKind) };
     case "modify_structure_state":

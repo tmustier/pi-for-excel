@@ -5,6 +5,7 @@
  * (vendored from pi-web-ui 0.75.3 during the UI ownership migration —
  * see docs/ui-ownership.md), extended with:
  * - custom compaction summary message support
+ * - auto-context notes stored in the transcript (sent as user messages)
  * - model-facing shaping of older large tool results (scaled to the active
  *   model's context window)
  */
@@ -14,8 +15,9 @@ import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
 import type { Message } from "@earendil-works/pi-ai";
 
 import { effectiveRecentToolResultsToKeep } from "../context/window-budgets.js";
+import { autoContextToUserMessage } from "./auto-context.js";
 import { convertAttachments, isArtifactMessage, isUserMessageWithAttachments } from "./attachments.js";
-import { compactionSummaryToUserMessage } from "./compaction.js";
+import { compactionSummaryToUserMessage, getCompactedToolCallIds } from "./compaction.js";
 import { shapeToolResultsForLlm } from "./tool-result-shaping.js";
 
 /**
@@ -81,11 +83,17 @@ export function createConvertToLlm(options: {
         continue;
       }
 
+      if (message.role === "autoContext") {
+        normalized.push(autoContextToUserMessage(message));
+        continue;
+      }
+
       normalized.push(message);
     }
 
     const shaped = shapeToolResultsForLlm(normalized, {
       recentToolResultsToKeep: effectiveRecentToolResultsToKeep(options.getContextWindow?.()),
+      compactToolCallIds: getCompactedToolCallIds(messages),
     });
     return convertStandardMessagesToLlm(shaped);
   };

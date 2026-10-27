@@ -1,208 +1,216 @@
 /**
- * Auto-context injection.
+ * Auto-context: what Pi tells the agent about the workbook without being asked.
  *
- * Adds (when available):
- * - workbook structure context (blueprint), only on first send and when invalidated
- * - workspace files summary
- * - selection context (read around current selection)
- * - change tracker summary (cells edited since last message)
+ * Two layers, chosen for prompt caching (see docs/context-management-policy.md):
+ *
+ * 1. Notes stored in the transcript (`prepareRequest`). Snapshots that stay
+ *    true until something changes (the workbook blueprint, the Files summary)
+ *    and events (cells edited by someone other than Pi). Before each model
+ *    request, a note is added only when its subject differs from the last
+ *    note of that kind in the transcript. Stored notes become part of the
+ *    cached prefix, remain visible for the rest of the turn and in later
+ *    turns, survive reloads, and are re-sent only when compaction removed
+ *    them. They are inserted before the user's new prompt, or after the latest
+ *    tool results mid-turn.
+ *
+ * 2. The current selection (`transformContext`). State that can change at any
+ *    moment, so it is re-read for every request and appended as the last
+ *    message. It is never stored, is bounded in size, and sits after the
+ *    cached prefix.
  */
 
-import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { Agent, AgentMessage, PrepareRequest } from "@earendil-works/pi-agent-core";
 
+import { getBlueprint } from "../context/blueprint.js";
 import type { ChangeTracker } from "../context/change-tracker.js";
-import { getBlueprint, getBlueprintRevision } from "../context/blueprint.js";
-import { readSelectionContext } from "../context/selection.js";
+import { readSelectionContext, type SelectionContext } from "../context/selection.js";
 import { getFilesWorkspace } from "../files/workspace.js";
-import { extractTextFromContent } from "../utils/content.js";
+import { AUTO_CONTEXT_PREFIX, type AutoContextKind, type AutoContextMessage } from "../messages/auto-context.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { getWorkbookContext } from "../workbook/context.js";
 
-import {
-  decideWorkbookContextRefresh,
-  type BlueprintRefreshReason,
-} from "./context-refresh-decision.js";
+interface FilesSummary {
+  summary: string;
+  relevantSignature: string;
+  hasRelevantFiles: boolean;
+}
 
-const AUTO_CONTEXT_PREFIX = "[Auto-context]";
-const WORKBOOK_CONTEXT_REFRESH_PREFIX = "[Workbook context refresh:";
-const WORKSPACE_FILES_REFRESH_PREFIX = "[Workspace files refresh:";
+export interface AutoContextSources {
+  changeTracker: Pick<ChangeTracker, "cursor" | "describeSince">;
+  /** The runtime's agent: stored notes are added to its transcript. */
+  getAgent: () => Pick<Agent, "state"> | null | undefined;
+  /** This runtime (chat tab); its own workbook writes are not reported to it. */
+  runtimeId: string;
+  getWorkbookId?: () => Promise<string | null>;
+  getBlueprint?: (workbookId: string | null) => Promise<string>;
+  getFilesSummary?: (workbookId: string | null) => Promise<FilesSummary | null>;
+  readSelection?: () => Promise<SelectionContext>;
+}
 
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T | null> {
+export interface AutoContext {
+  prepareRequest: PrepareRequest;
+  transformContext: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+  /**
+   * This runtime's own mutation changed the workbook structure. The tool
+   * result already says what changed, so the new blueprint waits for the
+   * next turn instead of arriving after the tool result as fresh input (which
+   * made a model repeat the change).
+   */
+  noteOwnStructureChange: () => void;
+}
+
+const WORKBOOK_ID_TIMEOUT_MS = 1200;
+const BLUEPRINT_TIMEOUT_MS = 2500;
+const FILES_TIMEOUT_MS = 1200;
+const SELECTION_TIMEOUT_MS = 2000;
+
+const TIMED_OUT = Symbol("timed out");
+
+/** Run one auto-context source; a failure or timeout is logged and yields null. */
+async function attempt<T>(what: string, run: () => Promise<T>, timeoutMs: number): Promise<T | null> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeoutPromise = new Promise<null>((resolve) => {
-    timeoutId = setTimeout(() => resolve(null), timeoutMs);
-  });
-
-  const raced = Promise.race<T | null>([promise, timeoutPromise]);
-  return raced.finally(() => {
+  try {
+    const promise = run();
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+      timeoutId = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
+    });
+    const result = await Promise.race([promise, timeout]);
+    if (result !== TIMED_OUT) return result;
+    console.warn(`[auto-context] ${what} timed out after ${timeoutMs} ms`);
+  } catch (error) {
+    console.warn(`[auto-context] ${what} failed:`, getErrorMessage(error));
+  } finally {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
-  });
+  }
+  return null;
 }
 
-function buildWorkbookContextSection(blueprint: string, reason: BlueprintRefreshReason): string {
-  let reasonText = "initial";
-  if (reason === "workbook_switched") reasonText = "workbook switched";
-  if (reason === "blueprint_invalidated") reasonText = "workbook structure changed";
-  if (reason === "context_missing") reasonText = "context missing from history";
-
-  return [
-    `[Workbook context refresh: ${reasonText}]`,
-    blueprint,
-  ].join("\n\n");
+function hashText(value: string): string {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0");
 }
 
-function historyHasWorkbookContextRefresh(messages: readonly AgentMessage[]): boolean {
-  for (const message of messages) {
-    if (!(message.role === "user" || message.role === "user-with-attachments")) {
-      continue;
+function latestNote(messages: readonly AgentMessage[], kind: AutoContextKind): AutoContextMessage | undefined {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "autoContext" && message.kind === kind) return message;
+  }
+  return undefined;
+}
+
+function isPrompt(message: AgentMessage | undefined): boolean {
+  return message?.role === "user" || message?.role === "user-with-attachments";
+}
+
+function note(kind: AutoContextKind, text: string, extra: Pick<AutoContextMessage, "key" | "workbookId"> = {}): AutoContextMessage {
+  return { role: "autoContext", kind, text, timestamp: Date.now(), ...extra };
+}
+
+export function createAutoContext(sources: AutoContextSources): AutoContext {
+  const loadWorkbookId = sources.getWorkbookId ?? (async () => (await getWorkbookContext()).workbookId);
+  const loadBlueprint = sources.getBlueprint ?? getBlueprint;
+  const loadFilesSummary = sources.getFilesSummary ?? ((workbookId) => getFilesWorkspace().getContextSummary(workbookId));
+  const loadSelection = sources.readSelection ?? readSelectionContext;
+  // Each runtime (chat tab) reads the shared edit log from its own cursor.
+  let changeCursor = sources.changeTracker.cursor();
+  let ownStructureChangePending = false;
+
+  async function collectNotes(messages: readonly AgentMessage[]): Promise<AutoContextMessage[]> {
+    const notes: AutoContextMessage[] = [];
+    const compacted = messages.some((message) => message.role === "compactionSummary");
+    const workbookId = await attempt("workbook identity", loadWorkbookId, WORKBOOK_ID_TIMEOUT_MS);
+    const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
+    const deferStructure = midTurn && ownStructureChangePending;
+    if (!midTurn) ownStructureChangePending = false;
+
+    const blueprint = await attempt("workbook blueprint", () => loadBlueprint(workbookId), BLUEPRINT_TIMEOUT_MS);
+    if (blueprint && blueprint.trim().length > 0) {
+      const key = `${workbookId ?? "unknown"}:${hashText(blueprint)}`;
+      const last = latestNote(messages, "workbook");
+      let reason: string | null = null;
+      if (!last) reason = compacted ? "re-sent after the conversation was compacted" : "initial";
+      else if (last.workbookId !== workbookId) reason = "workbook switched";
+      else if (last.key !== key && !deferStructure) reason = "structure changed";
+      if (reason) {
+        notes.push(note("workbook", [
+          `Workbook structure (${reason}). Sizes are as of this note; a new note follows when sheets, tables, names, rows or columns change.`,
+          blueprint,
+        ].join("\n\n"), { key, workbookId }));
+      }
     }
 
-    const text = extractTextFromContent(message.content);
-    if (!text.includes(AUTO_CONTEXT_PREFIX)) continue;
-    if (text.includes(WORKBOOK_CONTEXT_REFRESH_PREFIX)) {
-      return true;
+    const files = await attempt("Files workspace summary", () => loadFilesSummary(workbookId), FILES_TIMEOUT_MS);
+    if (files) {
+      const last = latestNote(messages, "files");
+      let reason: string | null = null;
+      if (!last && files.hasRelevantFiles) reason = compacted ? "re-sent after the conversation was compacted" : "initial";
+      else if (last && last.key !== files.relevantSignature) reason = "files changed";
+      if (reason) {
+        notes.push(note("files", `Files workspace (${reason}):\n\n${files.summary}`, { key: files.relevantSignature }));
+      }
     }
+
+    const changes = await sources.changeTracker.describeSince(changeCursor, sources.runtimeId);
+    changeCursor = changes.cursor;
+    if (changes.text) notes.push(note("changes", changes.text));
+
+    return notes;
   }
 
-  return false;
-}
+  const prepareRequest: PrepareRequest = async (request) => {
+    const messages = request.context.messages;
+    const notes = await collectNotes(messages);
+    if (notes.length === 0) return undefined;
 
-function historyHasWorkspaceFilesRefresh(messages: readonly AgentMessage[]): boolean {
-  for (const message of messages) {
-    if (!(message.role === "user" || message.role === "user-with-attachments")) {
-      continue;
+    // Before the user's new prompt(s); after tool results mid-turn.
+    let insertAt = messages.length;
+    while (insertAt > 0 && isPrompt(messages[insertAt - 1])) insertAt -= 1;
+    const anchor = messages[insertAt];
+
+    // Store the notes in the runtime's transcript at the same place, so they
+    // persist with the session and later runs see them.
+    const agent = sources.getAgent();
+    if (agent) {
+      const transcript = agent.state.messages;
+      const index = anchor ? transcript.indexOf(anchor) : -1;
+      agent.state.messages = index >= 0
+        ? [...transcript.slice(0, index), ...notes, ...transcript.slice(index)]
+        : [...transcript, ...notes];
     }
 
-    const text = extractTextFromContent(message.content);
-    if (!text.includes(AUTO_CONTEXT_PREFIX)) continue;
-    if (text.includes(WORKSPACE_FILES_REFRESH_PREFIX)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function buildWorkspaceFilesSection(summary: string, reason: "initial" | "files_changed"): string {
-  const reasonText = reason === "files_changed" ? "files changed" : "initial";
-  return [`[Workspace files refresh: ${reasonText}]`, summary].join("\n\n");
-}
-
-export function createContextInjector(
-  changeTracker: ChangeTracker,
-): (messages: AgentMessage[], _signal?: AbortSignal) => Promise<AgentMessage[]> {
-  let lastInjectedWorkbookId: string | null | undefined;
-  let lastInjectedBlueprintRevision = -1;
-  let lastInjectedWorkspaceSignature: string | undefined;
-
-  return async (messages: AgentMessage[], _signal?: AbortSignal): Promise<AgentMessage[]> => {
-    const injections: string[] = [];
-    let currentWorkbookId: string | null = null;
-
-    // Workbook structure context: inject only when needed.
-    try {
-      const workbookCtx = await withTimeout(getWorkbookContext().catch(() => null), 1200);
-      const workbookId = workbookCtx?.workbookId ?? null;
-      currentWorkbookId = workbookId;
-      const currentRevision = getBlueprintRevision(workbookId);
-      const hasWorkbookContextMessage = historyHasWorkbookContextRefresh(messages);
-
-      const decision = decideWorkbookContextRefresh({
-        lastInjectedWorkbookId,
-        lastInjectedBlueprintRevision,
-        currentWorkbookId: workbookId,
-        currentBlueprintRevision: currentRevision,
-        hasWorkbookContextMessage,
-      });
-
-      if (decision.shouldBootstrap) {
-        lastInjectedWorkbookId = workbookId;
-        lastInjectedBlueprintRevision = currentRevision;
-      }
-
-      if (decision.refreshReason) {
-        const blueprint = await withTimeout(getBlueprint(workbookId).catch(() => null), 2500);
-        if (blueprint && blueprint.trim().length > 0) {
-          injections.push(buildWorkbookContextSection(blueprint, decision.refreshReason));
-          lastInjectedWorkbookId = workbookId;
-          lastInjectedBlueprintRevision = getBlueprintRevision(workbookId);
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
-      const workspace = getFilesWorkspace();
-      const contextSummary = await withTimeout(
-        workspace.getContextSummary(currentWorkbookId).catch(() => null),
-        1200,
-      );
-
-      if (contextSummary) {
-        const signature = contextSummary.relevantSignature;
-        const hasWorkspaceMessage = historyHasWorkspaceFilesRefresh(messages);
-
-        if (lastInjectedWorkspaceSignature === undefined && hasWorkspaceMessage) {
-          lastInjectedWorkspaceSignature = signature;
-        }
-
-        const shouldInjectInitial =
-          lastInjectedWorkspaceSignature === undefined &&
-          !hasWorkspaceMessage &&
-          contextSummary.hasRelevantFiles;
-        const shouldInjectChanged =
-          lastInjectedWorkspaceSignature !== undefined &&
-          signature !== lastInjectedWorkspaceSignature;
-
-        if (shouldInjectInitial || shouldInjectChanged) {
-          const section = buildWorkspaceFilesSection(
-            contextSummary.summary,
-            shouldInjectChanged ? "files_changed" : "initial",
-          );
-          injections.push(section);
-        }
-
-        lastInjectedWorkspaceSignature = signature;
-      } else {
-        lastInjectedWorkspaceSignature = undefined;
-      }
-    } catch {
-      // ignore
-    }
-
-    try {
-      const sel = await withTimeout(readSelectionContext(), 1500);
-      if (sel) injections.push(sel.text);
-    } catch {
-      // ignore
-    }
-
-    const changes = changeTracker.flush();
-    if (changes) injections.push(changes);
-    if (injections.length === 0) return messages;
-
-    const injection = injections.join("\n\n");
-    const injectionMessage: AgentMessage = {
-      role: "user",
-      content: [{ type: "text", text: `${AUTO_CONTEXT_PREFIX}\n${injection}` }],
-      timestamp: Date.now(),
+    return {
+      context: {
+        ...request.context,
+        messages: [...messages.slice(0, insertAt), ...notes, ...messages.slice(insertAt)],
+      },
     };
+  };
 
-    const nextMessages = [...messages];
-    let lastUserIdx = -1;
-    for (let i = nextMessages.length - 1; i >= 0; i--) {
-      if (nextMessages[i]?.role === "user") {
-        lastUserIdx = i;
-        break;
-      }
-    }
+  const transformContext = async (messages: AgentMessage[]): Promise<AgentMessage[]> => {
+    const selection = await attempt("selection", loadSelection, SELECTION_TIMEOUT_MS);
+    const text = selection?.text
+      ?? "Current selection: unavailable (Excel did not answer in time).";
+    // This note is the last user-role message, after tool results mid-turn.
+    // Some models answered it as if it were the request, so it says what it
+    // is. It must not restate the request: after a successful tool call that
+    // read as "do it again" and looped a mutation.
+    const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
+    const reminder = midTurn
+      ? "(Background from Excel, not a message from the user and not a new request. Continue from the tool results above; do not repeat steps that already succeeded.)"
+      : "(Background from Excel, not a message from the user.)";
+    return [
+      ...messages,
+      { role: "user", content: [{ type: "text", text: `${AUTO_CONTEXT_PREFIX} ${text}\n\n${reminder}` }], timestamp: Date.now() },
+    ];
+  };
 
-    if (lastUserIdx >= 0) {
-      nextMessages.splice(lastUserIdx, 0, injectionMessage);
-    } else {
-      nextMessages.push(injectionMessage);
-    }
-
-    return nextMessages;
+  return {
+    prepareRequest,
+    transformContext,
+    noteOwnStructureChange: () => { ownStructureChangePending = true; },
   };
 }

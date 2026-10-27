@@ -589,6 +589,8 @@ void test("workbook recovery log persists and restores chart checkpoints", async
 
 void test("chart_absent restore can skip inverse snapshot when recreation would be impossible", async () => {
   const settingsStore = createInMemorySettingsStore();
+  const ids: string[] = [];
+  const rangeRestores: string[] = [];
   const workbookContext: WorkbookContext = {
     workbookId: "url_sha256:charts-create-workbook",
     workbookName: "Charts.xlsx",
@@ -604,12 +606,27 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
   const log = new WorkbookRecoveryLog({
     getSettingsStore: () => Promise.resolve(settingsStore),
     getWorkbookContext: () => Promise.resolve(workbookContext),
-    now: () => 1700000000200,
-    createId: () => "snap-create-chart",
-    applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
+    now: () => 1700000000200 + ids.length,
+    createId: () => {
+      const id = `snap-${ids.length + 1}`;
+      ids.push(id);
+      return id;
+    },
+    applySnapshot: (address) => {
+      rangeRestores.push(address);
+      return Promise.resolve({ values: [[1]], formulas: [[1]] });
+    },
     applyChartSnapshot: () => Promise.resolve({ state: null, address: "Sheet1!New Chart" }),
   });
 
+  await log.append({
+    toolName: "write_cells",
+    toolCallId: "tc-older-write",
+    address: "Sheet1!A1",
+    changedCount: 1,
+    beforeValues: [["before"]],
+    beforeFormulas: [["before"]],
+  });
   const appended = await log.appendChart({
     toolName: "charts",
     toolCallId: "tc-create-recovery",
@@ -619,8 +636,15 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
   });
 
   assert.ok(appended);
-  const restored = await log.restore(appended.id);
+  const restored = await log.restoreLatestForCurrentWorkbook();
+  assert.equal(restored.restoredSnapshotId, appended.id);
   assert.equal(restored.inverseSnapshotId, null);
+
+  // With no rollback to store, the used backup is removed, so the next
+  // /revert reaches the older write instead of re-deleting the chart forever.
+  const next = await log.restoreLatestForCurrentWorkbook();
+  assert.equal(next.address, "Sheet1!A1");
+  assert.deepEqual(rangeRestores, ["Sheet1!A1"]);
 });
 
 void test("chart rename restore round-trips through the inverse address", async () => {

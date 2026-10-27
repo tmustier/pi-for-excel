@@ -6,6 +6,8 @@ import http from "node:http";
 import net from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { evaluateTargetHostPolicy } from "../scripts/proxy-target-policy.mjs";
+
 const ORIGIN = "https://localhost:3141";
 const PROXY_SCRIPT_PATH = new URL("../scripts/cors-proxy-server.mjs", import.meta.url).pathname;
 
@@ -268,6 +270,9 @@ test("proxy default allowlist includes supported OAuth and web search providers"
     "platform.claude.com",
     "auth.openai.com",
     "openrouter.ai",
+    "api.individual.githubcopilot.com",
+    "api.business.githubcopilot.com",
+    "api.enterprise.githubcopilot.com",
     "s.jina.ai",
     "api.firecrawl.dev",
     "google.serper.dev",
@@ -277,6 +282,12 @@ test("proxy default allowlist includes supported OAuth and web search providers"
 
   for (const host of requiredHosts) {
     assert.ok(loggedHosts.has(host), `Expected ${host} in default target allowlist log`);
+    assert.deepEqual(evaluateTargetHostPolicy({ hostname: host, allowedHosts: loggedHosts }), { allowed: true });
+  }
+  for (const host of ["api.individual.githubcopilot.com.example.com", "api.business.githubcopilot.com.example.com", "api.enterprise.githubcopilot.com.example.com", "api.other.githubcopilot.com", "proxy.individual.githubcopilot.com"]) {
+    const response = await fetch(`http://127.0.0.1:${proxy.port}/?url=${encodeURIComponent(`https://${host}/responses`)}`, { headers: { Origin: ORIGIN } });
+    assert.equal(response.status, 403);
+    assert.match(await response.text(), /blocked_target_not_allowlisted/);
   }
 });
 

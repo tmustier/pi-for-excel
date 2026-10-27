@@ -324,21 +324,31 @@ export interface FilesDialogConnectFolderButtonState {
 export function resolveFilesDialogConnectFolderButtonState(
   backendStatus: WorkspaceBackendStatus | null,
 ): FilesDialogConnectFolderButtonState {
+  if (backendStatus?.nativeConnected) {
+    return {
+      hidden: false,
+      disabled: false,
+      label: t("files-dialog-filtering.disconnectFolder"),
+      title: t("files-dialog-filtering.disconnectFolderTitle", { folder: backendStatus.nativeDirectoryName ?? "" }),
+    };
+  }
+
+  if (backendStatus?.nativeBlockedByFrame === true) {
+    // Show it disabled with the reason rather than letting it fail on click.
+    return {
+      hidden: false,
+      disabled: true,
+      label: t("files-dialog-filtering.connectFolder"),
+      title: t("files-dialog-filtering.connectFolderBlockedTitle"),
+    };
+  }
+
   if (!backendStatus || !backendStatus.nativeSupported) {
     return {
       hidden: true,
       disabled: true,
       label: t("files-dialog-filtering.connectFolder"),
       title: "",
-    };
-  }
-
-  if (backendStatus.nativeConnected) {
-    return {
-      hidden: false,
-      disabled: true,
-      label: t("files-dialog-filtering.connected"),
-      title: t("files-dialog-filtering.folderConnectedTitle"),
     };
   }
 

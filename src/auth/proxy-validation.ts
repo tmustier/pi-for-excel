@@ -7,6 +7,7 @@
  */
 
 import type { SpreadsheetHostKind } from "../host/types.js";
+import { t } from "../language/index.js";
 
 export const DEFAULT_LOCAL_PROXY_URL = "https://localhost:3003";
 export const WPS_DEV_HOST_GATEWAY_PROXY_URL = "http://10.0.2.2:3003";
@@ -145,33 +146,30 @@ export function validateOfficeProxyUrl(url: string): string {
   const normalized = normalizeProxyUrl(url);
 
   if (!/^https?:\/\//i.test(normalized)) {
-    throw new Error(
-      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_PROXY_URL}`,
-    );
+    throw new Error(t("proxy.error.invalid", { url, example: DEFAULT_PROXY_URL }));
   }
 
   let parsed: URL;
   try {
     parsed = new URL(normalized);
   } catch {
-    throw new Error(
-      `Invalid Proxy URL: "${url}". Expected a full URL like ${DEFAULT_PROXY_URL}`,
-    );
+    throw new Error(t("proxy.error.invalid", { url, example: DEFAULT_PROXY_URL }));
   }
 
   // Mixed content guardrail: HTTPS taskpane -> HTTP proxy.
   // This tends to fail in Office webviews (macOS), so fail fast with guidance.
   if (typeof window !== "undefined" && window.location?.protocol === "https:" && parsed.protocol === "http:") {
-    throw new Error(
-      `Proxy URL is HTTP (${normalized}) but the add-in is served over HTTPS. Office webviews may block this as mixed content. ` +
-        `Use ${DEFAULT_PROXY_URL} and run an HTTPS proxy. See ${PROXY_HELPER_DOCS_URL}.`,
-    );
+    throw new Error(t("proxy.error.mixedContent", {
+      url: normalized,
+      example: DEFAULT_PROXY_URL,
+      guide: PROXY_HELPER_DOCS_URL,
+    }));
   }
 
   return normalized;
 }
 
-function isLoopbackHostname(hostname: string): boolean {
+export function isLoopbackHostname(hostname: string): boolean {
   const h = hostname.toLowerCase();
   if (h === "localhost") return true;
   if (h === "::1" || h === "0:0:0:0:0:0:0:1") return true;

@@ -9,11 +9,6 @@
   overflow-y: auto;
 }
 
-.pi-resume-dialog {
-  max-height: 80vh;
-  overflow: hidden;
-}
-
 .pi-resume-body {
   gap: 10px;
 }
@@ -22,9 +17,11 @@
   gap: 6px;
 }
 
+/* Saved sessions take the leftover height but never shrink below their
+   content: when recently closed tabs fill the card, the body scrolls instead
+   of squeezing this list to 0 px. */
 .pi-resume-section[data-resume-section="saved"] {
-  flex: 1 1 auto;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 
 .pi-resume-section-hint {
@@ -98,6 +95,7 @@
   flex-direction: column;
   align-items: flex-start;
   gap: 2px;
+  text-align: start;
 }
 
 .pi-resume-item__title {
@@ -163,4 +161,15 @@
   font-size: var(--text-base);
   color: var(--muted-foreground);
   text-align: right;
+}
+
+.pi-shortcuts-note {
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: var(--radius-md);
+  background: var(--amber-alpha-8);
+  border: 1px solid var(--amber-alpha-16);
+  font-size: var(--text-sm);
+  line-height: 1.4;
+  color: var(--foreground);
 }

@@ -5,6 +5,7 @@ import { Agent } from "@earendil-works/pi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
 
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 
 const OVERFLOW = "400 litellm.ContextWindowExceededError: This model's maximum context length is 65536 tokens";
 
@@ -25,8 +26,8 @@ function harness(response: ReturnType<typeof fauxAssistantMessage>, runCompact: 
     agent,
     autoCompactEnabled: true,
     runCompact,
-    sidebar: { setBusyIndicator: () => {} },
-    queueDisplay: { setActionQueue: () => {} },
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
   });
   return { agent, queue, requests };
 }

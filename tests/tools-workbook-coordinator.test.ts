@@ -5,7 +5,7 @@ import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 
 import { withWorkbookCoordinator } from "../src/tools/with-workbook-coordinator.ts";
-import { createWorkbookCoordinator } from "../src/workbook/coordinator.ts";
+import { createWorkbookCoordinator, getSessionLockState } from "../src/workbook/coordinator.ts";
 
 const parameters = Type.Object({});
 
@@ -76,4 +76,33 @@ void test("a failed unknown-workbook write releases the lock for the next tool r
 
   await assert.rejects(() => failure.execute("failure", {}), /host write failed/u);
   assert.equal(resultText(await next.execute("next", {})), "next committed");
+});
+
+void test("a tab's own parallel writes hold the lock; only another tab's write waits", async () => {
+  const local = createWorkbookCoordinator();
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => { release = resolve; });
+  const op = (sessionId: string, opId: string) => ({ workbookId: "wb", sessionId, opId });
+  // What a listener sees when each write is announced as queued.
+  const seenWhenQueued: string[] = [];
+  local.subscribe((event) => {
+    if (event.type !== "queued") return;
+    seenWhenQueued.push(`${event.context.opId}:${getSessionLockState(local.getSnapshot("wb"), event.context.sessionId)}`);
+  });
+
+  const first = local.runWrite(op("tab-a", "a1"), () => held);
+  const second = local.runWrite(op("tab-a", "a2"), () => Promise.resolve());
+  const other = local.runWrite(op("tab-b", "b1"), () => Promise.resolve());
+  await Promise.resolve();
+
+  const snapshot = local.getSnapshot("wb");
+  assert.equal(getSessionLockState(snapshot, "tab-a"), "holding_lock");
+  assert.equal(getSessionLockState(snapshot, "tab-b"), "waiting_for_lock");
+  assert.equal(getSessionLockState(snapshot, "tab-c"), "idle");
+  assert.deepEqual(seenWhenQueued, ["a2:holding_lock", "b1:waiting_for_lock"]);
+
+  release?.();
+  await Promise.all([first, second, other]);
+  assert.equal(getSessionLockState(local.getSnapshot("wb"), "tab-a"), "idle");
+  assert.equal(getSessionLockState(local.getSnapshot("wb"), "tab-b"), "idle");
 });

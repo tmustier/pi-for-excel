@@ -47,7 +47,7 @@ void test("the dev bridge configures MCP only in the active chat and rejects inv
     assert.deepEqual(await opened.page.evaluate(`(async () => {
       const { getAppStorage } = await import("/src/storage/local/app-storage.ts");
       return getAppStorage().settings.get("integrations.session.v1." + ${JSON.stringify(enabled.result.sessionId)});
-    })()`), ["mcp_tools"]);
+    })()`), ["web_search", "mcp_tools"]);
     assert.match(await send({ integrationId: "not-an-integration", enabled: true }), /"ok":false/);
     assert.match(await send({ integrationId: "mcp_tools", enabled: "true" }), /"ok":false/);
     assert.match(await send({ integrationId: "mcp_tools", enabled: true, scope: "workbook" }), /"ok":false/);

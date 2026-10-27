@@ -16,8 +16,11 @@ import {
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
   resolveConfiguredProxyUrl,
+  validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
-import { readTaskpaneProxySettings } from "./settings.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { checkProxyOnce } from "./proxy-status.js";
+import { needsRemoteProxyWarning, readTaskpaneProxySettings, saveTaskpaneProxyUrl } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -172,50 +175,34 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
 
     // Language bar at the top
     const langBar = createElement("div", "pi-welcome-lang-bar");
-    langBar.style.cssText = "display:flex;justify-content:flex-end;gap:4px;padding:4px 8px;";
+    langBar.setAttribute("role", "group");
+    langBar.setAttribute("aria-label", t("welcome.language.aria"));
 
-    const engBtn = createElement("button");
-    engBtn.type = "button";
-    engBtn.textContent = t("language.english");
-    engBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
-
-    const zhBtn = createElement("button");
-    zhBtn.type = "button";
-    zhBtn.textContent = "中文";
-    zhBtn.style.cssText = "font-size:11px;padding:2px 8px;border:1px solid #ccc;border-radius:4px;background:var(--pi-bg, #fff);cursor:pointer;";
-
-    const currentLang2 = getLanguage();
-    if (currentLang2 === "zh-CN") {
-      zhBtn.style.borderColor = "var(--color-accent, #3b82f6)";
-      zhBtn.style.color = "var(--color-accent, #3b82f6)";
-    } else {
-      engBtn.style.borderColor = "var(--color-accent, #3b82f6)";
-      engBtn.style.color = "var(--color-accent, #3b82f6)";
-    }
-
-    engBtn.addEventListener("click", () => {
-      if (getLanguage() === "en") return;
-      initLanguage("en");
-      void (async () => {
-        try {
-          const storage = getAppStorage();
-          await storage.settings.set("language", "en");
+    const createLanguageButton = (lang: "en" | "zh-CN", label: string): HTMLButtonElement => {
+      const button = createElement("button", "pi-welcome-lang-btn");
+      button.type = "button";
+      button.textContent = label;
+      button.setAttribute("aria-pressed", getLanguage() === lang ? "true" : "false");
+      button.addEventListener("click", () => {
+        if (getLanguage() === lang) return;
+        void (async () => {
+          // Save first: switching in memory before a failed save would leave a
+          // mixed-language pane until the next reload.
+          try {
+            await getAppStorage().settings.set("language", lang);
+          } catch {
+            showToast(t("welcome.language.saveFailed"), { variant: "error" });
+            return;
+          }
+          initLanguage(lang);
           location.reload();
-        } catch { /* ignore */ }
-      })();
-    });
+        })();
+      });
+      return button;
+    };
 
-    zhBtn.addEventListener("click", () => {
-      if (getLanguage() === "zh-CN") return;
-      initLanguage("zh-CN");
-      void (async () => {
-        try {
-          const storage = getAppStorage();
-          await storage.settings.set("language", "zh-CN");
-          location.reload();
-        } catch { /* ignore */ }
-      })();
-    });
+    const engBtn = createLanguageButton("en", t("language.english"));
+    const zhBtn = createLanguageButton("zh-CN", "中文");
 
     langBar.append(engBtn, zhBtn);
 
@@ -252,7 +239,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       proxyPanel.hidden = !willOpen;
       proxyToggle.setAttribute("aria-expanded", willOpen ? "true" : "false");
       proxyToggle.textContent = willOpen
-        ? "Hide proxy settings"
+        ? t("welcome.proxy.hide")
         : proxyToggleClosedLabel;
 
       if (willOpen) {
@@ -268,14 +255,29 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
     };
 
     const saveProxyUi = async () => {
+      const storage = getAppStorage();
+      let proxyUrl: string;
       try {
-        const storage = getAppStorage();
+        // Same validation as Settings → Proxy: an unusable URL is never stored.
+        proxyUrl = validateOfficeProxyUrl(proxyUrlEl.value.trim() || DEFAULT_PROXY_URL);
+      } catch (error) {
+        showToast(t("welcome.toast.proxy_url_not_saved", { error: getErrorMessage(error) }), { variant: "error" });
+        return;
+      }
+
+      try {
         await storage.settings.set("proxy.enabled", proxyEnabledEl.checked);
-        await storage.settings.set("proxy.url", proxyUrlEl.value.trim());
-        showToast(t("welcome.toast.proxy_saved"));
+        proxyUrlEl.value = await saveTaskpaneProxyUrl(storage.settings, proxyUrl);
       } catch {
         showToast(t("welcome.toast.proxy_failed"));
+        return;
       }
+
+      showToast(t("welcome.toast.proxy_saved"));
+      if (needsRemoteProxyWarning({ enabled: proxyEnabledEl.checked, url: proxyUrl })) {
+        showToast(t("init.securityWarning"), { variant: "error" });
+      }
+      void checkProxyOnce(storage.settings, { force: true });
     };
 
     proxyEnabledEl.addEventListener("change", () => {

@@ -5,6 +5,7 @@
 import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
+import { getActiveProviders } from "../models/active-providers.js";
 import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
@@ -19,6 +20,7 @@ import {
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
 import type { RuntimeLockState } from "./session-runtime-manager.js";
+import { closeStatusPopover } from "./status-popovers.js";
 import { getThinkingLevelLabel } from "./thinking-display.js";
 
 export type ActiveAgentProvider = () => Agent | null;
@@ -51,6 +53,30 @@ function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
   }
 }
 
+/**
+ * Providers that serve the same models under different billing. When more
+ * than one of a family is connected, the model name alone does not say which
+ * account a tab bills, so the control adds this tag (P-89). Brand names, not
+ * translated.
+ */
+const SHARED_MODEL_PROVIDER_TAGS: Record<string, { family: string; tag: string }> = {
+  openai: { family: "openai", tag: "API" },
+  "openai-codex": { family: "openai", tag: "ChatGPT" },
+  google: { family: "google", tag: "Gemini API" },
+  "google-gemini-cli": { family: "google", tag: "Code Assist" },
+  "google-antigravity": { family: "google", tag: "Antigravity" },
+};
+
+function ambiguousProviderTag(provider: string): string | null {
+  const entry = SHARED_MODEL_PROVIDER_TAGS[provider];
+  const active = getActiveProviders();
+  if (!entry || !active) return null;
+  for (const other of active) {
+    if (other !== provider && SHARED_MODEL_PROVIDER_TAGS[other]?.family === entry.family) return entry.tag;
+  }
+  return null;
+}
+
 function renderStatusBar(
   agent: Agent | null,
   lockState: RuntimeLockState,
@@ -73,7 +99,9 @@ function renderStatusBar(
 
   // Model alias
   const model = state.model;
-  const modelAlias = model ? (model.name || model.id) : t("status.select_model");
+  const providerTag = model ? ambiguousProviderTag(model.provider) : null;
+  const modelName = model ? (model.name || model.id) : t("status.select_model");
+  const modelAlias = providerTag ? `${modelName} · ${providerTag}` : modelName;
   const modelAliasEscaped = escapeHtml(modelAlias);
 
   // Context usage
@@ -98,7 +126,7 @@ function renderStatusBar(
   const ctxDescription = getStatusContextTooltipDescription();
   const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
 
-  const contextHealth = getStatusContextHealth(pct);
+  const contextHealth = getStatusContextHealth(totalTokens, contextWindow);
   const ctxColor = contextHealth.colorClass;
   const ctxWarningText = contextHealth.warning?.text ?? "";
   const ctxWarningSeverity = contextHealth.warning?.severity ?? "";
@@ -117,9 +145,9 @@ function renderStatusBar(
 
   let lockBadge = "";
   if (lockState === "waiting_for_lock") {
-    lockBadge = `<span class="pi-status-lock pi-status-lock--waiting" data-tooltip="A workbook write is queued behind another session.">lock…</span>`;
+    lockBadge = `<span class="pi-status-lock pi-status-lock--waiting" data-tooltip="${escapeAttr(t("status.lock.waiting.tooltip"))}">${escapeHtml(t("status.lock.waiting"))}</span>`;
   } else if (lockState === "holding_lock") {
-    lockBadge = `<span class="pi-status-lock pi-status-lock--active" data-tooltip="This session currently holds the workbook write lock.">lock</span>`;
+    lockBadge = `<span class="pi-status-lock pi-status-lock--active" data-tooltip="${escapeAttr(t("status.lock.holding.tooltip"))}">${escapeHtml(t("status.lock.holding"))}</span>`;
   }
 
   const modeIsAuto = executionMode === "yolo";
@@ -128,7 +156,7 @@ function renderStatusBar(
   const modeTooltip = modeIsAuto
     ? t("status.mode.auto.tooltip")
     : t("status.mode.confirm.tooltip");
-  const modeBadge = `<button type="button" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${escapeAttr(modeTooltip)}"><span>${escapeHtml(modeLabel)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
+  const modeBadge = `<button type="button" aria-haspopup="menu" class="pi-status-mode pi-status-clickable pi-status-tooltip--right${modeBadgeClass}" data-tooltip="${escapeAttr(modeTooltip)}"><span>${escapeHtml(modeLabel)}</span><span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>`;
 
   const thinkingTooltip = escapeAttr(
     t("status.thinking.tooltip"),
@@ -140,13 +168,13 @@ function renderStatusBar(
 
   const nextMarkup = `
     <div class="pi-status-main">
-      <button type="button" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${escapeAttr(t("status.model.tooltip"))}">
+      <button type="button" aria-haspopup="dialog" class="pi-status-model pi-status-clickable pi-status-tooltip--left" data-tooltip="${escapeAttr(t("status.model.tooltip"))}">
         <span class="pi-status-model__mark">π</span>
         <span class="pi-status-model__name">${modelAliasEscaped}</span>
         ${chevronSvg}
       </button>
-      <button type="button" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${escapeAttr(t("status.thinking.aria", { level: thinkingLevel }))}">${brainSvg} ${escapeHtml(thinkingLevel)}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
-      <button type="button" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${escapeAttr(t("status.context.aria", { pct, label: ctxLabel }))}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
+      <button type="button" aria-haspopup="menu" class="pi-status-thinking pi-status-clickable" data-tooltip="${thinkingTooltip}" aria-label="${escapeAttr(t("status.thinking.aria", { level: thinkingLevel }))}">${brainSvg} ${escapeHtml(thinkingLevel)}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span></button>
+      <button type="button" aria-haspopup="menu" class="pi-status-ctx pi-status-ctx--trigger pi-status-clickable has-tooltip" ${STATUS_CONTEXT_DESC_ATTR}="${ctxPopoverDesc}" ${STATUS_CONTEXT_TOKENS_ATTR}="${ctxPopoverTokens}" ${STATUS_CONTEXT_WARNING_ATTR}="${ctxPopoverWarnText}" ${STATUS_CONTEXT_WARNING_SEVERITY_ATTR}="${ctxWarningSeverity}" aria-label="${escapeAttr(t("status.context.aria", { pct, label: ctxLabel }))}"><span class="pi-status-ctx__pct ${ctxColor}">${pct}%</span><span class="pi-status-ctx__sep">/</span><span class="pi-status-ctx__limit">${ctxLabel}</span>${usageDebug}<span class="pi-status-affordance" aria-hidden="true">${affordanceChevronSvg}</span><span class="pi-tooltip"><span class="pi-tooltip__desc">${escapeHtml(ctxDescription)}</span><span class="pi-tooltip__tokens">${escapeHtml(ctxTokenDetail)}</span>${ctxWarning}</span></button>
       ${lockBadge}
     </div>
     <div class="pi-status-side">
@@ -173,18 +201,21 @@ function renderStatusBar(
     return;
   }
 
+  // Re-rendering replaces the buttons; keep keyboard focus on the same control.
+  const active = document.activeElement;
+  const focusedControl = active instanceof Element && el.contains(active)
+    ? STATUS_CONTROL_CLASSES.find((name) => active.classList.contains(name))
+    : undefined;
+
   setSafeInnerHTML(el, nextMarkup, "status bar markup with escaped model and localized text");
   el.setAttribute("data-status-signature", renderSignature);
+  if (focusedControl) {
+    el.querySelector<HTMLElement>(`.${focusedControl}`)?.focus({ preventScroll: true });
+  }
   adjustContextTooltipAlignment(el);
 }
 
-export function updateStatusBarForAgent(
-  agent: Agent,
-  lockState: RuntimeLockState = "idle",
-  executionMode: ExecutionMode = "yolo",
-): void {
-  renderStatusBar(agent, lockState, executionMode);
-}
+const STATUS_CONTROL_CLASSES = ["pi-status-model", "pi-status-thinking", "pi-status-ctx", "pi-status-mode"] as const;
 
 export function updateStatusBar(
   getActiveAgent: ActiveAgentProvider,
@@ -266,6 +297,9 @@ export function injectStatusBar(opts: {
 
   const bindActiveAgent = () => {
     unsubscribeActiveAgent?.();
+    // Popovers describe the active tab (thinking, context, mode); a tab switch
+    // would leave them editing the old one (STATUS-08).
+    closeStatusPopover();
 
     const activeAgent = getActiveAgent();
     if (activeAgent) {
@@ -327,7 +361,13 @@ export function injectStatusBar(opts: {
     markStatusBarInteractionEndSoon();
   };
 
-  const onStatusUpdate = () => requestRender();
+  // Discrete changes (mode, model, rules, lock) render at once, even while the
+  // bar is hovered or focused: the user just asked for them. Only the
+  // high-frequency agent stream above waits for the interaction to settle.
+  const onStatusUpdate = () => {
+    hasDeferredRender = false;
+    updateStatusBar(getActiveAgent, getLockState, getExecutionMode);
+  };
 
   document.addEventListener("pi:status-update", onStatusUpdate);
   document.addEventListener("pi:active-runtime-changed", bindActiveAgent);

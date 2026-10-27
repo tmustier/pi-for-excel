@@ -25,6 +25,7 @@ import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 
 import { encodeBase64Utf8 } from "../../utils/base64-text.js";
+import { escapeAttr } from "../../utils/html.js";
 
 /**
  * Escape raw HTML tags while preserving markdown syntax.
@@ -69,7 +70,7 @@ function codeBlockElement(language: string, code: string): string {
   // Base64 keeps arbitrary code safe inside an HTML attribute; <code-block>
   // decodes it when encoding="base64" is set.
   const encoded = encodeBase64Utf8(unescapeHtmlEntities(code));
-  return `<div class="pi-md-code"><code-block language="${language}" encoding="base64" code="${encoded}"></code-block></div>`;
+  return `<div class="pi-md-code"><code-block language="${escapeAttr(language)}" encoding="base64" code="${encoded}"></code-block></div>`;
 }
 
 @customElement("markdown-block")
@@ -113,12 +114,15 @@ export class MarkdownBlock extends LitElement {
     renderer.table = (token) =>
       `<div class="pi-md-table-wrap">${originalTable(token)}</div>`;
 
-    const parsed = marked.parse(source, { async: false, renderer });
+    // `breaks`: a single newline is a line break, as people type in chat.
+    const parsed = marked.parse(source, { async: false, renderer, breaks: true });
 
-    // Swap <pre><code> blocks for our <code-block> component.
+    // Swap <pre><code> blocks for our <code-block> component. The language
+    // is whatever marked put in the class (already entity-escaped), so
+    // labels such as c++, f# and objective-c keep their code bar.
     let content = parsed.replace(
-      /<pre><code class="language-(\w+)">([\s\S]+?)<\/code><\/pre>/g,
-      (_match, language: string, code: string) => codeBlockElement(language, code),
+      /<pre><code class="language-([^"]+)">([\s\S]+?)<\/code><\/pre>/g,
+      (_match, language: string, code: string) => codeBlockElement(unescapeHtmlEntities(language), code),
     );
     content = content.replace(
       /<pre><code>([\s\S]+?)<\/code><\/pre>/g,

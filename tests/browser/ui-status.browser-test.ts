@@ -19,14 +19,16 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
   await page.evaluate((pct) => {
     const sidebar = document.querySelector("pi-sidebar");
     const agent = sidebar.agent;
-    agent.state.model = { ...agent.state.model, contextWindow: 100 };
+    // A 200k window: yellow above 120k (75% of the 160k soft warning budget), red above 160k.
+    agent.state.model = { ...agent.state.model, contextWindow: 200_000 };
+    const tokens = pct * 2_000;
     agent.state.messages.push({
       role: "assistant",
       content: [{ type: "text", text: "usage fixture" }],
       api: "openai-responses",
       provider: "openai",
       model: "browser-fixture",
-      usage: { input: pct, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: pct, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
+      usage: { input: tokens, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: tokens, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } },
       stopReason: "stop",
       timestamp: Date.now(),
     });
@@ -36,9 +38,9 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
 }
 
 for (const row of [
-  { percent: 40, warning: null, severity: null },
-  { percent: 41, warning: "Context 41% full.", severity: "yellow" },
-  { percent: 61, warning: "Context 61% full — responses may become less reliable.", severity: "red" },
+  { percent: 60, warning: null, severity: null },
+  { percent: 61, warning: "Context 61% full.", severity: "yellow" },
+  { percent: 81, warning: "Context 81% full — responses may become less reliable.", severity: "red" },
   { percent: 101, warning: "Context is full — the next message will fail.", severity: "red" },
 ] as const) {
   void test(`context usage at ${row.percent}% shows the expected visible warning`, async () => {
@@ -56,12 +58,120 @@ for (const row of [
   });
 }
 
-void test("context warning attributes normalize unknown severity to yellow in the visible popover", async () => {
+void test("Shift+Tab cycles thinking only from the composer text field", async () => {
   await withTaskpane({ width: 420, height: 720 }, async (page) => {
-    await setContextUsage(page, 41);
-    await page.locator(".pi-status-ctx--trigger").evaluate((trigger) => trigger.setAttribute("data-ctx-severity", "unknown"));
-    await page.locator(".pi-status-ctx--trigger").click();
-    assert.match(await page.locator(".pi-status-popover__warning").getAttribute("class") ?? "", /warning--yellow/);
+    const level = (): Promise<string | null> => page.locator(".pi-status-thinking").getAttribute("aria-label");
+    const input = page.locator("pi-input textarea");
+    await input.fill("draft");
+
+    const before = await level();
+    await input.press("Shift+Tab");
+    const cycled = await level();
+    assert.notEqual(cycled, before);
+    assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+
+    // From Send, Shift+Tab moves focus back to the text field and leaves the level alone.
+    await page.getByRole("button", { name: "Send" }).focus();
+    await page.keyboard.press("Shift+Tab");
+    assert.equal(await level(), cycled);
+    assert.equal(await input.evaluate((el) => el === document.activeElement), true);
+  });
+});
+
+void test("arrow keys inside a status popover do not switch tabs", async () => {
+  await withTaskpane({ width: 420, height: 720 }, async (page) => {
+    await page.getByRole("button", { name: "New tab" }).click();
+    const active = page.locator(".pi-session-tab.is-active");
+    await active.filter({ hasText: "Chat 2" }).waitFor();
+
+    await page.locator(".pi-status-thinking").click();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowLeft");
+
+    assert.match(await active.textContent() ?? "", /Chat 2/);
+    assert.equal(await page.locator(".pi-status-popover--thinking").isVisible(), true);
+  });
+});
+
+void test("the tab strip's left arrow reaches the first tab", async () => {
+  await withTaskpane({ width: 349, height: 622 }, async (page) => {
+    for (let count = 2; count <= 6; count += 1) {
+      await page.getByRole("button", { name: "New tab" }).click();
+      await page.locator(".pi-session-tab").nth(count - 1).waitFor();
+    }
+    const scroller = page.locator(".pi-session-tabs__scroller");
+    const left = page.locator(".pi-session-tabs__scroll--left");
+    for (let clicks = 0; clicks < 10 && await left.isVisible(); clicks += 1) {
+      await left.click();
+      await page.waitForTimeout(500);
+    }
+    assert.equal(await scroller.evaluate((element) => element.scrollLeft), 0);
+  });
+});
+
+void test("toasts sit above the composer dock as it grows", async () => {
+  await withTaskpane({ width: 380, height: 622 }, async (page) => {
+    const gap = await page.evaluate(async () => {
+      // A queue strip is inserted into the dock above the input, as queue-display.ts does.
+      const inputArea = document.querySelector(".pi-input-area");
+      const strip = document.createElement("div");
+      strip.style.height = "60px";
+      inputArea.parentElement.insertBefore(strip, inputArea);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("Toast placement fixture");
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      const toast = document.querySelector(".pi-toast-region").getBoundingClientRect();
+      return strip.getBoundingClientRect().top - toast.bottom;
+    });
+    assert.ok(gap >= 0, `toast overlaps the dock by ${-gap}px`);
+  });
+});
+
+void test("toasts never cover the open slash-command menu", async () => {
+  await withTaskpane({ width: 349, height: 662 }, async (page) => {
+    await page.evaluate(async () => {
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("First fixture toast", 60_000);
+      showToast("Second fixture toast", 60_000);
+    });
+    await page.locator("pi-input textarea").fill("/");
+    const rows = page.locator("#pi-command-menu .pi-cmd-item");
+    await rows.first().waitFor({ state: "visible" });
+    const result = await rows.evaluateAll((items) => {
+      const menu = document.querySelector("#pi-command-menu")?.getBoundingClientRect();
+      // Only rows scrolled into the menu's own viewport can be clicked.
+      const visible = items.filter((item) => {
+        const box = item.getBoundingClientRect();
+        return menu !== undefined && box.top >= menu.top && box.bottom <= menu.bottom;
+      });
+      const covered = visible.filter((item) => {
+        const box = item.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit === null || !item.contains(hit);
+      });
+      return { visible: visible.length, covered: covered.length };
+    });
+    assert.ok(result.visible > 0);
+    assert.equal(result.covered, 0);
+
+    // A pointer click on a row runs it (hovering must not re-render the row away).
+    await page.locator("pi-input textarea").fill("/share");
+    await page.locator("#pi-command-menu .pi-cmd-item").first().click();
+    await page.waitForFunction(() => document.querySelector("pi-input textarea")?.value === "", undefined, { timeout: 3_000 });
+  });
+});
+
+void test("a toast with the same id replaces a long progress toast", async () => {
+  await withTaskpane({ width: 380, height: 622 }, async (page) => {
+    const messages = await page.evaluate(async () => {
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("Unrelated toast");
+      showToast("Compacting fixture…", { id: "compact", duration: 60_000 });
+      showToast("Summarized fixture", { id: "compact" });
+      return [...document.querySelectorAll("#pi-toast .pi-toast__message")].map((node) => node.textContent);
+    });
+    assert.deepEqual(messages, ["Unrelated toast", "Summarized fixture"]);
   });
 });
 
@@ -81,6 +191,38 @@ void test("thinking popover remains above its anchor when it fits", async () => 
     const [anchorBox, popoverBox] = await Promise.all([anchor.boundingBox(), page.locator(".pi-status-popover--thinking").boundingBox()]);
     assert.ok(anchorBox && popoverBox);
     assert.ok(popoverBox.y + popoverBox.height < anchorBox.y);
+  });
+});
+
+void test("choosing a mode updates the label at once while the status bar is hovered and focused", async () => {
+  await withTaskpane({ width: 380, height: 720 }, async (page) => {
+    const mode = page.locator(".pi-status-mode");
+    const initial = (await mode.innerText()).trim();
+    const target = initial === "Auto" ? "Confirm" : "Auto";
+
+    await mode.hover();
+    await mode.focus();
+    await page.keyboard.press("Enter");
+    await page.getByRole("menuitemradio", { name: new RegExp(`^${target}`) }).waitFor({ state: "visible" });
+    await page.getByRole("menuitemradio", { name: new RegExp(`^${target}`) }).focus();
+    await page.keyboard.press("Enter");
+
+    await page.locator(".pi-status-mode").filter({ hasText: target }).waitFor({ state: "visible", timeout: 1_000 });
+    assert.equal(await page.evaluate(() => document.activeElement?.classList.contains("pi-status-mode") ?? false), true);
+  });
+});
+
+void test("a tab switch closes the thinking popover instead of leaving it bound to the old tab", async () => {
+  await withTaskpane({ width: 380, height: 720 }, async (page) => {
+    await page.getByRole("button", { name: "New tab" }).click();
+    await page.locator(".pi-session-tab").nth(1).waitFor({ state: "visible" });
+    await page.locator(".pi-status-thinking").click();
+    const popover = page.locator(".pi-status-popover--thinking");
+    await popover.waitFor({ state: "visible" });
+    // Keyboard switch: no outside click to close the popover as a side effect.
+    await page.keyboard.press("Control+PageUp");
+    await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ state: "visible" });
+    await popover.waitFor({ state: "detached", timeout: 2_000 });
   });
 });
 

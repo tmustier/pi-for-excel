@@ -16,17 +16,21 @@ import {
   setCurrentSpreadsheetHost,
 } from "../host/index.js";
 import { t } from "../language/index.js";
+import {
+  STORAGE_UPGRADE_BLOCKED_EVENT,
+  STORAGE_VERSION_CHANGED_EVENT,
+} from "../storage/local/indexeddb-storage-backend.js";
 import { renderLoading, renderError } from "../ui/loading.js";
 import { getErrorMessage } from "../utils/errors.js";
 
 import { initTaskpane } from "./init.js";
 
-function getRequiredElement<T extends HTMLElement>(id: string): T {
+function getRequiredElement(id: string): HTMLElement {
   const el = document.getElementById(id);
   if (!el) {
     throw new Error(`[pi] Missing required element #${id}`);
   }
-  return el as T;
+  return el;
 }
 
 function showFatalError(errorRoot: HTMLElement, message: string): void {
@@ -34,9 +38,9 @@ function showFatalError(errorRoot: HTMLElement, message: string): void {
 }
 
 export function bootstrapTaskpane(): void {
-  const appEl = getRequiredElement<HTMLElement>("app");
-  const loadingRoot = getRequiredElement<HTMLElement>("loading-root");
-  const errorRoot = getRequiredElement<HTMLElement>("error-root");
+  const appEl = getRequiredElement("app");
+  const loadingRoot = getRequiredElement("loading-root");
+  const errorRoot = getRequiredElement("error-root");
 
   // Initial loading UI
   render(renderLoading(), loadingRoot);
@@ -44,6 +48,13 @@ export function bootstrapTaskpane(): void {
   // Global patches
   installProcessEnvShim();
   installFetchInterceptor();
+
+  window.addEventListener(STORAGE_UPGRADE_BLOCKED_EVENT, () => {
+    render(renderLoading(t("bootstrap.storageBlocked")), loadingRoot);
+  });
+  window.addEventListener(STORAGE_VERSION_CHANGED_EVENT, () => {
+    showFatalError(errorRoot, t("bootstrap.storageVersionChanged"));
+  });
 
   // Host bootstrap (Office/WPS/browser fallback for local dev)
   let initialized = false;
@@ -53,27 +64,16 @@ export function bootstrapTaskpane(): void {
 
     initialized = true;
 
-    let initComplete = false;
-
-    const markInitComplete = () => {
-      if (initComplete) return false;
-      initComplete = true;
-      return true;
-    };
-
+    // A slow start keeps going: the spinner says so, and success mounts the
+    // taskpane in its place. Only a real failure shows the fatal error.
     const slowInitTimer = setTimeout(() => {
-      if (initComplete) return;
-      console.warn(t("bootstrap.initTimeoutWarning"));
+      render(renderLoading(t("bootstrap.slowStart")), loadingRoot);
+      console.warn("[pi] Taskpane initialization taking longer than expected (>12s)");
     }, 12_000);
 
-    const hardTimeoutTimer = setTimeout(() => {
-      if (!markInitComplete()) return;
-      loadingRoot.replaceChildren();
-      showFatalError(
-        errorRoot,
-        t("bootstrap.fatalTimeout"),
-      );
-      console.error("[pi] Init error: Taskpane initialization timed out after 60000ms");
+    const verySlowInitTimer = setTimeout(() => {
+      render(renderLoading(t("bootstrap.stillStarting")), loadingRoot);
+      console.error("[pi] Taskpane initialization still running after 60s");
     }, 60_000);
 
     void initTaskpane({
@@ -81,22 +81,14 @@ export function bootstrapTaskpane(): void {
       errorRoot,
       autoResizeImages: import.meta.env.VITE_PI_AUTO_RESIZE_IMAGES !== "false",
     })
-      .then(() => {
-        if (!markInitComplete()) return;
-        clearTimeout(slowInitTimer);
-        clearTimeout(hardTimeoutTimer);
-      })
       .catch((error: unknown) => {
-        if (!markInitComplete()) {
-          console.error("[pi] Init error after timeout:", error);
-          return;
-        }
-
-        clearTimeout(slowInitTimer);
-        clearTimeout(hardTimeoutTimer);
         loadingRoot.replaceChildren();
         showFatalError(errorRoot, t("bootstrap.fatalError", { msg: getErrorMessage(error) }));
         console.error("[pi] Init error:", error);
+      })
+      .finally(() => {
+        clearTimeout(slowInitTimer);
+        clearTimeout(verySlowInitTimer);
       });
   };
 

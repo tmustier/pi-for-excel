@@ -2,7 +2,6 @@ import { DEFAULT_PROXY_URL, probeProxyReachability } from "../auth/proxy-validat
 import { getEnabledProxyBaseUrl } from "./external-fetch.js";
 import {
   getApiKeyForProvider,
-  isApiKeyRequired,
   loadWebSearchProviderConfig,
   WEB_SEARCH_PROVIDERS,
   type WebSearchProvider,
@@ -66,7 +65,7 @@ export async function detectWebSearchSetupContext(
     : providerConfig.provider;
 
   const hasKey = Boolean(getApiKeyForProvider(providerConfig, provider));
-  const needsKey = !hasKey && isApiKeyRequired(provider);
+  const needsKey = !hasKey;
 
   const isDev = deps?.isDev === true;
   const probeProxy = deps?.probeProxyReachability ?? probeProxyReachability;

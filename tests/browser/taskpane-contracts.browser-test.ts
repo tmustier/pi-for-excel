@@ -95,7 +95,7 @@ async function verifyFailedCommandToast(failureKind: "rejects" | "throws"): Prom
     }, { kind: failureKind, message: sentinel });
 
     await enterCommand(page, `/browser-${failureKind}`);
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.equal(await toast.textContent(), "Could not run that command.");
     assert.equal((await page.locator("body").textContent())?.includes(sentinel), false);
@@ -153,6 +153,8 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
     await nameInput.press("Escape");
     assert.equal(await nameInput.inputValue(), "Browser gateway");
     assert.equal(await nameInput.evaluate((element) => element === document.activeElement), false);
+    // Stepping out of the field keeps focus inside the dialog, not on <body>.
+    assert.equal(await settings.evaluate((overlay) => overlay.contains(document.activeElement)), true);
     await settings.waitFor({ state: "visible" });
 
     await page.getByPlaceholder("https://your-gateway.example.com/v1").fill("https://gateway.example.com/v1");
@@ -175,14 +177,22 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
   });
 });
 
-void test("copy fallback selects the full command in Chromium", async () => {
+void test("copy command still copies when the async clipboard is refused", async () => {
   await withBrowserPage("src/ui-gallery.html", async (page) => {
+    // Excel on the web frames the taskpane without clipboard-write permission.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) } });
+      document.documentElement.dataset.copied = "";
+      document.addEventListener("copy", () => {
+        document.documentElement.dataset.copied += document.getSelection()?.toString() ?? "";
+      }, true);
+    });
     const row = page.locator(".pi-command-copy").filter({ hasText: "npx pi-for-excel-proxy" });
     await row.waitFor({ state: "visible", timeout: 10_000 });
     await row.getByRole("button", { name: "Copy command" }).click();
 
-    await page.waitForFunction(() => window.getSelection()?.toString() === "npx pi-for-excel-proxy");
-    assert.equal(await page.evaluate(() => window.getSelection()?.toString()), "npx pi-for-excel-proxy");
+    await row.getByRole("button", { name: "Copied" }).waitFor({ state: "visible", timeout: 3_000 });
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.copied), "npx pi-for-excel-proxy");
   });
 });
 
@@ -221,7 +231,7 @@ void test("typing /backup in the composer and pressing Enter runs the manual bac
   await withTaskpane(async (page) => {
     await enterCommand(page, "/backup");
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
   });
@@ -249,7 +259,7 @@ void test("submitInput uses the composer path for commands and model messages", 
     await welcomeOverlay.waitFor({ state: "detached" });
     allowCommands = true;
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup command failed: .*unavailable/i);
     allowPlainInput = true;
@@ -311,7 +321,7 @@ void test("Settings Backups exposes manual backup and reports browser-host unava
     await manualBackup.waitFor({ state: "visible" });
     await manualBackup.click();
 
-    const toast = page.locator("#pi-toast.visible .pi-toast__message");
+    const toast = page.locator("#pi-toast .pi-toast__message").last();
     await toast.waitFor({ state: "visible", timeout: 5_000 });
     assert.match(await toast.innerText(), /Backup failed: .*unavailable/i);
   });
@@ -363,44 +373,32 @@ void test("local-service probes populate the first runtime capabilities", async 
   });
 });
 
-void test("disclosure customization renders operable shared toggles", async () => {
+void test("first-run disclosure is a dismissible banner that can open Settings", async () => {
   await withBrowserPage("src/ui-gallery.html", async (page) => {
     await page.evaluate(`
       (async () => {
+        localStorage.removeItem("pi.onboarding.disclosure.acknowledged");
         const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
-        const firstBar = createDisclosureBar({ providerCount: 1 });
-        const secondBar = createDisclosureBar({ providerCount: 1 });
-        if (firstBar) document.body.appendChild(firstBar);
-        if (secondBar) document.body.appendChild(secondBar);
+        window.__settingsOpened = 0;
+        const bar = createDisclosureBar({ providerCount: 1, onOpenSettings: () => { window.__settingsOpened += 1; } });
+        if (bar) document.body.appendChild(bar.root);
       })()
     `);
 
-    const bars = page.locator(".pi-disclosure-bar");
-    assert.equal(await bars.count(), 2);
-    const firstBar = bars.nth(0);
-    const secondBar = bars.nth(1);
-    const customize = firstBar.locator(".pi-disclosure-bar__link");
-    const secondCustomize = secondBar.locator(".pi-disclosure-bar__link");
-    const pickerId = await customize.getAttribute("aria-controls");
-    const secondPickerId = await secondCustomize.getAttribute("aria-controls");
-    assert.ok(pickerId);
-    assert.ok(secondPickerId);
-    assert.notEqual(pickerId, secondPickerId);
-    assert.equal(await firstBar.locator(".pi-disclosure-picker").getAttribute("id"), pickerId);
-    assert.equal(await secondBar.locator(".pi-disclosure-picker").getAttribute("id"), secondPickerId);
+    const banner = page.locator('body > .pi-banner[data-banner-id="disclosure"]');
+    await banner.waitFor({ state: "visible" });
+    assert.equal(await banner.getAttribute("role"), "status");
+    await banner.getByRole("button", { name: "Review in Settings" }).click();
+    await banner.waitFor({ state: "detached" });
+    assert.equal(await page.evaluate("window.__settingsOpened"), 1);
 
-    assert.equal(await customize.getAttribute("aria-expanded"), "false");
-    await firstBar.locator(`#${pickerId}`).waitFor({ state: "hidden" });
-    await customize.click();
-    assert.equal(await customize.getAttribute("aria-expanded"), "true");
-    await firstBar.locator(`#${pickerId}`).waitFor({ state: "visible" });
-
-    const webSearchRow = firstBar.locator(".pi-toggle-row").filter({ hasText: "Web search" });
-    const checkbox = webSearchRow.locator('input[type="checkbox"]');
-    await checkbox.waitFor({ state: "attached" });
-    assert.equal(await checkbox.isChecked(), true);
-    await webSearchRow.locator("label.pi-toggle").click();
-    assert.equal(await checkbox.isChecked(), false);
+    // Acknowledged for good: a second taskpane boot does not show it again.
+    assert.equal(await page.evaluate(`
+      (async () => {
+        const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
+        return createDisclosureBar({ providerCount: 1, onOpenSettings: () => {} }) === null;
+      })()
+    `), true);
   });
 });
 
@@ -463,6 +461,18 @@ void test("recently closed tabs and experimental settings are reachable by comma
     const resume = page.locator("#pi-resume-overlay");
     await resume.getByRole("heading", { name: "Recently closed" }).waitFor({ state: "visible", timeout: 5_000 });
     await resume.locator('[data-resume-section="recently-closed"] .pi-resume-item').waitFor({ state: "visible" });
+
+    // Tab from the card itself must be handled by the trap: the browser's default
+    // from a tabindex=-1 card leaves the add-in frame inside Office.
+    const tabFromCard = await page.evaluate(() => {
+      const card = document.querySelector<HTMLElement>("#pi-resume-overlay .pi-overlay-card, #pi-resume-overlay [tabindex=\"-1\"]");
+      card?.focus();
+      const event = new KeyboardEvent("keydown", { key: "Tab", bubbles: true, cancelable: true });
+      (document.activeElement ?? document.body).dispatchEvent(event);
+      const active = document.activeElement;
+      return { prevented: event.defaultPrevented, inside: card?.contains(active) === true && active !== card };
+    });
+    assert.deepEqual(tabFromCard, { prevented: true, inside: true });
     await resume.getByRole("button", { name: "Close resume session" }).click();
 
     await enterCommand(page, "/experimental");
@@ -495,24 +505,69 @@ void test("Settings guards unsaved navigation and exposes shared behavior contro
   });
 });
 
-void test("proxy state changes update the proxy banner", async () => {
+void test("Settings back/close rule: Escape closes on the entry page and steps back from a nested one", async () => {
   await withTaskpane(async (page) => {
-    const banner = page.locator(".pi-proxy-banner");
-    await banner.waitFor({ state: "attached" });
-    await page.evaluate(() => {
-      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", {
-        detail: { state: "not-detected" },
-      }));
-    });
-    await banner.waitFor({ state: "visible" });
-    assert.match(await banner.innerText(), /Proxy not running/);
+    const settings = page.locator("#pi-settings-overlay");
 
-    await page.evaluate(() => {
-      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", {
-        detail: { state: "detected" },
-      }));
-    });
-    await banner.waitFor({ state: "hidden" });
+    // Opened straight at Backups: Escape closes instead of landing on the Settings root.
+    await enterCommand(page, "/history");
+    await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible", timeout: 5_000 });
+    await page.keyboard.press("Escape");
+    await settings.waitFor({ state: "detached" });
+
+    // Reached from the Settings root: Escape goes back to the root, then closes.
+    await enterCommand(page, "/settings");
+    await settings.getByRole("button", { name: /^Backups/ }).click();
+    await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await settings.getByRole("heading", { name: "Settings" }).waitFor({ state: "visible" });
+    await page.keyboard.press("Escape");
+    await settings.waitFor({ state: "detached" });
+  });
+});
+
+void test("proxy banner warns only when the enabled proxy is down, and can be dismissed", async () => {
+  await withTaskpane(async (page) => {
+    const banner = page.locator('#pi-notices .pi-banner[data-banner-id="proxy"]');
+    const setProxyState = (state: string) => page.evaluate((next) => {
+      document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state: next } }));
+    }, state);
+    const setProxyEnabled = (enabled: boolean) => page.evaluate(async (next) => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      await getAppStorage().settings.set("proxy.enabled", next);
+    }, enabled);
+
+    await setProxyEnabled(false);
+    await setProxyState("not-detected");
+    await page.waitForTimeout(200);
+    assert.equal(await banner.count(), 0);
+
+    await setProxyEnabled(true);
+    await setProxyState("not-detected");
+    await banner.waitFor({ state: "visible" });
+    assert.match(await banner.innerText(), /proxy is turned on but isn’t running/);
+
+    const showSteps = banner.getByRole("button", { name: "Show how to start it", exact: true });
+    await showSteps.focus();
+    await page.keyboard.press("Enter");
+    const hideSteps = banner.getByRole("button", { name: "Hide steps", exact: true });
+    assert.equal(await hideSteps.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await hideSteps.getAttribute("aria-expanded"), "true");
+    await page.keyboard.press("Enter");
+    assert.equal(await showSteps.evaluate((button) => button === document.activeElement), true);
+    assert.equal(await showSteps.getAttribute("aria-expanded"), "false");
+
+    await banner.getByRole("button", { name: "Dismiss" }).click();
+    await banner.waitFor({ state: "detached" });
+    await setProxyState("not-detected");
+    await page.waitForTimeout(200);
+    assert.equal(await banner.count(), 0, "a dismissed warning stays hidden until the proxy recovers");
+
+    await setProxyState("detected");
+    await setProxyState("not-detected");
+    await banner.waitFor({ state: "visible" });
+    await setProxyState("detected");
+    await banner.waitFor({ state: "detached" });
   });
 });
 

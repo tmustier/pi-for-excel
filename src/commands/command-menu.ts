@@ -5,9 +5,11 @@
  * Filters as user types, arrow keys navigate, Enter selects, Esc dismisses.
  */
 
+import { t } from "../language/index.js";
 import { commandRegistry, type SlashCommand } from "./types.js";
+import type { PiInput } from "../ui/pi-input.js";
 
-const SOURCE_BADGES: Record<string, string> = {
+const SOURCE_BADGES: Record<SlashCommand["source"], string> = {
   builtin: "",
   extension: "ext",
   integration: "integration",
@@ -22,23 +24,22 @@ function getCommandTextarea(): HTMLTextAreaElement | null {
   return document.querySelector("pi-input textarea");
 }
 
-function clearCommandTextarea(): void {
-  const textarea = getCommandTextarea();
-  if (!textarea) {
-    return;
-  }
-
-  textarea.value = "";
-  textarea.dispatchEvent(new Event("input", { bubbles: true }));
-}
-
+/**
+ * Choosing a command puts its name in the draft (keeping any arguments typed
+ * after the name) and submits it the way Enter does, so a command refused
+ * while Pi is busy leaves the draft in place.
+ */
 function runCommand(command: SlashCommand): void {
   hideCommandMenu();
-  clearCommandTextarea();
+  const textarea = getCommandTextarea();
+  const composer = document.querySelector<PiInput>("pi-input");
+  if (!textarea || !composer) return;
 
-  document.dispatchEvent(
-    new CustomEvent("pi:command-run", { detail: { name: command.name, args: "" } }),
-  );
+  const value = textarea.value;
+  const spaceIdx = value.indexOf(" ");
+  const args = spaceIdx > 0 ? value.slice(spaceIdx + 1).trim() : "";
+  textarea.value = args ? `/${command.name} ${args}` : `/${command.name}`;
+  composer.submit();
 }
 
 export function showCommandMenu(filter: string, anchor: HTMLElement): void {
@@ -55,9 +56,10 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
     menuEl.id = "pi-command-menu";
     menuEl.className = "pi-cmd-menu";
     menuEl.setAttribute("role", "listbox");
-    menuEl.setAttribute("aria-label", "Slash commands");
+    menuEl.setAttribute("aria-label", t("command-menu.aria"));
     document.body.appendChild(menuEl);
   }
+
 
   // Position above the anchor (the input card)
   const anchorRect = anchor.getBoundingClientRect();
@@ -67,68 +69,64 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
 
   renderMenu();
   menuEl.style.display = "block";
+  // Toasts sit above the open menu so they never cover (and swallow clicks
+  // on) its rows; see toasts.css.
+  const menuOffset = Math.round(window.innerHeight - menuEl.getBoundingClientRect().top);
+  document.documentElement.style.setProperty("--pi-command-menu-offset", `${menuOffset}px`);
 }
 
 export function hideCommandMenu(): void {
   if (menuEl) {
     menuEl.style.display = "none";
   }
+  document.documentElement.style.removeProperty("--pi-command-menu-offset");
   selectedIndex = 0;
+  getCommandTextarea()?.removeAttribute("aria-activedescendant");
 }
 
 export function isCommandMenuVisible(): boolean {
   return menuEl !== null && menuEl.style.display !== "none";
 }
 
+/**
+ * The menu owns arrows, Enter, Tab and Escape only while focus is in the
+ * composer it belongs to; a handled key goes nowhere else (one Escape closes
+ * the menu without also stopping the turn).
+ */
 export function handleCommandMenuKey(e: KeyboardEvent): boolean {
   if (!isCommandMenuVisible()) return false;
+  const textarea = getCommandTextarea();
+  if (!textarea || e.target !== textarea) {
+    hideCommandMenu();
+    return false;
+  }
+  if (e.isComposing || e.keyCode === 229) return false;
 
   const hasModifier = e.altKey || e.ctrlKey || e.metaKey || e.shiftKey;
-
+  const command = filteredCommands[selectedIndex];
   if (e.key === "ArrowUp" && !hasModifier) {
-    e.preventDefault();
-    selectedIndex = Math.max(0, selectedIndex - 1);
-    renderMenu();
-    return true;
-  }
-
-  if (e.key === "ArrowDown" && !hasModifier) {
-    e.preventDefault();
-    selectedIndex = Math.min(filteredCommands.length - 1, selectedIndex + 1);
-    renderMenu();
-    return true;
-  }
-
-  if (e.key === "Enter") {
-    e.preventDefault();
-    const command = filteredCommands[selectedIndex];
-    if (command) {
-      runCommand(command);
-    }
-    return true;
-  }
-
-  if (e.key === "Escape") {
-    e.preventDefault();
+    selectIndex(Math.max(0, selectedIndex - 1));
+  } else if (e.key === "ArrowDown" && !hasModifier) {
+    selectIndex(Math.min(filteredCommands.length - 1, selectedIndex + 1));
+  } else if (e.key === "Enter" && !e.shiftKey) {
+    if (command) runCommand(command);
+  } else if (e.key === "Escape") {
     hideCommandMenu();
-    return true;
-  }
-
-  if (e.key === "Tab") {
-    // Tab-complete the command name
-    e.preventDefault();
-    const command = filteredCommands[selectedIndex];
-    const textarea = getCommandTextarea();
-    if (command && textarea) {
+  } else if (e.key === "Tab") {
+    if (command) {
       textarea.value = `/${command.name} `;
       textarea.dispatchEvent(new Event("input", { bubbles: true }));
       textarea.selectionStart = textarea.value.length;
       textarea.selectionEnd = textarea.value.length;
     }
-    return true;
+  } else {
+    return false;
   }
 
-  return false;
+  e.preventDefault();
+  e.stopPropagation();
+  e.stopImmediatePropagation();
+  return true;
 }
 
 function renderMenu(): void {
@@ -139,13 +137,15 @@ function renderMenu(): void {
   menuEl.replaceChildren();
 
   for (const [index, command] of filteredCommands.entries()) {
-    const badge = SOURCE_BADGES[command.source] ?? "";
+    const badge = SOURCE_BADGES[command.source];
     const isSelected = index === selectedIndex;
 
     const item = document.createElement("button");
     item.type = "button";
     item.className = `pi-cmd-item${isSelected ? " selected" : ""}`;
     item.dataset.index = String(index);
+    item.id = `pi-cmd-option-${index}`;
+    item.tabIndex = -1;
     item.setAttribute("role", "option");
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
 
@@ -166,41 +166,77 @@ function renderMenu(): void {
     description.textContent = command.description;
     item.appendChild(description);
 
+    // Keep focus (and the menu) in the composer while clicking a row.
+    item.addEventListener("mousedown", (event) => {
+      event.preventDefault();
+    });
     item.addEventListener("click", () => {
       runCommand(command);
     });
 
-    item.addEventListener("mouseenter", () => {
-      selectedIndex = index;
-      renderMenu();
+    // Only a moving pointer moves the highlight (a menu that opens under a
+    // resting pointer keeps its first row), and it never re-renders rows,
+    // which would swallow the click.
+    item.addEventListener("mousemove", () => {
+      if (selectedIndex !== index) selectIndex(index);
     });
 
     menuEl.appendChild(item);
 
     if (isSelected) {
       item.scrollIntoView({ block: "nearest" });
+      getCommandTextarea()?.setAttribute("aria-activedescendant", item.id);
     }
   }
 }
 
-/**
- * Wire the command menu to a textarea.
- * Call once after the textarea is available.
- */
-export function wireCommandMenu(textarea: HTMLTextAreaElement): void {
-  const getAnchor = (): HTMLElement =>
-    textarea.closest<HTMLElement>(".pi-input-card")
-    ?? textarea.closest<HTMLElement>(".bg-card")
-    ?? textarea;
+function selectIndex(index: number): void {
+  selectedIndex = index;
+  if (!menuEl) return;
+  for (const item of menuEl.querySelectorAll<HTMLElement>(".pi-cmd-item")) {
+    const isSelected = item.dataset.index === String(index);
+    item.classList.toggle("selected", isSelected);
+    item.setAttribute("aria-selected", isSelected ? "true" : "false");
+    if (isSelected) item.scrollIntoView({ block: "nearest" });
+  }
+}
 
-  textarea.addEventListener("input", () => {
+/**
+ * Listens on the composer element, not its textarea: the composer renders a
+ * fresh textarea for each tab (see `PiInput.loadDraft`).
+ */
+export function wireCommandMenu(composer: HTMLElement): void {
+  // The textarea in use names the menu it controls (#793), whichever tab's it is.
+  composer.addEventListener("focusin", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) event.target.setAttribute("aria-controls", "pi-command-menu");
+  });
+
+  // Like any popover, a press outside the menu and the composer closes it (#793).
+  document.addEventListener("pointerdown", (event) => {
+    if (!isCommandMenuVisible()) return;
+    const target = event.target;
+    if (target instanceof Node && (menuEl?.contains(target) || composer.contains(target))) return;
+    hideCommandMenu();
+  }, true);
+
+  composer.addEventListener("input", (event) => {
+    const textarea = event.target;
+    if (!(textarea instanceof HTMLTextAreaElement)) return;
+    const anchor = textarea.closest<HTMLElement>(".pi-input-card")
+      ?? textarea.closest<HTMLElement>(".bg-card")
+      ?? textarea;
     const value = textarea.value;
     if (value.startsWith("/") && !value.includes("\n")) {
       const filter = value.slice(1); // strip the `/`
-      showCommandMenu(filter, getAnchor());
+      showCommandMenu(filter, anchor);
       return;
     }
 
     hideCommandMenu();
+  });
+
+  // Clicking elsewhere, switching tabs or opening an overlay closes the menu.
+  composer.addEventListener("focusout", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) hideCommandMenu();
   });
 }

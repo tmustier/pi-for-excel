@@ -9,6 +9,8 @@
 
 import { html, type TemplateResult } from "lit";
 import { excelRun, parseRangeRef } from "../excel/helpers.js";
+import { t } from "../language/index.js";
+import { showToast } from "./toast.js";
 
 /* ── Debounce guard ─────────────────────────────────────────── */
 
@@ -63,6 +65,16 @@ async function navigateToRange(address: string): Promise<void> {
   });
 }
 
+/** Navigate, and tell the user when Excel refuses (deleted sheet, cell in edit mode, no Excel). */
+async function followCellLink(address: string): Promise<void> {
+  try {
+    await navigateToRange(address);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    showToast(t("cell-link.failed", { address, reason }), { variant: "error" });
+  }
+}
+
 /* ── Lit template helper ────────────────────────────────────── */
 
 /**
@@ -79,7 +91,7 @@ export function cellRef(address: string): TemplateResult {
     @click=${(e: Event) => {
       e.preventDefault();
       e.stopPropagation();
-      void navigateToRange(address);
+      void followCellLink(address);
     }}
   >${address}</a>`;
 }
@@ -99,7 +111,7 @@ export function cellRefDisplay(
     @click=${(e: Event) => {
       e.preventDefault();
       e.stopPropagation();
-      void navigateToRange(fullAddress);
+      void followCellLink(fullAddress);
     }}
   >${display}</a>`;
 }

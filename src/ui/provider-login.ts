@@ -8,7 +8,18 @@
  */
 
 import { getAppStorage } from "../storage/local/app-storage.js";
-import { isCorsError } from "../auth/cors-error.js";
+import { checkProviderApiKey } from "../auth/api-key-check.js";
+import { showToast } from "./toast.js";
+import { isMacPlatform, isWindowsPlatform } from "../utils/platform.js";
+
+/** Where the user runs the proxy helper, named for their platform. */
+function terminalAppName(): string {
+  if (isMacPlatform()) return t("platform.terminal.mac");
+  if (isWindowsPlatform()) return t("platform.terminal.windows");
+  return t("platform.terminal.other");
+}
+import { isCorsError, isModuleLoadError } from "../auth/cors-error.js";
+import { checkProxyOnce, isProxyBlockedByBrowser } from "../taskpane/proxy-status.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
@@ -70,7 +81,7 @@ function showProxyGateDialog(): Promise<boolean> {
     message.style.lineHeight = "1.5";
     message.textContent = DEFAULT_PROXY_IS_REMOTE
       ? t("provider.proxy_gate.message_remote")
-      : t("provider.proxy_gate.message");
+      : t("provider.proxy_gate.message", { terminal: terminalAppName() });
 
     const codeRow = document.createElement("div");
     codeRow.style.cssText = "display:flex;align-items:center;gap:8px;margin:12px 0;";
@@ -104,7 +115,7 @@ function showProxyGateDialog(): Promise<boolean> {
     } else {
       setSafeInnerHTML(
         hint,
-        `${escapeHtml(t("provider.proxy_gate.hint_html"))} ` +
+        `${escapeHtml(t("provider.proxy_gate.hint_html", { terminal: terminalAppName() }))} ` +
           `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
         "proxy gate helper link markup with escaped localized text",
       );
@@ -166,7 +177,7 @@ function showProxyGateDialog(): Promise<boolean> {
         } else {
           setSafeInnerHTML(
             hint,
-            `${escapeHtml(t("provider.proxy_gate.not_detected_html"))} ` +
+            `${escapeHtml(t("provider.proxy_gate.not_detected_html", { terminal: terminalAppName() }))} ` +
               `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
             "proxy retry helper link markup with escaped localized text",
           );
@@ -360,7 +371,10 @@ function normalizeApiKeyForProvider(
  * Copilot). The login flow keeps polling in the background, so the dialog
  * only informs the user; the caller closes it when login settles.
  */
-function showDeviceCodeDialog(info: { userCode: string; verificationUri: string }): () => void {
+function showDeviceCodeDialog(
+  info: { userCode: string; verificationUri: string },
+  onClose: () => void,
+): () => void {
   closeOverlayById(PROVIDER_PROMPT_OVERLAY_ID);
 
   const dialog = createOverlayDialog({
@@ -405,6 +419,9 @@ function showDeviceCodeDialog(info: { userCode: string; verificationUri: string 
   helper.textContent = t("provider.device_code.helper", { uri: info.verificationUri });
 
   dialog.card.append(title, message, codeRow, helper);
+  // Closing the dialog (Escape, ×, backdrop) cancels the login instead of
+  // leaving it polling in the background.
+  dialog.addCleanup(onClose);
   dialog.mount();
 
   return () => dialog.close();
@@ -854,6 +871,16 @@ export function buildProviderRow(
           if (!import.meta.env.DEV && OAUTH_IDS_NEEDING_PROXY.has(id)) {
             const reachable = await isProxyReachable();
             if (!reachable) {
+              // Where the browser blocks localhost (Excel on the web), the gate's
+              // "run the helper, then Retry" can never succeed: say why instead.
+              await checkProxyOnce(getAppStorage().settings);
+              if (isProxyBlockedByBrowser()) {
+                errorEl.textContent = t("proxy.blocked_by_browser");
+                errorEl.hidden = false;
+                oauthBtn.textContent = t("provider.login_with", { label });
+                oauthBtn.style.opacity = "1";
+                return;
+              }
               const userRetried = await showProxyGateDialog();
               if (!userRetried) {
                 // User cancelled — reset button and bail.
@@ -865,6 +892,7 @@ export function buildProviderRow(
           }
 
           const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
+          const loginAbort = new AbortController();
           const authUrlRef: { current: string | null } = { current: null };
 
           let cred;
@@ -881,7 +909,7 @@ export function buildProviderRow(
                 // page and show the user code to enter there.
                 const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
-                deviceCodeDialogRef.close = showDeviceCodeDialog(info);
+                deviceCodeDialogRef.close = showDeviceCodeDialog(info, () => loginAbort.abort());
               },
               onSelect: (prompt) =>
                 promptForSelect({
@@ -924,7 +952,16 @@ export function buildProviderRow(
                 return value;
               },
               onProgress: (msg) => { oauthBtn.textContent = msg; },
+              signal: loginAbort.signal,
             });
+          } catch (error) {
+            if (loginAbort.signal.aborted) {
+              // The user closed the device-code dialog: the login is cancelled.
+              oauthBtn.textContent = t("provider.login_with", { label });
+              oauthBtn.style.opacity = "1";
+              return;
+            }
+            throw error;
           } finally {
             deviceCodeDialogRef.close?.();
           }
@@ -943,23 +980,29 @@ export function buildProviderRow(
           }
 
           const msg = getErrorMessage(err);
-          const isLikelyCors =
+          // The login flow's code itself could not load (GitHub Copilot's flow is not bundled for the browser).
+          const flowUnavailable = err instanceof Error && isModuleLoadError(err);
+          const isLikelyCors = !flowUnavailable && (
             isCorsError(err) ||
-            (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg));
+            (typeof msg === "string" && /load failed|failed to fetch|cors|cross-origin|networkerror/i.test(msg)));
 
           if (isLikelyCors) {
-            if (DEFAULT_PROXY_IS_REMOTE) {
+            if (isProxyBlockedByBrowser()) {
+              errorEl.textContent = t("proxy.blocked_by_browser");
+            } else if (DEFAULT_PROXY_IS_REMOTE) {
               errorEl.textContent = t("provider.cors_error_remote", { url: DEFAULT_PROXY_URL });
             } else {
               setSafeInnerHTML(
                 errorEl,
-                `${escapeHtml(t("provider.cors_error"))} <code style="padding:2px 5px;border-radius:4px;` +
+                `${escapeHtml(t("provider.cors_error", { terminal: terminalAppName() }))} <code style="padding:2px 5px;border-radius:4px;` +
                   "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
                   `npx pi-for-excel-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
                   `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
                 "provider CORS helper error markup with escaped localized text",
               );
             }
+          } else if (flowUnavailable) {
+            errorEl.textContent = t("provider.oauth.flow_unavailable", { label });
           } else {
             errorEl.textContent = msg || t("provider.login_failed");
           }
@@ -1017,11 +1060,23 @@ export function buildProviderRow(
     const key = normalized.key;
     saveBtn.textContent = t("provider.testing");
     saveBtn.style.opacity = "0.7";
+    saveBtn.disabled = true;
     errorEl.hidden = true;
     try {
+      const check = await checkProviderApiKey(id, key);
+      if (check.status === "rejected") {
+        errorEl.textContent = t("provider.key_rejected", { label, status: String(check.httpStatus) });
+        errorEl.hidden = false;
+        return;
+      }
+
       await storage.providerKeys.set(id, key);
       setConnectedState(true);
       onConnected(row, id, label);
+      // After the caller's "connected" toast, so this caveat is the one left showing.
+      if (check.status === "unverified") {
+        showToast(t("provider.key_unverified", { label }), 4000);
+      }
       detail.hidden = true;
       expandedRef.current = null;
     } catch (err) {
@@ -1031,6 +1086,7 @@ export function buildProviderRow(
     } finally {
       saveBtn.textContent = t("provider.save");
       saveBtn.style.opacity = "1";
+      saveBtn.disabled = false;
     }
   })(); });
 

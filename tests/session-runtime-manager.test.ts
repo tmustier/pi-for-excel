@@ -6,6 +6,7 @@ import { createModels, fauxProvider } from "@earendil-works/pi-ai";
 
 import type { ActionQueue } from "../src/taskpane/action-queue.ts";
 import type { QueueDisplay } from "../src/taskpane/queue-display.ts";
+import { createTabState } from "../src/taskpane/tab-state.ts";
 import {
   SessionRuntimeManager,
   type SessionRuntime,
@@ -62,7 +63,8 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
   const actionQueue: ActionQueue = {
     enqueuePrompt: () => {},
     enqueueCommand: () => {},
-    drainQueuedActions: () => [],
+    editLast: () => false,
+    stop: () => ({ texts: [], cancelledCommands: [] }),
     isBusy: () => false,
     shutdown: () => {},
   };
@@ -71,6 +73,9 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
     add: () => {},
     clear: () => {},
     drainQueuedMessages: () => [],
+    removeQueuedMessage: () => {},
+    setRowHandlers: () => {},
+    lastEditableRow: () => null,
     setActionQueue: () => {},
     attach: () => {},
     detach: () => {},
@@ -82,6 +87,7 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
       agent,
       actionQueue,
       queueDisplay,
+      tab: createTabState(),
       persistence,
       lockState: "idle",
       refreshCapabilities: () => {
@@ -179,4 +185,83 @@ void test("capability refresh requested during a pass runs again and a listener-
   unsubscribe();
   assert.equal(listenerRequests, 1);
   assert.equal(refreshCount, 4, "a refresh requested from a snapshot listener must execute");
+});
+
+void test("a capability refresh requested before any runtime exists does not swallow later refreshes", async () => {
+  const manager = new SessionRuntimeManager({
+    createRuntime: () => Promise.reject(new Error("factory should not run")),
+  });
+  await manager.refreshCapabilities();
+
+  const first = createRuntimeHarness("first");
+  manager.registerRuntime(first.runtime, { activate: true });
+  await manager.refreshCapabilities();
+  assert.equal(first.getRefreshCount(), 1);
+});
+
+void test("a run that ends in a background tab marks it until the tab is opened; a user stop leaves no mark", () => {
+  const first = createRuntimeHarness("first");
+  const second = createRuntimeHarness("second");
+  const busy = new Map<string, boolean>();
+  const outcomes = new Map<string, "finished" | "failed" | null>();
+  for (const harness of [first, second]) {
+    const runtimeId = harness.runtime.runtimeId;
+    harness.runtime.actionQueue.isBusy = () => busy.get(runtimeId) ?? false;
+  }
+  const settled: Array<{ runtimeId: string; outcome: string; wasActive: boolean; title: string }> = [];
+  const manager = new SessionRuntimeManager({
+    createRuntime: () => Promise.reject(new Error("factory should not run")),
+    getRunOutcome: (runtime) => outcomes.get(runtime.runtimeId) ?? null,
+    onRunSettled: (event) => settled.push(event),
+  });
+  manager.registerRuntime(first.runtime, { activate: true });
+  manager.registerRuntime(second.runtime, { activate: false });
+  const attentionOf = (runtimeId: string) =>
+    manager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.attention;
+
+  // Background run finishes.
+  busy.set("second", true);
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("second"), "none");
+  busy.set("second", false);
+  outcomes.set("second", "finished");
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("second"), "finished");
+  assert.deepEqual(settled, [{ runtimeId: "second", outcome: "finished", wasActive: false, title: "Chat 2" }]);
+
+  // Settles once: further emits while idle report nothing new.
+  manager.notifyRuntimeChanged();
+  assert.equal(settled.length, 1);
+
+  // Failure overrides; a new run clears the mark while it works.
+  busy.set("second", true);
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("second"), "none");
+  busy.set("second", false);
+  outcomes.set("second", "failed");
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("second"), "failed");
+
+  // Opening the tab clears it.
+  manager.switchRuntime("second");
+  assert.equal(attentionOf("second"), "none");
+
+  // A user stop in the (now background) first tab: no mark, no event.
+  settled.length = 0;
+  busy.set("first", true);
+  manager.notifyRuntimeChanged();
+  busy.set("first", false);
+  outcomes.set("first", null);
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("first"), "none");
+  assert.equal(settled.length, 0);
+
+  // The active tab finishing is reported as active and never marked.
+  busy.set("second", true);
+  manager.notifyRuntimeChanged();
+  busy.set("second", false);
+  outcomes.set("second", "finished");
+  manager.notifyRuntimeChanged();
+  assert.equal(attentionOf("second"), "none");
+  assert.deepEqual(settled.map((event) => event.wasActive), [true]);
 });

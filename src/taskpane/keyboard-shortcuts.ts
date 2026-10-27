@@ -9,10 +9,13 @@ import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import { moveCursorToEnd } from "../ui/input-focus.js";
+import { isModalOverlayOpen } from "../ui/overlay-dialog.js";
 import { isActionToastVisible, showToast } from "../ui/toast.js";
 import { t } from "../language/index.js";
+import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
+import { isDialogOverlayOpen } from "../ui/overlay-escape.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
 import {
   handleCommandMenuKey,
@@ -20,15 +23,8 @@ import {
   isCommandMenuVisible,
 } from "../commands/command-menu.js";
 
-import { flashThinkingLevel, updateStatusBarForAgent } from "./status-bar.js";
+import { flashThinkingLevel } from "./status-bar.js";
 import { THINKING_LEVEL_COLORS } from "./thinking-display.js";
-import {
-  handleSlashCommandExecution,
-  handleStreamingSteerOrFollowUp,
-  restoreQueuedMessagesToEditor,
-  type ActionQueue,
-  type QueueDisplay,
-} from "./keyboard-shortcuts/editor-actions.js";
 import { shouldHandleUndoCloseTabShortcut, textEntryHasContent } from "./keyboard-shortcuts/guards.js";
 import {
   getAdjacentTabDirectionFromShortcut,
@@ -61,7 +57,8 @@ interface KeydownContext {
   textarea: HTMLTextAreaElement | undefined;
   keyTarget: Node | null;
   isInEditor: boolean;
-  isStreaming: boolean;
+  /** The active tab is busy: responding, compacting or waiting to retry. */
+  isBusy: boolean;
 }
 
 type ShortcutHandler = (context: KeydownContext) => boolean;
@@ -74,58 +71,25 @@ function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   return target.closest(".pi-session-tabs") !== null;
 }
 
-function setExcelToolCardsExpanded(expanded: boolean): void {
-  const toolMessages = document.querySelectorAll("tool-message");
-
-  for (const toolMessage of toolMessages) {
-    const body = toolMessage.querySelector<HTMLElement>(".pi-tool-card__body");
-    if (!body) continue;
-
-    body.classList.toggle("pi-tool-card__body--collapsed", !expanded);
-
-    const up = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-up");
-    const down = toolMessage.querySelector<HTMLElement>(".pi-tool-card__chevron-collapsed");
-    if (!up || !down) continue;
-
-    if (expanded) {
-      up.classList.remove("hidden");
-      down.classList.add("hidden");
-    } else {
-      up.classList.add("hidden");
-      down.classList.remove("hidden");
-    }
-  }
-}
-
-function collapseThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    // When expanded, ThinkingBlock renders a markdown-block for its body.
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (!isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
-}
-
-function expandThinkingBlocks(): void {
-  const blocks = document.querySelectorAll("thinking-block");
-  for (const block of blocks) {
-    const isExpanded = Boolean(block.querySelector("markdown-block"));
-    if (isExpanded) continue;
-
-    const header = block.querySelector<HTMLElement>(".thinking-header");
-    header?.click();
-  }
+/**
+ * Menus and status popovers own plain arrow keys (see `menu-keyboard.ts`);
+ * explicit tab chords such as Ctrl+PageUp still switch tabs from them.
+ */
+function isPlainArrowInsideMenu(event: KeyboardEvent, target: EventTarget | null | undefined): boolean {
+  const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+  return plain
+    && (event.key === "ArrowLeft" || event.key === "ArrowRight")
+    && target instanceof Element
+    && target.closest("[role=\"menu\"], .pi-status-popover") !== null;
 }
 
 function buildKeydownContext(args: {
   event: KeyboardEvent;
   agent: Agent | null;
+  isBusy: boolean;
   sidebar: PiSidebar;
 }): KeydownContext {
-  const { event, agent, sidebar } = args;
+  const { event, agent, isBusy, sidebar } = args;
   const textarea = sidebar.getTextarea();
   const eventTarget = event.target instanceof Node ? event.target : null;
   const keyTarget = eventTarget ?? (document.activeElement instanceof Node ? document.activeElement : null);
@@ -144,7 +108,7 @@ function buildKeydownContext(args: {
     textarea,
     keyTarget,
     isInEditor,
-    isStreaming: agent?.state.isStreaming ?? false,
+    isBusy,
   };
 }
 
@@ -159,7 +123,9 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
   const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length] ?? "off";
 
   agent.state.thinkingLevel = next;
-  updateStatusBarForAgent(agent);
+  // Full re-render with the real mode and lock state (rendering from the agent
+  // alone would reset the mode badge to its default).
+  document.dispatchEvent(new CustomEvent("pi:status-update"));
   flashThinkingLevel(next, THINKING_LEVEL_COLORS[next]);
 
   return next;
@@ -167,10 +133,12 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
 
 export function installKeyboardShortcuts(opts: {
   getActiveAgent: () => Agent | null;
-  getActiveQueueDisplay: () => QueueDisplay | null;
-  getActiveActionQueue: () => ActionQueue | null;
+  isActiveTabBusy: () => boolean;
   sidebar: PiSidebar;
-  markUserAborted: (agent: Agent) => void;
+  /** Stops the active tab, exactly like the Stop button. */
+  stopActiveTab: () => void;
+  /** Alt+Up: puts the last queued message back in the composer; false when there is none. */
+  editLastQueued: () => boolean;
   onCreateTab?: () => void;
   onCloseActiveTab?: () => void;
   onReopenLastClosed?: () => void;
@@ -179,10 +147,10 @@ export function installKeyboardShortcuts(opts: {
 }): () => void {
   const {
     getActiveAgent,
-    getActiveQueueDisplay,
-    getActiveActionQueue,
+    isActiveTabBusy,
     sidebar,
-    markUserAborted,
+    stopActiveTab,
+    editLastQueued,
     onCreateTab,
     onCloseActiveTab,
     onReopenLastClosed,
@@ -214,12 +182,13 @@ export function installKeyboardShortcuts(opts: {
       if (event.key !== "Escape" || !isCommandMenuVisible()) return false;
 
       event.preventDefault();
+      event.stopImmediatePropagation();
       hideCommandMenu();
       return true;
     },
     (context) => {
-      const { event, isInEditor, isStreaming, keyTarget } = context;
-      if (!shouldBlurEditorFromEscape({ key: event.key, isInEditor, isStreaming })) return false;
+      const { event, isInEditor, isBusy, keyTarget } = context;
+      if (!shouldBlurEditorFromEscape({ key: event.key, isInEditor, isStreaming: isBusy })) return false;
 
       event.preventDefault();
       event.stopPropagation();
@@ -235,18 +204,17 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, isStreaming, agent, keyTarget, textarea } = context;
+      const { event, isBusy, agent, keyTarget } = context;
       const isEscapeKey = event.key === "Escape" || event.key === "Esc";
       const escapeClaimedByOverlay = isEscapeKey && doesUiClaimStreamingEscape(keyTarget);
 
       if (
         !isEscapeKey
         || !shouldAbortFromEscape({
-          isStreaming,
+          isStreaming: isBusy,
           hasAgent: agent !== null,
           escapeClaimedByOverlay,
         })
-        || !agent
       ) {
         return false;
       }
@@ -254,34 +222,11 @@ export function installKeyboardShortcuts(opts: {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-
-      restoreQueuedMessagesToEditor({
-        sidebar,
-        textarea,
-        agent,
-        queueDisplay: getActiveQueueDisplay(),
-        actionQueue: getActiveActionQueue(),
-        requeueCommands: false,
-      });
-
-      const preservedText = sidebar.getInput()?.value ?? textarea?.value ?? "";
-
-      markUserAborted(agent);
-      agent.abort();
-
-      if (preservedText.trim().length > 0) {
-        requestAnimationFrame(() => {
-          const activeInput = sidebar.getInput();
-          if (!activeInput) return;
-          if (activeInput.value.trim().length > 0) return;
-          activeInput.value = preservedText;
-        });
-      }
-
+      stopActiveTab();
       return true;
     },
     (context) => {
-      const { event, isInEditor, textarea, keyTarget, agent } = context;
+      const { event, isInEditor, keyTarget } = context;
       if (!isRestoreQueuedMessagesShortcut(event)) {
         return false;
       }
@@ -293,26 +238,13 @@ export function installKeyboardShortcuts(opts: {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-
-      const restoredCount = restoreQueuedMessagesToEditor({
-        sidebar,
-        textarea,
-        agent,
-        queueDisplay: getActiveQueueDisplay(),
-        actionQueue: getActiveActionQueue(),
-      });
-
-      if (restoredCount === 0) {
-        showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
-      } else {
-        showToast(t("shortcuts.toast.restoredQueued", { count: restoredCount, plural: restoredCount === 1 ? "" : "s" }));
-      }
-
+      editLastQueued();
       return true;
     },
     (context) => {
       const { event } = context;
-      if (!isCreateTabShortcut(event) || !onCreateTab) return false;
+      // Tab shortcuts never act on the tabs hidden behind an open dialog.
+      if (!isCreateTabShortcut(event) || !onCreateTab || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       event.stopPropagation();
@@ -322,7 +254,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      if (!isCloseActiveTabShortcut(event) || !onCloseActiveTab) return false;
+      if (!isCloseActiveTabShortcut(event) || !onCloseActiveTab || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       event.stopPropagation();
@@ -332,7 +264,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event, keyTarget } = context;
-      if (!isUndoCloseTabShortcut(event) || !onReopenLastClosed) return false;
+      if (!isUndoCloseTabShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
 
       const shouldHandleUndoClose = shouldHandleUndoCloseTabShortcut({
         canUndoCloseTab: canUndoCloseTab?.() ?? true,
@@ -351,7 +283,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      if (!isReopenLastClosedShortcut(event) || !onReopenLastClosed) return false;
+      if (!isReopenLastClosedShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       onReopenLastClosed();
@@ -365,7 +297,10 @@ export function installKeyboardShortcuts(opts: {
         !adjacentTabDirection
         || !onSwitchAdjacentTab
         || isTextEntryTarget(keyTarget)
-        || isInsideSessionTabs(keyTarget)
+        || isDialogOverlayOpen()
+        // A focused tab handles plain arrows itself; chords still switch here.
+        || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
+        || isPlainArrowInsideMenu(event, keyTarget)
       ) {
         return false;
       }
@@ -375,10 +310,15 @@ export function installKeyboardShortcuts(opts: {
       return true;
     },
     (context) => {
-      const { event, agent } = context;
-      if (!(event.shiftKey && event.key === "Tab") || !agent) return false;
+      const { event, agent, textarea, keyTarget } = context;
+      // Only from the composer's text field: everywhere else, including the
+      // composer's own buttons, Shift+Tab moves focus backwards.
+      if (!(event.shiftKey && event.key === "Tab") || !agent || !textarea || keyTarget !== textarea) return false;
 
+      // Office on the web also moves focus on Shift+Tab from a window listener;
+      // the key must do exactly one thing.
       event.preventDefault();
+      event.stopPropagation();
       cycleThinkingLevel(agent);
       return true;
     },
@@ -387,61 +327,46 @@ export function installKeyboardShortcuts(opts: {
       if (!(event.ctrlKey || event.metaKey) || event.key !== "o") return false;
 
       event.preventDefault();
-      const collapsed = document.body.classList.toggle("pi-hide-internals");
-
-      // Collapse/expand tool cards to match the new mode.
-      requestAnimationFrame(() => setExcelToolCardsExpanded(!collapsed));
-
-      // Collapse/expand thinking blocks to match the new mode.
-      requestAnimationFrame(() =>
-        collapsed ? collapseThinkingBlocks() : expandThinkingBlocks(),
+      const expanded = toggleDetailsExpanded();
+      const shortcut = formatDetailsShortcut();
+      showToast(
+        expanded
+          ? t("transcript.details.expanded", { shortcut })
+          : t("transcript.details.collapsed", { shortcut }),
+        1500,
       );
-
-      showToast(collapsed ? "Details hidden (⌃O)" : "Details shown (⌃O)", 1500);
       return true;
     },
   ];
 
   const onKeyDown = (event: KeyboardEvent) => {
-    // Command menu takes priority
-    if (isCommandMenuVisible() && handleCommandMenuKey(event)) {
+    // Keys that belong to an IME composition (including the Enter that
+    // commits a candidate) are the input method's, not shortcuts.
+    if (event.isComposing || event.keyCode === 229) return;
+
+    // A modal overlay owns the keyboard. Its own handlers take Escape and Tab;
+    // taskpane shortcuts must not act on the tabs or composer behind it.
+    if (isModalOverlayOpen()) {
       return;
     }
 
     const context = buildKeydownContext({
       event,
       agent: getActiveAgent(),
+      isBusy: isActiveTabBusy(),
       sidebar,
     });
+
+    // The command menu is a combobox on the composer: it only takes keys typed there.
+    if (isCommandMenuVisible() && context.isInEditor && handleCommandMenuKey(event)) {
+      return;
+    }
 
     for (const handler of shortcutHandlers) {
       if (handler(context)) {
         return;
       }
     }
-
-    if (
-      handleSlashCommandExecution({
-        event,
-        textarea: context.textarea,
-        isInEditor: context.isInEditor,
-        isStreaming: context.isStreaming,
-        getActiveActionQueue,
-        sidebar,
-      })
-    ) {
-      return;
-    }
-
-    void handleStreamingSteerOrFollowUp({
-      event,
-      textarea: context.textarea,
-      isInEditor: context.isInEditor,
-      isStreaming: context.isStreaming,
-      agent: context.agent,
-      getActiveQueueDisplay,
-      sidebar,
-    });
   };
 
   document.addEventListener("keydown", onKeyDown, true);

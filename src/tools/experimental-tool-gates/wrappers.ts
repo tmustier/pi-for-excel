@@ -2,6 +2,10 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { assessOfficeJsCodeRisk } from "./office-js-risk.js";
 import {
+  wrapExtensionsManagerToolWithChangeGate,
+  wrapFilesToolWithChangeGate,
+} from "./local-change-gates.js";
+import {
   buildPythonBridgeGateErrorMessage,
   buildTmuxBridgeGateErrorMessage,
   defaultGetApprovedPythonBridgeUrl,
@@ -12,6 +16,8 @@ import {
 import {
   EXECUTE_OFFICE_JS_TOOL_NAME,
   EXECUTE_WPS_JS_TOOL_NAME,
+  EXTENSIONS_MANAGER_TOOL_NAME,
+  FILES_TOOL_NAME,
   PYTHON_BRIDGE_ONLY_TOOL_NAMES,
   PYTHON_FALLBACK_TOOL_NAMES,
   TMUX_TOOL_NAME,
@@ -315,11 +321,12 @@ function wrapDirectWorkbookJsToolWithHardGate(
       // untrusted input.
       const mode = await (dependencies.getExecutionMode?.() ?? Promise.resolve("safe" as const));
       if (mode !== "yolo" || risk.flagged) {
-        const approved = await requestApproval(
-          risk.flagged
-            ? { ...request, riskIdentifiers: risk.identifiers }
-            : request,
-        );
+        const approved = await requestApproval({
+          ...request,
+          ...(risk.flagged ? { riskIdentifiers: risk.identifiers } : {}),
+          ...(signal ? { signal } : {}),
+        });
+        throwIfAborted(signal);
         if (!approved) {
           throw new Error(`${apiName} execution cancelled by user.`);
         }
@@ -333,7 +340,7 @@ function wrapDirectWorkbookJsToolWithHardGate(
 
 function createPythonBridgeApprover(
   dependencies: ExperimentalToolGateDependencies,
-): (toolName: string, bridgeUrl: string, params: unknown) => Promise<void> {
+): (toolName: string, bridgeUrl: string, params: unknown, signal: AbortSignal | undefined) => Promise<void> {
   const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
   const getApprovedBridgeUrl =
     dependencies.getApprovedPythonBridgeUrl
@@ -342,7 +349,7 @@ function createPythonBridgeApprover(
     dependencies.setApprovedPythonBridgeUrl
     ?? defaultSetApprovedPythonBridgeUrl;
 
-  return async (toolName: string, bridgeUrl: string, params: unknown): Promise<void> => {
+  return async (toolName: string, bridgeUrl: string, params: unknown, signal: AbortSignal | undefined): Promise<void> => {
     const cachedApprovalUrl = await getApprovedBridgeUrl();
     if (cachedApprovalUrl === bridgeUrl) {
       return;
@@ -352,7 +359,9 @@ function createPythonBridgeApprover(
       toolName,
       bridgeUrl,
       params,
+      ...(signal ? { signal } : {}),
     });
+    throwIfAborted(signal);
     if (!approved) {
       throw new Error("Python/LibreOffice execution cancelled by user.");
     }
@@ -390,7 +399,7 @@ function wrapPythonToolWithOptionalBridgeApproval(
         }
 
         throwIfAborted(signal);
-        await approveBridgeUsage(tool.name, bridgeUrl, params);
+        await approveBridgeUsage(tool.name, bridgeUrl, params, signal);
       } else {
         const reason = gate.reason ?? "bridge_unreachable";
 
@@ -446,7 +455,7 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
       }
 
       throwIfAborted(signal);
-      await approveBridgeUsage(tool.name, bridgeUrl, params);
+      await approveBridgeUsage(tool.name, bridgeUrl, params, signal);
 
       throwIfAborted(signal);
       return tool.execute(toolCallId, params, signal, onUpdate);
@@ -468,7 +477,10 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
  *   call in Confirm mode. In Auto mode, pure host JSAPI code runs without a
  *   prompt, but code referencing ambient browser authority (network, storage,
  *   globals, dynamic evaluation) still requires per-call approval.
- * - `files` has no gate — read, write, and delete are always available.
+ * - `files` write/delete and `extensions_manager` changes ask for consent
+ *   (`local-change-gates.ts`): every change in Confirm mode; in Auto mode,
+ *   new code (install/enable) and irreversible loss (deleting or overwriting
+ *   a file Pi did not create this session, uninstall).
  */
 export function applyExperimentalToolGates(
   tools: AgentTool[],
@@ -494,6 +506,16 @@ export function applyExperimentalToolGates(
 
     if (tool.name === EXECUTE_WPS_JS_TOOL_NAME) {
       gatedTools.push(wrapDirectWorkbookJsToolWithHardGate(tool, dependencies, "WPS JSAPI"));
+      continue;
+    }
+
+    if (tool.name === FILES_TOOL_NAME) {
+      gatedTools.push(wrapFilesToolWithChangeGate(tool, dependencies));
+      continue;
+    }
+
+    if (tool.name === EXTENSIONS_MANAGER_TOOL_NAME) {
+      gatedTools.push(wrapExtensionsManagerToolWithChangeGate(tool, dependencies));
       continue;
     }
 

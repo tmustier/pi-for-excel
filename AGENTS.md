@@ -118,7 +118,7 @@ without needing Excel. It renders mock components with the real CSS theme.
 
 Available gallery sections (use as argument):
 `badges`, `file-items`, `tool-cards`, `tool-groups`, `diff-table`,
-`text-preview`, `buttons`, `toasts`, `markdown`
+`text-preview`, `buttons`, `toasts`, `banners`, `markdown`
 
 Or use agent-browser directly for interactive inspection:
 ```bash

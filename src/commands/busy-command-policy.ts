@@ -11,10 +11,22 @@ import type { SlashCommand } from "./types.js";
 const BUSY_ALLOWED_COMMANDS = new Set<string>([
   "compact",
   "new",
+  // Opening these is safe while busy; the status bar and utilities menu already
+  // open them. A model change itself is still refused for a busy tab.
+  "model",
+  "settings",
+  "login",
   "rules",
   "resume",
+  // Backups stay available while Pi works: restores and full backups wait
+  // for the workbook lock instead of interleaving with Pi's writes.
   "history",
+  "revert",
+  "backup",
   "reopen",
+  // Read-only: they copy or download what is already in the transcript.
+  "copy",
+  "export",
   "yolo",
   "extensions",
   "plugins",

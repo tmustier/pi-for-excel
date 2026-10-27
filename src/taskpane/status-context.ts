@@ -1,3 +1,4 @@
+import { getCompactionThresholds } from "../compaction/defaults.js";
 import { t } from "../language/index.js";
 
 export const STATUS_CONTEXT_DESC_ATTR = "data-ctx-desc";
@@ -34,8 +35,18 @@ function getSoftActionText(): string {
   return t("status.context.softAction");
 }
 
-export function getStatusContextHealth(pct: number): StatusContextHealth {
-  if (pct > 100) {
+/** Yellow starts at this share of the soft warning budget. */
+const YELLOW_SHARE_OF_SOFT_WARNING = 0.75;
+
+/**
+ * Colours follow the compaction budgets for this context window, so red means
+ * close to compaction (past the soft warning budget) on every model, and
+ * yellow means well on the way there.
+ */
+export function getStatusContextHealth(totalTokens: number, contextWindow: number): StatusContextHealth {
+  const pct = contextWindow > 0 ? Math.round((totalTokens / contextWindow) * 100) : 0;
+  const { softWarningTokens } = getCompactionThresholds(contextWindow);
+  if (totalTokens > contextWindow) {
     return {
       colorClass: "pi-status-ctx--red",
       warning: {
@@ -46,7 +57,7 @@ export function getStatusContextHealth(pct: number): StatusContextHealth {
     };
   }
 
-  if (pct > 60) {
+  if (totalTokens > softWarningTokens) {
     return {
       colorClass: "pi-status-ctx--red",
       warning: {
@@ -57,7 +68,7 @@ export function getStatusContextHealth(pct: number): StatusContextHealth {
     };
   }
 
-  if (pct > 40) {
+  if (totalTokens > softWarningTokens * YELLOW_SHARE_OF_SOFT_WARNING) {
     return {
       colorClass: "pi-status-ctx--yellow",
       warning: {

@@ -9,18 +9,31 @@ The sidebar UI is first-party end to end:
 
 ```
 ┌─ pi-sidebar ──────────────────────────────────────┐
+│  .pi-session-tabs      ← tab strip (scrolls)      │
+│  #pi-notices           ← banners (banner.ts)      │
 │  .pi-messages          ← scrollable               │
-│    message-list        ← src/ui/messages                │
-│    streaming-message-container  ← src/ui/messages       │
-│    .pi-empty           ← empty state overlay       │
-│  .pi-working           ← "Working…" pulse (stream) │
-│  .pi-input-area        ← sticky footer            │
-│    pi-input            ← our component             │
-│    #pi-status-bar      ← model + ctx % + thinking  │
+│    message-list        ← src/ui/messages          │
+│    streaming-message-container  ← src/ui/messages │
+│    .pi-empty           ← empty state              │
+│  .pi-dock              ← composer unit            │
+│    .pi-working         ← working line (stream)    │
+│    queue / widgets     ← steer + follow-up tray   │
+│    .pi-input-area      ← pi-input                 │
+│    #pi-status-bar      ← model, thinking, ctx,    │
+│                          mode                     │
 └────────────────────────────────────────────────────┘
 ```
 
 `pi-sidebar` subscribes to the `Agent` directly and passes messages/tools/streaming state down as properties to the message components.
+
+One model of a streaming turn: the response being streamed renders only in
+`<streaming-message-container>`. At `message_end` pi-agent-core pushes the
+finished response into `state.messages`; the sidebar clears the streaming copy
+in the same update, so `<message-list>` alone draws it from then on. Its tool
+cards spin until their own `tool_execution_end` (results arriving before the
+batch's toolResult messages are passed down as `liveToolResults`). Whether a
+card, thinking block or group is open comes from `transcript-state.ts`, never
+from the element, so it survives the element being replaced.
 
 ### Message component modules (`src/ui/messages/`)
 
@@ -31,7 +44,8 @@ The sidebar UI is first-party end to end:
 | `messages.ts` | `<user-message>`, `<assistant-message>`, `<tool-message>` |
 | `markdown-block.ts` | `<markdown-block>` — marked + input hardening; fenced code → `<code-block encoding="base64">` |
 | `code-block.ts` | `<code-block>` — highlight.js core + copy button |
-| `thinking-block.ts` | `<thinking-block>` — collapsible; owns "Thinking…" → "Thought for Xs" label lifecycle |
+| `thinking-block.ts` | `<thinking-block>` — collapsible (header is a button); "Thinking…" while it is the streaming block, then "Thought for Xs" from transcript state, "Thought" when the timing was not observed |
+| `transcript-state.ts` | View state that outlives elements: details mode (Ctrl/Cmd+O, saved), hand toggles of cards/blocks/groups, observed thinking durations |
 | `attachment-tile.ts` | `<attachment-tile>` — defensive rendering for restored attachment messages |
 | `message-renderer-registry.ts` | `registerMessageRenderer()` / `renderMessage()` by role |
 | `tool-renderer-registry.ts` | `registerToolRenderer()` / `renderTool()` + JSON fallback renderer |
@@ -130,17 +144,66 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 | `icons.ts` | mini-lit `icon`/`iconDOM` | Lucide icon helpers sized via SVG attributes |
 | `model-selector-dialog.ts` | pi-web-ui ModelSelector | First-party model picker (active-provider filter, featured ordering, search, keyboard nav) |
 | `api-key-dialog.ts` | pi-web-ui ApiKeyPromptDialog | First-party provider connect prompt (reuses `provider-login.ts` rows, so OAuth works too) |
-| `toast.ts` | — | `showToast(msg, duration \| { duration, variant })` + `showActionToast(...)` — fixed notifications with destructive styling for errors |
+| `toast.ts` | — | `showToast(msg, duration \| { duration, variant })` + `showActionToast({ id?, … })` + `dismissToast(id)` — stacked transient notifications (see Notifications) |
+| `banner.ts` | — | `showBanner` / `createBanner` / `mountBanner` / `hideBanner` — persistent conditions in `#pi-notices` (see Notifications) |
+| `announcer.ts` | — | `announce(msg, { assertive? })` — hidden live regions (see Notifications) |
+| `menu-keyboard.ts` | — | Shared `role="menu"` keyboard model (see Menus) |
+| `text-input-dialog.ts` | `window.prompt` | `requestTextInputDialog(...)` on the overlay primitive; native `prompt`/`confirm`/`alert` are dead on Excel on the web |
 | `theme-mode.ts` | — | Keeps light mode by default; `/experimental on dark-mode` enables Office/theme-driven `.dark` (fallback: `prefers-color-scheme`) |
 | `loading.ts` | — | Splash screen shown during init |
 | `provider-login.ts` | — | API key entry rows for the welcome overlay |
-| `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus restore) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`) |
+| `overlay-dialog.ts` | — | Shared overlay lifecycle helper (single-instance toggle, Escape/backdrop close, focus contract — see Overlays) + shared overlay chrome/DOM builders (`createOverlayCloseButton`, `createOverlayHeader`, `createOverlayButton`, `createOverlayInput`, `createOverlaySectionTitle`) |
 | `overlay-ids.ts` | — | Shared overlay id constants used across builtins/extensions/taskpane |
+
+## Layers
+
+One z-index scale in `theme/tokens.css`; never use a raw number:
+
+| Token | Used by |
+|---|---|
+| `--z-sticky` | tab strip, dock, status bar |
+| `--z-popover` | menus, status popovers, command menu |
+| `--z-overlay` | `.pi-overlay` (every dialog and full-pane view) |
+| `--z-toast` | `#pi-toast` — above overlays, so feedback from inside a dialog is visible |
+
+## Overlays
+
+Every dialog and full-pane view (Settings, Files, Plugins, resume, model picker, confirmations, text input, extension overlays) is built with `createOverlayDialog` and gets the same contract from `installOverlayFocus`:
+
+- **Initial focus**: `[data-autofocus]`, else the first text field, else the card itself (so the dialog is announced and nothing is activated by accident).
+- **Focus trap**: Tab / Shift+Tab cycle inside the topmost overlay; focus that lands behind it is pulled back. Toasts stay reachable.
+- **Escape** acts on the topmost overlay only. **Back/close rule**: Escape returns to where the user came from (Files preview → list, a Settings page reached from the Settings root → root) and closes the overlay on the view it opened at (`/rules`, `/backups`). A view's `onEscape` returns `true` when it handled the key. A task's own Save/Cancel finish the task and close. Settings' ‹ button is "up" and may go to a page's `parentId` on the entry page. × and backdrop click close through the same guarded path, so unsaved-change confirmations apply.
+- **Return focus** to the opener, or the composer when the opener is gone.
+- While any modal overlay is open, taskpane shortcuts (`keyboard-shortcuts.ts`) do nothing; older overlays are made inert (`coverOpenOverlays`).
+
+Do not call `window.prompt` / `confirm` / `alert`: use `requestTextInputDialog` / `requestConfirmationDialog`.
+
+## Notifications
+
+Pick by how long the thing stays true:
+
+| Kind | Use for | Where | Rules |
+|---|---|---|---|
+| **Inline status** | state of one control or card (saving…, tool failed) | next to the control | no extra notification for the same event |
+| **Toast** (`toast.ts`) | the result of something the user just did | `#pi-toast`, bottom, above the dock and above overlays | ≤3 stacked, newest last; duplicates refresh instead of stacking; pause on hover/focus; errors stay 6 s and have ×; Undo toasts take an `id` so they can be dismissed when the action is undone another way |
+| **Banner** (`banner.ts`) | a condition that stays true until fixed or acknowledged (last run failed, proxy down, first-run disclosure) | `#pi-notices` under the tabs, most severe first | always dismissible; one per `id`; never moves focus; `role="alert"` only for errors |
+| **Announcement** (`announcer.ts`) | screen-reader-only news with no visible notification: a run finished, failed in a background tab, is retrying; an approval is waiting | hidden `aria-live` regions | never for something a toast or banner already announces; assertive only when the user must act |
+
+Wording: sentence case, past tense for results ("Renamed tab to “Forecast”"), say what to do next for failures ("Couldn’t save. Try again."), curly quotes around names, no trailing period on one-phrase toasts, and the same string for the same event on every path. Every string goes through `t()`.
+
+## Menus
+
+`menu-keyboard.ts` is the one keyboard model for `role="menu"` (gear menu, tab context menu, status popovers):
+
+- Opening focuses the checked item (radio menus) or the first item.
+- ↑/↓ move with wrap, Home/End jump, Enter/Space activate, Escape and Tab close; closing returns focus to the trigger.
+- Tab context menu also opens with Shift+F10 / the ContextMenu key.
+- The slash-command menu is a combobox on the composer (`aria-activedescendant`); it only takes keys typed in the composer.
 
 ## Wiring (taskpane.ts)
 
 `taskpane.ts` creates the `Agent`, mounts `PiSidebar`, and wires:
 - `sidebar.onSend` / `sidebar.onAbort` → agent.prompt() / agent.abort()
 - Keyboard shortcuts (Enter, Escape, Shift+Tab for thinking) via `document.addEventListener("keydown")`
-- Slash command menu via `wireCommandMenu(sidebar.getTextarea())`
+- Slash command menu via `wireCommandMenu(sidebar.getInput())`
 - Session persistence (auto-save on message_end, auto-restore latest on init)

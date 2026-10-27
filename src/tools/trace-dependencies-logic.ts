@@ -49,10 +49,57 @@ export function parseQualifiedCellAddress(cellRef: string, defaultSheet: string)
   }
 }
 
-export function normalizeTraversalAddress(address: string, defaultSheet: string): string | null {
-  const parsed = parseQualifiedCellAddress(address, defaultSheet);
-  if (!parsed) return null;
-  return qualifiedAddress(parsed.sheet, cellAddress(parsed.col, parsed.row));
+/** Ranges up to this many cells are traced cell by cell; larger ones become one range node. */
+export const MAX_EXPANDED_RANGE_CELLS = 16;
+
+/** Traversal addresses for one rectangular reference: each cell, or the whole range when large. */
+export function expandReferenceBounds(
+  sheet: string,
+  bounds: { startCol: number; startRow: number; endCol: number; endRow: number },
+): string[] {
+  const width = bounds.endCol - bounds.startCol + 1;
+  const height = bounds.endRow - bounds.startRow + 1;
+  if (width * height > MAX_EXPANDED_RANGE_CELLS) {
+    const start = cellAddress(bounds.startCol, bounds.startRow);
+    const end = cellAddress(bounds.endCol, bounds.endRow);
+    return [qualifiedAddress(sheet, `${start}:${end}`)];
+  }
+  const cells: string[] = [];
+  for (let row = bounds.startRow; row <= bounds.endRow; row += 1) {
+    for (let col = bounds.startCol; col <= bounds.endCol; col += 1) {
+      cells.push(qualifiedAddress(sheet, cellAddress(col, row)));
+    }
+  }
+  return cells;
+}
+
+/**
+ * Traversal addresses for an address from the precedent/dependent APIs
+ * ("Sheet1!E2:E3", "A1", "'My Sheet'!$B$2:$C$4"). Every cell of a small range
+ * is kept; previously only the first cell was.
+ */
+export function expandTraversalAddress(address: string, defaultSheet: string): string[] {
+  try {
+    const parsed = parseRangeRef(address);
+    const sheetName = parsed.sheet ?? defaultSheet;
+    if (!sheetName) return [];
+    const result: string[] = [];
+    for (const area of parsed.address.split(",")) {
+      const [rawStart, rawEnd] = area.replace(/\$/gu, "").trim().split(":");
+      if (!rawStart) continue;
+      const start = parseCell(rawStart);
+      const end = parseCell(rawEnd ?? rawStart);
+      result.push(...expandReferenceBounds(sheetName, {
+        startCol: Math.min(start.col, end.col),
+        startRow: Math.min(start.row, end.row),
+        endCol: Math.max(start.col, end.col),
+        endRow: Math.max(start.row, end.row),
+      }));
+    }
+    return result;
+  } catch {
+    return [];
+  }
 }
 
 export function extractFormulaReferences(formula: string, currentSheet: string): ParsedFormulaReference[] {

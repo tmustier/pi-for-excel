@@ -10,9 +10,32 @@
 
 import { t } from "../language/index.js";
 import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, colToLetter } from "../excel/helpers.js";
+import { blockAddress, excelRun, colToLetter, parseRangeRef, type ExcelRunOptions } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { cellValueGridSchema, formatAsMarkdownTable, formatDisplayedCell, textGridSchema } from "../utils/format.js";
+import { collectRangeState, parseBlock, renderRangeState } from "./sheet-state.js";
+
+const PREVIEW_ROWS = 5;
+const PREVIEW_COLUMNS = 20;
+const MAX_OVERVIEW_SPILL_CHECKS = 100;
+
+/** Cells of a RangeAreas address ("S!A1:A3,S!C5"), first `limit` only. */
+function formulaCellAddresses(address: string, limit: number): string[] {
+  const cells: string[] = [];
+  for (const part of address.split(",")) {
+    const block = parseBlock(part.trim());
+    if (!block) continue;
+    for (let r = 0; r < block.rowCount; r++) {
+      for (let c = 0; c < block.columnCount; c++) {
+        if (cells.length >= limit) return cells;
+        cells.push(blockAddress({ rowIndex: block.rowIndex + r, columnIndex: block.columnIndex + c, rowCount: 1, columnCount: 1 }));
+      }
+    }
+  }
+  return cells;
+}
 
 const schema = Type.Object({
   sheet: Type.Optional(
@@ -45,7 +68,7 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
       try {
         const text = params.sheet
           ? await buildSheetDetail(params.sheet)
-          : await buildOverview();
+          : `${await buildOverview()}${await buildWorkbookStateNotes()}`;
         return {
           content: [{ type: "text", text }],
           details: undefined,
@@ -60,8 +83,60 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   };
 }
 
+/** Columns of the header row read; wider sheets list the first ones only. */
+const MAX_HEADER_COLUMNS = 200;
+
+/**
+ * Labels in the first row of the used range, which is the header row even
+ * when the data starts below row 1 or right of column A. `rowNote` names the
+ * row when it is not row 1, e.g. " (row 5)".
+ */
+async function loadHeaderRow(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet,
+  used: Excel.Range,
+): Promise<{ labels: string[]; rowNote: string }> {
+  if (used.isNullObject) return { labels: [], rowNote: "" };
+  const row = sheet.getRangeByIndexes(used.rowIndex, used.columnIndex, 1, Math.min(used.columnCount, MAX_HEADER_COLUMNS));
+  row.load("values");
+  await context.sync();
+  const values = Value.Parse(cellValueGridSchema, row.values)[0] ?? [];
+  const labels = values.filter((v) => v !== null && v !== undefined && v !== "").map((v) => String(v));
+  return { labels, rowNote: used.rowIndex === 0 ? "" : ` (row ${used.rowIndex + 1})` };
+}
+
+/**
+ * Calculation mode and sheet protection for the workbook overview tool. Kept
+ * out of buildOverview() because that text is the cached blueprint, which only
+ * refreshes on structure changes; these change without one.
+ */
+async function buildWorkbookStateNotes(): Promise<string> {
+  return excelRun(async (context) => {
+    const application = context.workbook.application;
+    application.load("calculationMode");
+    const sheets = context.workbook.worksheets;
+    sheets.load("items/name");
+    await context.sync();
+    const protections = sheets.items.map((sheet) => {
+      sheet.protection.load("protected");
+      return { name: sheet.name, protection: sheet.protection };
+    });
+    await context.sync();
+
+    const lines: string[] = [];
+    if (application.calculationMode !== "Automatic") {
+      lines.push(`Calculation mode: ${application.calculationMode} (formula results may be stale until recalculated)`);
+    }
+    const protectedSheets = protections.filter((item) => item.protection.protected).map((item) => item.name);
+    if (protectedSheets.length > 0) {
+      lines.push(`Protected sheets: ${protectedSheets.join(", ")}`);
+    }
+    return lines.length > 0 ? `\n\n### Current state\n${lines.map((line) => `- ${line}`).join("\n")}` : "";
+  });
+}
+
 /** Build the full workbook overview. Also used by context injection. */
-export async function buildOverview(): Promise<string> {
+export async function buildOverview(runOptions?: ExcelRunOptions): Promise<string> {
   return excelRun(async (context) => {
     const wb = context.workbook;
     wb.load("name");
@@ -81,11 +156,7 @@ export async function buildOverview(): Promise<string> {
 
     for (const sheet of sheets.items) {
       const used = sheet.getUsedRangeOrNullObject();
-      used.load("rowCount,columnCount,address");
-
-      // Get header row (first populated row)
-      const headerRange = sheet.getRange("1:1").getUsedRangeOrNullObject();
-      headerRange.load("values");
+      used.load("rowCount,columnCount,rowIndex,columnIndex,address");
 
       // Get tables on this sheet
       const tables = sheet.tables;
@@ -114,19 +185,17 @@ export async function buildOverview(): Promise<string> {
 
       const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
 
-      const headers = headerRange.isNullObject
-        ? []
-        : (headerRange.values[0] ?? []).filter((v) => v !== null && v !== undefined && v !== "");
+      const header = await loadHeaderRow(context, sheet, used);
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
       );
 
-      if (headers.length > 0) {
-        const display = headers.length > 8
-          ? headers.slice(0, 8).join(", ") + `, … (+${headers.length - 8} more)`
-          : headers.join(", ");
-        lines.push(`   Headers: ${display}`);
+      if (header.labels.length > 0) {
+        const display = header.labels.length > 8
+          ? header.labels.slice(0, 8).join(", ") + `, … (+${header.labels.length - 8} more)`
+          : header.labels.join(", ");
+        lines.push(`   Headers${header.rowNote}: ${display}`);
       }
 
       // List tables
@@ -159,7 +228,7 @@ export async function buildOverview(): Promise<string> {
     }
 
     return lines.join("\n");
-  });
+  }, runOptions);
 }
 
 // ============================================================================
@@ -169,15 +238,24 @@ export async function buildOverview(): Promise<string> {
 /** Build detailed info for a single sheet including objects, tables, named ranges, and a data preview. */
 async function buildSheetDetail(sheetName: string): Promise<string> {
   return excelRun(async (context) => {
-    const sheet = context.workbook.worksheets.getItem(sheetName);
+    const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
     sheet.load("name,visibility");
+    await context.sync();
+    if (sheet.isNullObject) {
+      const sheets = context.workbook.worksheets;
+      sheets.load("items/name");
+      await context.sync();
+      const existing = sheets.items.map((item) => `"${item.name}"`).join(", ");
+      throw new Error(`Sheet "${sheetName}" not found. Sheets in this workbook: ${existing}.`);
+    }
 
+    // Only the shape of the used range: loading its values fails on big sheets.
     const used = sheet.getUsedRangeOrNullObject();
-    used.load("rowCount,columnCount,address,values");
-
-    // Header row
-    const headerRange = sheet.getRange("1:1").getUsedRangeOrNullObject();
-    headerRange.load("values");
+    used.load("rowCount,columnCount,rowIndex,columnIndex,address");
+    const formulaCells = used.getSpecialCellsOrNullObject("Formulas");
+    formulaCells.load("address");
+    const freeze = sheet.freezePanes.getLocationOrNullObject();
+    freeze.load("address");
 
     // Tables
     const tables = sheet.tables;
@@ -216,13 +294,9 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     lines.push(`Dimensions: ${dims}`);
 
     // ── Headers ──
-    const headers = headerRange.isNullObject
-      ? []
-      : (headerRange.values[0] ?? []).filter(
-          (v) => v !== null && v !== undefined && v !== "",
-        );
-    if (headers.length > 0) {
-      lines.push(`Headers: ${headers.join(", ")}`);
+    const header = await loadHeaderRow(context, sheet, used);
+    if (header.labels.length > 0) {
+      lines.push(`Headers${header.rowNote}: ${header.labels.join(", ")}`);
     }
 
     // ── Tables ──
@@ -273,29 +347,53 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       );
     }
 
-    // ── Data preview (first 5 rows as markdown table) ──
-    if (!used.isNullObject && used.rowCount > 0 && used.columnCount > 0) {
-      const previewRowCount = Math.min(5, used.rowCount);
-      const allValues = used.values as unknown[][];
-      const previewRows = allValues.slice(0, previewRowCount);
-      const colCount = used.columnCount;
-
-      // Column letters as header
-      const colLetters = Array.from({ length: colCount }, (_, i) => colToLetter(i));
-      const headerRow = `| | ${colLetters.join(" | ")} |`;
-      const separator = `|---|${colLetters.map(() => "---").join("|")}|`;
-
-      lines.push("");
-      lines.push(`### Preview (first ${previewRowCount} rows)`);
-      lines.push(headerRow);
-      lines.push(separator);
-      for (let r = 0; r < previewRows.length; r++) {
-        const row = previewRows[r] ?? [];
-        const cells = row.map((v) =>
-          v === null || v === undefined || v === "" ? "" : typeof v === "string" ? v : typeof v === "number" || typeof v === "boolean" ? String(v) : JSON.stringify(v),
-        );
-        lines.push(`| ${r + 1} | ${cells.join(" | ")} |`);
+    // ── Sheet state (protection, merges, filters, validation, spills, calc mode) ──
+    if (!used.isNullObject) {
+      const usedBlock = {
+        rowIndex: used.rowIndex,
+        columnIndex: used.columnIndex,
+        rowCount: used.rowCount,
+        columnCount: used.columnCount,
+      };
+      const state = await collectRangeState(
+        context,
+        sheet,
+        usedBlock,
+        formulaCells.isNullObject ? [] : formulaCellAddresses(formulaCells.address, MAX_OVERVIEW_SPILL_CHECKS),
+      );
+      const notes = renderRangeState(state, colToLetter);
+      if (!freeze.isNullObject) notes.push(`Frozen panes: ${parseRangeRef(freeze.address).address}`);
+      if (notes.length > 0) {
+        lines.push("");
+        lines.push("### Sheet state");
+        for (const note of notes) lines.push(`- ${note}`);
       }
+
+      // ── Data preview (first rows only, as displayed) ──
+      const previewRowCount = Math.min(PREVIEW_ROWS, used.rowCount);
+      const previewColumnCount = Math.min(PREVIEW_COLUMNS, used.columnCount);
+      const preview = sheet.getRangeByIndexes(used.rowIndex, used.columnIndex, previewRowCount, previewColumnCount);
+      preview.load("values,text,numberFormat");
+      await context.sync();
+
+      const values = Value.Parse(cellValueGridSchema, preview.values);
+      const text = Value.Parse(textGridSchema, preview.text);
+      const numberFormats = Value.Parse(textGridSchema, preview.numberFormat);
+      const header: Array<string | number> = [""];
+      for (let c = 0; c < previewColumnCount; c++) header.push(colToLetter(used.columnIndex + c));
+      const rows: Array<Array<string | number>> = [header];
+      for (const [r, row] of values.entries()) {
+        rows.push([
+          used.rowIndex + r + 1,
+          ...row.map((value, c) => formatDisplayedCell(value, text[r]?.[c], numberFormats[r]?.[c]).text),
+        ]);
+      }
+      const columnsNote = previewColumnCount < used.columnCount
+        ? `, first ${previewColumnCount} of ${used.columnCount} columns`
+        : "";
+      lines.push("");
+      lines.push(`### Preview (first ${previewRowCount} rows${columnsNote}, as displayed)`);
+      lines.push(formatAsMarkdownTable(rows));
     }
 
     return lines.join("\n");

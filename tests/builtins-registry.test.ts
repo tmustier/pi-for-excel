@@ -11,6 +11,7 @@ import { getDefaultPermissionsForTrust } from "../src/extensions/permissions.ts"
 import { registerBuiltins, type BuiltinsContext } from "../src/commands/builtins/index.ts";
 import { executeSlashCommand, type SlashCommandExecutionResult } from "../src/commands/slash-command-execution.ts";
 import { TOOLS_COMMAND_NAME } from "../src/integrations/naming.ts";
+import { isBusyAllowedCommand } from "../src/commands/busy-command-policy.ts";
 import { commandRegistry, type SlashCommand } from "../src/commands/types.ts";
 import { installFakeDom } from "./fixtures/fake-dom.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
@@ -82,8 +83,11 @@ async function executeRegisteredCommand(name: string, args = ""): Promise<void> 
   await command.execute(args);
 }
 
+/** Text of the newest toast (toasts stack, newest last). */
 function getToastText(document: Document): string {
-  return document.getElementById("pi-toast")?.children[0]?.children[0]?.textContent ?? "";
+  const region = document.getElementById("pi-toast");
+  const newest = region?.children[region.children.length - 1];
+  return newest?.children[0]?.textContent ?? "";
 }
 
 void test("command-layer contract: workspace commands complete, preserve failures, and run while busy", async () => {
@@ -312,31 +316,30 @@ void test("command-layer contract: recovery commands expose completion, errors, 
     await executeRegisteredCommand("history");
     assert.equal(recoveryOpenCount, 1);
 
-    const blockedRevert = executeSlashCommand({
+    // Backup commands run while Pi is busy; restores and captures wait for
+    // the workbook lock instead of being refused.
+    const busyRevert = executeSlashCommand({
       name: "revert",
       args: "",
       busy: true,
       onError: () => {},
     });
-    assert.equal(blockedRevert, "busy-blocked");
-    assert.equal(revertCount, 0);
-
-    await executeRegisteredCommand("revert");
+    assert.equal(busyRevert, "executed");
+    await Promise.resolve();
+    await Promise.resolve();
     assert.equal(revertCount, 1);
 
     failRevert = true;
     await assert.rejects(executeRegisteredCommand("revert"), /restore failed/);
 
-    const blockedBackup = executeSlashCommand({
+    const busyBackup = executeSlashCommand({
       name: "backup",
       args: "",
       busy: true,
       onError: () => {},
     });
-    assert.equal(blockedBackup, "busy-blocked");
-    assert.equal(createBackupCount, 0);
-
-    await executeRegisteredCommand("backup", "create");
+    assert.equal(busyBackup, "executed");
+    await new Promise((resolve) => setTimeout(resolve, 0));
     assert.equal(createBackupCount, 1);
     assert.match(getToastText(fakeDom.document), /Backup created/i);
 
@@ -548,4 +551,10 @@ void test("extension registry migrates legacy v1 entries to v2 permissions", asy
   const restartedEntries = await loadStoredExtensions(settings);
   assert.equal(restartedEntries[0]?.id, "ext.legacy.inline");
   assert.equal(restartedEntries[0]?.trust, "inline-code");
+});
+
+void test("read-only transcript commands run while Pi is busy", () => {
+  for (const name of ["copy", "export", "history", "revert", "backup"]) {
+    assert.equal(isBusyAllowedCommand({ name, source: "builtin" }), true, name);
+  }
 });

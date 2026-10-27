@@ -37,6 +37,13 @@ export interface ModelSelectorDialogOptions {
   models: Models;
   currentModel: Model<Api> | null;
   onSelect: (model: Model<Api>) => void;
+  /**
+   * Returns why the list can be browsed but not picked from (the tab is busy),
+   * or undefined when picking is allowed. Picking only to be refused afterwards
+   * would lose the choice. Read again on every status update, so an open
+   * picker unlocks when the turn ends.
+   */
+  getDisabledReason?: () => string | undefined;
 }
 
 function formatTokenCount(count: number): string {
@@ -60,7 +67,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
 
   const dialog = createOverlayDialog({
     overlayId: MODEL_SELECTOR_OVERLAY_ID,
-    cardClassName: "pi-model-selector-card",
+    cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-model-selector-card",
     restoreFocusOnClose: true,
   });
 
@@ -70,8 +77,11 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   // Selection follows the mouse only after real pointer movement, so
   // keyboard-triggered scrolling doesn't hand selection to whatever lands
   // under the cursor.
-  let navigationMode: "keyboard" | "mouse" = "mouse";
-  let lastMouse = { x: 0, y: 0 };
+  // It starts in keyboard mode: a pointer resting where the list appears must
+  // not take the selection from the current model, or Enter would pick its row.
+  let navigationMode: "keyboard" | "mouse" = "keyboard";
+  let disabledReason = options.getDisabledReason?.();
+  let lastMouse: { x: number; y: number } | null = null;
 
   const { header } = createOverlayHeader({
     title: t("modelSelector.title"),
@@ -136,6 +146,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   };
 
   const select = (item: ModelSelectorItem): void => {
+    if (disabledReason) return;
     dialog.close();
     options.onSelect(item.model);
   };
@@ -165,6 +176,7 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
       row.classList.toggle("pi-model-selector-item--selected", index === selectedIndex);
       row.setAttribute("role", "option");
       row.setAttribute("aria-selected", index === selectedIndex ? "true" : "false");
+      if (disabledReason) row.setAttribute("aria-disabled", "true");
 
       const topRow = document.createElement("span");
       topRow.className = "pi-model-selector-item-top";
@@ -215,8 +227,10 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   });
 
   dialog.overlay.addEventListener("mousemove", (event) => {
-    if (event.clientX === lastMouse.x && event.clientY === lastMouse.y) return;
+    const previous = lastMouse;
     lastMouse = { x: event.clientX, y: event.clientY };
+    // The first event only records where the pointer rests (browsers send one when content appears under it).
+    if (!previous || (event.clientX === previous.x && event.clientY === previous.y)) return;
     navigationMode = "mouse";
   });
 
@@ -244,7 +258,27 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
     }
   });
 
-  dialog.card.append(header, searchInput, list);
+  const notice = document.createElement("p");
+  notice.className = "pi-overlay-hint pi-model-selector-notice";
+  notice.setAttribute("role", "status");
+  const renderNotice = (): void => {
+    notice.textContent = disabledReason ?? "";
+    notice.hidden = !disabledReason;
+  };
+  renderNotice();
+  dialog.card.append(header, searchInput, notice, list);
+  const handleStatusUpdate = (): void => {
+    if (!dialog.overlay.isConnected) return;
+    const next = options.getDisabledReason?.();
+    if (next === disabledReason) return;
+    disabledReason = next;
+    renderNotice();
+    renderList();
+  };
+  document.addEventListener("pi:status-update", handleStatusUpdate);
+  dialog.addCleanup(() => {
+    document.removeEventListener("pi:status-update", handleStatusUpdate);
+  });
   const handleModelsChanged = (): void => {
     if (!dialog.overlay.isConnected) return;
     allItems = collectModelItems(options.models);

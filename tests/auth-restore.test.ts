@@ -47,7 +47,7 @@ class TestSettingsStore extends SettingsStore {
 const validBrowserGrant = {
   access: "browser-access-fixture",
   refresh: "browser-refresh-fixture",
-  expires: Date.now() + 60_000,
+  expires: Date.now() + 60 * 60_000,
 };
 
 async function restoreBrowserAfterDevPayload(

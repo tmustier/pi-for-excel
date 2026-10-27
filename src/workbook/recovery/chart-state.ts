@@ -1,6 +1,7 @@
 /** Chart-state capture/apply for workbook recovery snapshots. */
 
 import { excelRun } from "../../excel/helpers.js";
+import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryChartState } from "./clone.js";
 import type {
   RecoveryChartApplyResult,
@@ -283,7 +284,7 @@ export async function applyChartState(
   address: string,
   targetState: RecoveryChartState,
 ): Promise<RecoveryChartApplyResult> {
-  return excelRun<RecoveryChartApplyResult>(async (context) => {
+  return runMutation<RecoveryChartApplyResult>(async (context) => {
     const parsedAddress = parseQualifiedChartName(address);
     const currentSheetName = parsedAddress.sheetName ?? targetState.sheetName;
     const currentChartName = parsedAddress.chartName || targetState.name;

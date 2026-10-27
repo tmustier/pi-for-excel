@@ -14,12 +14,13 @@ import {
   type SkillActivationMutableSettingsStore,
 } from "../../skills/activation-store.js";
 import {
-  loadExternalAgentSkillsFromWorkspace,
+  loadDiscoverableAgentSkillsFromWorkspace,
   removeExternalAgentSkillFromWorkspace,
   upsertExternalAgentSkillInWorkspace,
 } from "../../skills/external-store.js";
 import { dispatchSkillsChanged } from "../../skills/events.js";
 import type { AgentSkillDefinition } from "../../skills/types.js";
+import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
 import {
   createSectionHeader,
@@ -56,7 +57,9 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
   let activationLoadError: string | null = null;
 
   try {
-    external = await loadExternalAgentSkillsFromWorkspace(getFilesWorkspace());
+    // Same set Pi loads at runtime: managed skills/external/<name>/SKILL.md
+    // plus workspace-discovered skills/<name>/SKILL.md.
+    external = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
   } catch (err) {
     externalLoadError = err instanceof Error ? err.message : "Unknown error";
   }
@@ -118,7 +121,7 @@ export async function renderSkillsTab(args: {
       if (result.changed) {
         dispatchSkillsChanged({ reason: "activation" });
       }
-    }, "toggle", `${enabled ? "Enabled" : "Disabled"} skill: ${skillName}`);
+    }, "toggle", t(enabled ? "ext-hub-skills.toast.enabled" : "ext-hub-skills.toast.disabled", { name: skillName }));
   };
 
   container.replaceChildren();
@@ -177,17 +180,31 @@ export async function renderSkillsTab(args: {
         },
         onRemove: () => {
           if (isBusy()) return;
-          void runMutation(async () => {
-            const removed = await removeExternalAgentSkillFromWorkspace({
-              workspace: getFilesWorkspace(),
-              name: skill.name,
+          void (async () => {
+            const confirmed = await requestConfirmationDialog({
+              title: t("ext-hub-skills.confirmRemoveTitle", { name: skill.name }),
+              message: t("ext-hub-skills.confirmRemoveMessage"),
+              confirmLabel: t("ext-hub-skills.remove"),
+              cancelLabel: t("confirm.cancel"),
+              confirmButtonTone: "danger",
+              restoreFocusOnClose: false,
             });
-            if (removed) {
-              dispatchSkillsChanged({ reason: "catalog" });
-            } else {
-              throw new Error(`External skill not found: ${skill.name}`);
-            }
-          }, "config", `Removed external skill: ${skill.name}`);
+            if (!confirmed || isBusy()) return;
+
+            await runMutation(async () => {
+              const workspace = getFilesWorkspace();
+              // Workspace-discovered skills are plain files the user added;
+              // remove exactly the SKILL.md this card shows.
+              const removed = skill.location.startsWith("skills/external/")
+                ? await removeExternalAgentSkillFromWorkspace({ workspace, name: skill.name })
+                : await workspace.deleteFile(skill.location).then(() => true);
+              if (removed) {
+                dispatchSkillsChanged({ reason: "catalog" });
+              } else {
+                throw new Error(`External skill not found: ${skill.name}`);
+              }
+            }, "config", t("ext-hub-skills.toast.removed", { name: skill.name }));
+          })();
         },
       }));
     }

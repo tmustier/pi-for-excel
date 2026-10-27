@@ -24,7 +24,8 @@ export interface SessionCommandActions {
   createManualFullBackup: () => Promise<ManualFullBackupSummary>;
   listManualFullBackups: (limit?: number) => Promise<ManualFullBackupSummary[]>;
   restoreManualFullBackup: (backupId?: string) => Promise<ManualFullBackupSummary | null>;
-  clearManualFullBackups: () => Promise<number>;
+  /** Asks `confirm` with the count only after the workbook identity is known and there is something to delete. */
+  clearManualFullBackups: (confirm: (count: number) => Promise<boolean>) => Promise<number>;
 }
 
 export function createSessionIdentityCommands(actions: SessionCommandActions): SlashCommand[] {
@@ -75,10 +76,6 @@ function formatBytes(bytes: number): string {
 
   const unit = units[unitIndex] ?? "GB";
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
-}
-
-function shortBackupId(id: string): string {
-  return id.length > 24 ? `${id.slice(0, 24)}…` : id;
 }
 
 function backupUsage(): string {
@@ -138,7 +135,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
           if (action === "create") {
             const backup = await actions.createManualFullBackup();
             showToast(
-              t("session.toast.backup_created", { id: shortBackupId(backup.id), size: formatBytes(backup.sizeBytes) }),
+              t("session.toast.backup_created", { id: backup.id, size: formatBytes(backup.sizeBytes) }),
             );
             return;
           }
@@ -156,7 +153,7 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
             }
 
             const preview = backups
-              .map((backup) => shortBackupId(backup.id))
+              .map((backup) => backup.id)
               .slice(0, 3)
               .join(", ");
 
@@ -173,25 +170,30 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
               return;
             }
 
-            showToast(t("session.toast.backup_restored", { id: shortBackupId(restored.id) }));
+            showToast(t("session.toast.backup_restored", { id: restored.id }));
             return;
           }
 
           if (action === "clear") {
-            const proceed = await requestConfirmationDialog({
-              title: t("session.confirm.clear_title"),
-              message: t("session.confirm.clear_message"),
-              confirmLabel: t("session.confirm.clear_label"),
-              cancelLabel: t("session.confirm.cancel"),
-              confirmButtonTone: "danger",
-              restoreFocusOnClose: true,
+            let asked = false;
+            const removed = await actions.clearManualFullBackups((count) => {
+              asked = true;
+              return requestConfirmationDialog({
+                title: t("session.confirm.clear_title"),
+                message: t("session.confirm.clear_message", { count: String(count) }),
+                confirmLabel: t("session.confirm.clear_label"),
+                cancelLabel: t("session.confirm.cancel"),
+                confirmButtonTone: "danger",
+                restoreFocusOnClose: true,
+              });
             });
-            if (!proceed) {
+            if (!asked) {
+              showToast(t("session.toast.no_backups"));
               return;
             }
-
-            const removed = await actions.clearManualFullBackups();
-            showToast(t("session.toast.backups_deleted", { count: String(removed) }));
+            if (removed > 0) {
+              showToast(t("session.toast.backups_deleted", { count: String(removed) }));
+            }
             return;
           }
 

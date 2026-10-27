@@ -11,20 +11,21 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
   DEFAULT_PROXY_URL,
-  PROXY_HELPER_DOCS_URL,
-  isLoopbackProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
+import { createOAuthRefresher } from "../auth/oauth-refresh.js";
+import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
-import { ChangeTracker } from "../context/change-tracker.js";
+import { onCellEditWait } from "../excel/helpers.js";
+import { ChangeTracker, type PiWriteWindow } from "../context/change-tracker.js";
 import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
@@ -33,9 +34,14 @@ import { createConvertToLlm } from "../messages/convert-to-llm.js";
 import { installImageInputNormalization } from "../messages/image-input-limits.js";
 import { effectiveToolOutputLimits } from "../context/window-budgets.js";
 import { findTrailingContextOverflowError } from "../compaction/overflow-recovery.js";
+import { createTabState } from "./tab-state.js";
+import { getErrorMessage } from "../utils/errors.js";
+import { describeTurnFailure } from "./turn-error.js";
+import { createDraftStore } from "./draft-store.js";
+import { submitComposerText } from "./keyboard-shortcuts/editor-actions.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
-import { getFilesWorkspace } from "../files/workspace.js";
+import { describeImportRenames, getFilesWorkspace } from "../files/workspace.js";
 import { ConnectionManager } from "../connections/manager.js";
 import { createAllTools } from "../tools/index.js";
 import { collectRequiredConnectionIds } from "../tools/connection-requirements.js";
@@ -54,7 +60,6 @@ import {
   buildPythonBridgeApprovalMessage,
 } from "../tools/experimental-tool-gates.js";
 import {
-  buildMutationApprovalMessage,
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
@@ -117,10 +122,12 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
-import { showActionToast, showToast } from "../ui/toast.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { dismissToast, showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
-import { createProxyBanner } from "../ui/proxy-banner.js";
+import { createProxyBannerController } from "../ui/proxy-banner.js";
+import { announce } from "../ui/announcer.js";
+import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
 import {
@@ -130,8 +137,9 @@ import {
 import { promptForProviderConnection } from "../ui/api-key-dialog.js";
 import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
-import { createWorkbookCoordinator } from "../workbook/coordinator.js";
+import { createWorkbookCoordinator, getSessionLockState } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
+import { createRecoveryScopeResolver } from "../workbook/recovery-scope.js";
 import {
   getManualFullWorkbookBackupStore,
   ManualFullWorkbookBackupStore,
@@ -140,24 +148,38 @@ import {
 import {
   getWorkbookRecoveryLog,
   WorkbookRecoveryLog,
+  type WorkbookRecoveryRestorePreview,
   type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
+import { formatRelativeDate } from "../commands/builtins/overlay-relative-date.js";
 import {
   getWorkbookChangeAuditLog,
   WorkbookChangeAuditLog,
 } from "../audit/workbook-change-audit.js";
 import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
+import { MAX_RECOVERY_ENTRIES } from "../workbook/recovery/constants.js";
+import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
+import { requestApproval } from "../ui/approval-dialog.js";
+import { humanizeToolInput } from "../ui/humanize-params.js";
+import { describePendingToolCall } from "../ui/tool-renderers.js";
 import {
-  WorkbookSaveBoundaryMonitor,
-  startWorkbookSaveBoundaryPolling,
-} from "../workbook/save-boundary-monitor.js";
+  BackupIdentityMonitor,
+  startBackupIdentityPolling,
+} from "../workbook/backup-identity-monitor.js";
 
-import { createContextInjector } from "./context-injection.js";
+import { createAutoContext } from "./context-injection.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
-import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
+import {
+  RecentlyClosedStack,
+  loadRecentlyClosed,
+  saveRecentlyClosed,
+  type RecentlyClosedItem,
+} from "./recently-closed.js";
+import { createWorkbookIdentityFollower } from "./workbook-identity-follower.js";
+import { moveSessionToWorkbook } from "../workbook/session-association.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
@@ -174,27 +196,31 @@ import {
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
-import { getProxyState, startProxyPolling } from "./proxy-status.js";
+import { getProxyState, isProxyBlockedByBrowser, startProxyPolling } from "./proxy-status.js";
 import {
   closeStatusPopover,
   toggleContextPopover,
+  toggleModePopover,
   toggleThinkingPopover,
 } from "./status-popovers.js";
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
   ensureDefaultProxyUrl,
+  needsRemoteProxyWarning,
   readTaskpaneLanguage,
   readTaskpaneProxySettings,
 } from "./settings.js";
 import {
   SessionRuntimeManager,
+  isRuntimeBusy,
   type CreateRuntimeOptions,
+  type OpenSessionTarget,
+  type RuntimeRunOutcome,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
   awaitWithTimeout,
   createRuntimeToolFingerprint,
-  isLikelyCorsErrorMessage,
   shouldApplyRuntimeToolUpdate,
   isRuntimeAgentTool,
   normalizeRuntimeTools,
@@ -204,11 +230,19 @@ import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
-function showErrorBanner(errorRoot: HTMLElement, message: string): void {
-  render(renderError(message), errorRoot);
+const RUN_ERROR_BANNER_ID = "run-error";
+
+/** A tab's run error, as a closable banner in the notice area under the tabs. */
+function showErrorBanner(errorRoot: HTMLElement, message: string, onDismiss: () => void): void {
+  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss });
+  if (!shown) {
+    // Before the sidebar exists there is no notice area; use the page-level slot.
+    render(renderError(message), errorRoot);
+  }
 }
 
 function clearErrorBanner(errorRoot: HTMLElement): void {
+  hideBanner(RUN_ERROR_BANNER_ID);
   render(html``, errorRoot);
 }
 
@@ -219,11 +253,32 @@ export async function initTaskpane(opts: {
 }): Promise<void> {
   const { appEl, errorRoot, autoResizeImages } = opts;
 
-  const changeTracker = new ChangeTracker();
+  // One workbook-level edit log; each runtime reads it from its own cursor.
+  // User structure changes (sheets, rows, columns) invalidate the blueprint.
+  const changeTracker = new ChangeTracker({
+    onStructureChange: () => invalidateBlueprint(null),
+    getPiWriteAddresses: async (toolCallIds) => {
+      const wanted = new Set(toolCallIds);
+      const written = new Map<string, string[]>();
+      for (const entry of await getWorkbookChangeAuditLog().list(200)) {
+        if (!wanted.has(entry.toolCallId)) continue;
+        const address = entry.outputAddress ?? entry.inputAddress;
+        if (address) written.set(entry.toolCallId, [...(written.get(entry.toolCallId) ?? []), address]);
+      }
+      return written;
+    },
+  });
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
   const { providerKeys, sessions, settings, customProviders, modelCatalogs } = initAppStorage();
+
+  // Ask the browser not to evict sessions, backups and settings under storage
+  // pressure. Best effort: hosts may refuse silently or not support it.
+  void getAppStorage().requestPersistence().then(
+    (persisted) => console.log(`[pi] Persistent storage: ${persisted ? "granted" : "not granted"}`),
+    (error: Error) => console.warn("[pi] Persistent storage request failed:", error),
+  );
 
   // Initialize language from storage
   initLanguage(await readTaskpaneLanguage(settings));
@@ -249,13 +304,8 @@ export async function initTaskpane(opts: {
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
-  const initialProxySettings = await readTaskpaneProxySettings(settings);
-  if (
-    initialProxySettings.enabled &&
-    initialProxySettings.url !== null &&
-    initialProxySettings.url.length > 0 &&
-    !isLoopbackProxyUrl(initialProxySettings.url)
-  ) {
+  // The proxy pages warn again when a remote URL is saved or enabled.
+  if (needsRemoteProxyWarning(await readTaskpaneProxySettings(settings))) {
     showToast(t("init.securityWarning"));
   }
 
@@ -294,6 +344,8 @@ export async function initTaskpane(opts: {
       console.warn("[models] Some provider catalogues could not be refreshed:", snapshot.providerErrors);
     }
     document.dispatchEvent(new Event("pi:models-changed"));
+    // The model control tags the provider when two connected providers share models.
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
   document.addEventListener("pi:providers-changed", () => {
@@ -306,6 +358,7 @@ export async function initTaskpane(opts: {
   // 2b. Cached catalogues are published before first paint. Remote discovery
   // starts afterward; a late credential restore owns one follow-up refresh.
   const credentialRestorePromise = restoreCredentials(providerKeys, settings);
+  const oauthRefresher = createOAuthRefresher({ settings, providerKeys, getOAuthProvider });
   try {
     await awaitWithTimeout(
       "Provider lookup",
@@ -338,6 +391,14 @@ export async function initTaskpane(opts: {
 
   // 5. Create and mount PiSidebar
   const sidebar = new PiSidebar();
+  // Excel rejects every batch while the user is typing in a cell; excelRun
+  // retries and this tells the user why Pi is waiting.
+  onCellEditWait((waiting) => {
+    sidebar.setHostWaitIndicator(
+      waiting ? t("working.cellEdit") : null,
+      waiting ? t("working.cellEditHint") : null,
+    );
+  });
   sidebar.emptyHints = [
     {
       label: t("hint.explain.label"),
@@ -370,17 +431,12 @@ export async function initTaskpane(opts: {
 
   const executionModeController = await createExecutionModeController({
     settings,
-    showToast,
   });
 
   const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
     await executionModeController.setMode(mode);
-  };
-
-  const toggleExecutionModeFromUi = async (): Promise<void> => {
-    await executionModeController.toggleFromUi();
   };
 
   const loadModelSwitchBehavior = async (): Promise<ModelSwitchBehavior> => {
@@ -497,30 +553,86 @@ export async function initTaskpane(opts: {
     }
   };
 
+  // Outcome of each runtime's latest prompt run, recorded at agent_end (where a
+  // user stop is known) and read once when the tab goes idle. Runs that only
+  // executed commands have no entry and are not announced.
+  const runOutcomes = new Map<string, RuntimeRunOutcome | null>();
   const runtimeManager = new SessionRuntimeManager({
     createRuntime: buildSessionRuntime,
     warnCapabilityRefresh: (error) => {
       console.warn("[pi] Failed to refresh runtime capabilities:", error);
     },
+    getRunOutcome: (runtime) => {
+      const outcome = runOutcomes.get(runtime.runtimeId) ?? null;
+      runOutcomes.delete(runtime.runtimeId);
+      return outcome;
+    },
+    // CC-06. A failure in the active tab is already announced by its error
+    // banner (role="alert"); everything else has no visible notification.
+    onRunSettled: ({ outcome, wasActive, title }) => {
+      if (wasActive) {
+        if (outcome === "finished") announce(t("announce.finished"));
+        return;
+      }
+      announce(outcome === "failed"
+        ? t("announce.failedInTab", { title })
+        : t("announce.finishedInTab", { title }));
+    },
   });
-  const abortedAgents = new WeakSet<Agent>();
-  const recentlyClosed = new RecentlyClosedStack(10);
+  const draftStore = createDraftStore(settings);
+
+  // Per-workbook tab state (layout, recently closed) is stored under the
+  // workbook's identity. A workbook without one (never saved, or edited through
+  // an anonymous web link) uses the token Pi keeps inside the document, as
+  // recovery checkpoints do, so a reload keeps its tabs and another
+  // unidentified workbook does not see them. Without a token the state stays in
+  // memory. The standalone browser taskpane never has an identity and keeps
+  // using the shared slot.
+  const usesSharedUnidentifiedState = spreadsheetHost.kind === "browser";
+  const workbookScope = createRecoveryScopeResolver({ getWorkbookContext: resolveWorkbookContext });
+  const resolvePersistentWorkbookKey = async (
+    mode: "read" | "write",
+  ): Promise<{ workbookId: string | null } | null> => {
+    if (usesSharedUnidentifiedState) return { workbookId: await resolveWorkbookId() };
+    const scope = mode === "write" ? await workbookScope.resolveForAppend() : await workbookScope.resolveForRead();
+    return scope ? { workbookId: scope.workbookId } : null;
+  };
+
+  // Recently closed tabs are kept per workbook. If the stored list cannot be
+  // read, it is not overwritten: closes stay in memory for this taskpane only.
+  let recentlyClosedWritable = false;
+  let recentlyClosedWrites: Promise<void> = Promise.resolve();
+  const recentlyClosed = new RecentlyClosedStack(10, (items) => {
+    if (!recentlyClosedWritable) return;
+    recentlyClosedWrites = recentlyClosedWrites.then(async () => {
+      try {
+        const key = await resolvePersistentWorkbookKey("write");
+        if (key) await saveRecentlyClosed(settings, key.workbookId, items);
+      } catch (error) {
+        console.warn("[pi] Failed to persist recently closed tabs:", error);
+      }
+    });
+  });
+  try {
+    const key = await resolvePersistentWorkbookKey("read");
+    if (key) recentlyClosed.load(await loadRecentlyClosed(settings, key.workbookId));
+    recentlyClosedWritable = true;
+  } catch (error) {
+    console.warn("[pi] Failed to read recently closed tabs:", error);
+  }
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
   const getActiveAgent = () => getActiveRuntime()?.agent ?? null;
-  const getActiveQueueDisplay = () => getActiveRuntime()?.queueDisplay ?? null;
-  const getActiveActionQueue = () => getActiveRuntime()?.actionQueue ?? null;
   const getActiveLockState = () => getActiveRuntime()?.lockState ?? "idle";
 
   listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
     runtimeId: runtime.runtimeId,
     model: runtime.agent.state.model,
-    isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+    isBusy: isRuntimeBusy(runtime),
     applyModel: (model, thinkingLevel) => {
       runtime.agent.state.model = model;
-      if (thinkingLevel !== undefined) {
-        runtime.agent.state.thinkingLevel = thinkingLevel;
-      }
+      // A refreshed or swapped model may support fewer thinking levels than the current one.
+      runtime.agent.state.thinkingLevel = clampThinkingLevel(model, thinkingLevel ?? runtime.agent.state.thinkingLevel);
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       if (runtime.runtimeId === getActiveRuntime()?.runtimeId) {
         requestAnimationFrame(() => sidebar.requestUpdate());
@@ -540,36 +652,84 @@ export async function initTaskpane(opts: {
     sizeBytes: backup.sizeBytes,
   });
 
-  const saveBoundaryMonitor = new WorkbookSaveBoundaryMonitor({
-    clearBackupsForWorkbook: (workbookId) => workbookRecoveryLog.clearForWorkbook(workbookId),
-  });
-  const stopSaveBoundaryPolling = startWorkbookSaveBoundaryPolling({
-    monitor: saveBoundaryMonitor,
+  const stopBackupIdentityPolling = startBackupIdentityPolling({
+    monitor: new BackupIdentityMonitor({
+      rescopeBackups: (args) => workbookRecoveryLog.rescopeWorkbook(args),
+    }),
   });
 
   window.addEventListener("beforeunload", () => {
-    stopSaveBoundaryPolling();
+    stopBackupIdentityPolling();
   }, { once: true });
 
-  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
+  /**
+   * Runs a user-started workbook operation (restore, full backup) under the
+   * workbook lock, so it waits for Pi's current write instead of
+   * interleaving with it. This is why backup commands are allowed while busy.
+   */
+  const runUserWorkbookOperation = async <T,>(toolName: string, operation: () => Promise<T>): Promise<T> => {
     const activeRuntime = getActiveRuntime();
     const sessionId = activeRuntime?.persistence.getSessionId() ?? crypto.randomUUID();
-
     const workbookId = await resolveWorkbookId();
-    const coordinatorWorkbookId = workbookId ?? "workbook:unknown";
 
-    const restored = await workbookCoordinator.runWrite(
+    const { result } = await workbookCoordinator.runWrite(
       {
-        workbookId: coordinatorWorkbookId,
+        workbookId: workbookId ?? "workbook:unknown",
         sessionId,
         opId: crypto.randomUUID(),
-        toolName: "workbook_history",
+        toolName,
       },
-      () => workbookRecoveryLog.restore(snapshotId),
+      operation,
     );
+    return result;
+  };
 
-    const address = restored.result.address;
-    showToast(t("init.revertedAddress", { address }));
+  /** Restores a backup and tells every chat tab about it ("restored from a backup", #792). */
+  const restoreNotingTabs = async (snapshotId: string) => {
+    const window: PiWriteWindow = {
+      toolCallId: `restore:${snapshotId}`,
+      startedAt: Date.now(),
+      settledAt: Number.POSITIVE_INFINITY,
+    };
+    changeTracker.notePiWrite(window, { kind: "restore" });
+    try {
+      const result = await workbookRecoveryLog.restore(snapshotId);
+      window.address = result.address;
+      return result;
+    } finally {
+      window.settledAt = Date.now();
+    }
+  };
+
+  const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
+
+  /** Every restore the user starts (/revert, the Backups page) runs here. */
+  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
+    const edits = preview.laterEdits;
+    if (edits && !await requestConfirmationDialog({
+      title: t("init.confirm.restoreOverEditsTitle"),
+      message: t("init.confirm.restoreOverEditsMessage", {
+        age: formatBackupAge(preview.at),
+        address: preview.address,
+        count: edits.count,
+        sample: edits.sample.map((cell) => `${cell.address} = ${cell.content}`).join("; ")
+          + (edits.count > edits.sample.length ? "; …" : ""),
+      }),
+      confirmLabel: t("init.confirm.restoreAnyway"),
+      cancelLabel: t("init.confirm.keepEdits"),
+      confirmButtonTone: "danger",
+      restoreFocusOnClose: true,
+    })) return;
+
+    const restored = await runUserWorkbookOperation(
+      "workbook_history", () => restoreNotingTabs(preview.id),
+    );
+    const address = restored.address;
+    if (restored.inverseSnapshotError) {
+      showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
+      return;
+    }
+    showToast(t("init.revertedAddress", { address, age: formatBackupAge(preview.at) }));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -589,22 +749,29 @@ export async function initTaskpane(opts: {
   };
 
   const snapshotRuntimeTabLayout = (): WorkbookTabLayout => {
-    const runtimes = runtimeManager.listRuntimes();
-    const activeRuntime = runtimeManager.getActiveRuntime();
+    const tabs = runtimeManager.snapshotTabs();
+    const tabNumbers: Record<string, number> = {};
+    for (const tab of tabs) {
+      tabNumbers[tab.sessionId] = tab.tabNumber;
+    }
 
     return {
-      sessionIds: runtimes.map((runtime) => runtime.persistence.getSessionId()),
-      activeSessionId: activeRuntime?.persistence.getSessionId() ?? null,
+      sessionIds: tabs.map((tab) => tab.sessionId),
+      activeSessionId: tabs.find((tab) => tab.isActive)?.sessionId ?? null,
+      tabNumbers,
+      nextTabNumber: runtimeManager.getNextTabNumber(),
     };
   };
 
   const tabLayoutPersistence = createTabLayoutPersistence({
     resolveWorkbookId,
-    saveLayout: async (workbookId, layout) => {
-      await saveWorkbookTabLayout(settings, workbookId, layout);
+    saveLayout: async (_workbookId, layout) => {
+      const key = await resolvePersistentWorkbookKey("write");
+      if (key) await saveWorkbookTabLayout(settings, key.workbookId, layout);
     },
     warn: (message, error) => {
       console.warn(message, error);
+      showToast(t("sessions.toast.layoutSaveFailed", { error: getErrorMessage(error) }));
     },
   });
 
@@ -643,8 +810,29 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
-  bindRuntimeSidebar({ runtimeManager, sidebar });
+  // The notice area shows the active tab's run error (the binding passes it
+  // on every tab change). Closing the banner clears that tab's error.
+  let shownRunError: string | null = null;
+  const renderRunError = (message: string | null): void => {
+    if (message === shownRunError) return;
+    shownRunError = message;
+    if (message === null) {
+      clearErrorBanner(errorRoot);
+      return;
+    }
+    showErrorBanner(errorRoot, message, () => {
+      shownRunError = null;
+      runtimeManager.getActiveRuntime()?.tab.setError(null);
+    });
+  };
 
+  bindRuntimeSidebar({
+    runtimeManager,
+    sidebar,
+    renderError: renderRunError,
+  });
+
+  let lastReconciledModelSignature = "";
   runtimeManager.subscribe((snapshot) => {
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
       previousActiveRuntimeId = snapshot.activeRuntimeId;
@@ -657,6 +845,16 @@ export async function initTaskpane(opts: {
 
     maybePersistTabLayout();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
+
+    // A tab that registers, or restores a saved model, after the provider list
+    // was published missed that pass's reconcile (P-66, P-67): check it now.
+    const modelSignature = runtimeManager.listRuntimes()
+      .map((runtime) => `${runtime.runtimeId}:${runtime.agent.state.model.provider}/${runtime.agent.state.model.id}`)
+      .join("|");
+    if (modelSignature !== lastReconciledModelSignature) {
+      lastReconciledModelSignature = modelSignature;
+      modelRefreshOwner.reconcileRuntimes();
+    }
   });
 
   const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
@@ -721,6 +919,11 @@ export async function initTaskpane(opts: {
     void refreshWorkbookState();
   });
 
+  // Convention overrides live in the system prompt; rebuild it when they change.
+  document.addEventListener("pi:conventions-updated", () => {
+    void refreshCapabilitiesForAllRuntimes();
+  });
+
   document.addEventListener(PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
   });
@@ -737,8 +940,31 @@ export async function initTaskpane(opts: {
     void refreshCapabilitiesForAllRuntimes();
   });
 
+  // Other taskpanes (browser tabs, Excel windows) share settings storage but
+  // not DOM events. Tell them to rebuild their prompt when guidance changes here.
+  if (typeof BroadcastChannel !== "undefined") {
+    const settingsChannel = new BroadcastChannel("pi-for-excel:settings-changed");
+    for (const eventName of [
+      "pi:rules-updated",
+      "pi:conventions-updated",
+      PI_SKILLS_CHANGED_EVENT,
+      PI_INTEGRATIONS_CHANGED_EVENT,
+    ]) {
+      document.addEventListener(eventName, () => {
+        settingsChannel.postMessage(eventName);
+      });
+    }
+    settingsChannel.addEventListener("message", () => {
+      void refreshWorkbookState();
+    });
+  }
+
   document.addEventListener(PI_EXECUTION_MODE_CHANGED_EVENT, () => {
     void refreshCapabilitiesForAllRuntimes();
+  });
+
+  document.addEventListener(PI_BACKUP_SAVE_FAILED_EVENT, () => {
+    showToast(t("init.backupSaveFailed"), { duration: 8000, variant: "error" });
   });
 
   // Start bridge health probe now that refreshCapabilitiesForAllRuntimes is available.
@@ -769,18 +995,26 @@ export async function initTaskpane(opts: {
     return body.length > 0 ? body : message;
   };
 
+  /**
+   * Every approval goes through one queue (`requestApproval`), so parallel
+   * calls and other tabs wait their turn instead of declining each other.
+   */
   const requestRuntimeToolApproval = (args: {
     title: string;
     message: string;
     confirmLabel?: string;
+    signal?: AbortSignal;
+    source?: string;
+    onStop?: () => void;
   }): Promise<boolean> => {
-    return requestConfirmationDialog({
-      overlayId: TOOL_APPROVAL_OVERLAY_ID,
+    announce(t("announce.approval", { title: args.title }));
+    return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
-      ...(args.confirmLabel !== undefined ? { confirmLabel: args.confirmLabel } : {}),
-      cancelLabel: t("confirm.cancel"),
-      restoreFocusOnClose: true,
+      confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
+      ...(args.signal ? { signal: args.signal } : {}),
+      ...(args.source ? { source: args.source } : {}),
+      ...(args.onStop ? { onStop: args.onStop } : {}),
     });
   };
 
@@ -788,10 +1022,26 @@ export async function initTaskpane(opts: {
     optsForRuntime: CreateRuntimeOptions,
   ): Promise<SessionRuntime> {
     const runtimeId = crypto.randomUUID();
-    let runtimeSessionId: string = crypto.randomUUID();
+    let runtimeSessionId: string = optsForRuntime.sessionId ?? crypto.randomUUID();
     const runtimeSkillReadCache = createSkillReadCache();
+    // Files Pi created in this session; Auto mode may overwrite/delete them without asking.
+    const runtimeAssistantCreatedFiles = new Set<string>();
 
     let runtimeAgent: Agent | null = null;
+
+    /** Names this tab in its approvals when another tab is on screen. */
+    /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
+    const stopRuntimeTurn = (): void => {
+      const runtime = runtimeManager.getRuntime(runtimeId);
+      if (runtime) stopTab(runtime);
+    };
+
+    const approvalSource = (): { source?: string } => {
+      if (getActiveRuntime()?.runtimeId === runtimeId) return {};
+      const runtime = runtimeManager.getRuntime(runtimeId);
+      if (!runtime) return {};
+      return { source: t("approval.fromTab", { title: resolveRuntimeTabTitle(runtimeId, runtime) }) };
+    };
 
     const buildRuntimeCapabilities = async (sessionId: string): Promise<{
       tools: ReturnType<typeof withWorkbookCoordinator>;
@@ -811,38 +1061,13 @@ export async function initTaskpane(opts: {
         skillReadCache: runtimeSkillReadCache,
       }).filter(isRuntimeAgentTool);
 
-      const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
-        getExecutionMode: () => Promise.resolve(getExecutionMode()),
-        requestOfficeJsExecuteApproval: (request) => {
-          const apiName = request.apiName ?? "Office.js";
-          return requestRuntimeToolApproval({
-            title: apiName === "WPS JSAPI"
-              ? t("init.confirm.wpsJsTitle")
-              : t("init.confirm.officeJsTitle"),
-            message: buildOfficeJsExecuteApprovalMessage(request),
-            confirmLabel: t("init.confirm.allowOnce"),
-          });
-        },
-        requestPythonBridgeApproval: (request) => {
-          return requestRuntimeToolApproval({
-            title: t("init.confirm.pythonTitle"),
-            message: buildPythonBridgeApprovalMessage(
-              request.toolName,
-              request.bridgeUrl,
-              request.params,
-            ),
-            confirmLabel: t("init.confirm.allowBridge"),
-          });
-        },
-      });
-
       // Snapshot extension tools + revision together so schema-stable handler
       // reloads are compared against the same point-in-time payload.
       const extensionTools = extensionManager.getRegisteredTools();
       const extensionToolRevision = extensionManager.getToolRevision();
 
       const runtimeTools = normalizeRuntimeTools([
-        ...gatedCoreTools,
+        ...coreTools,
         ...createToolsForIntegrations(activeIntegrationIds),
         ...extensionTools,
       ]);
@@ -857,24 +1082,90 @@ export async function initTaskpane(opts: {
           getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         },
         {
+          onWriteStarted: (window) => changeTracker.notePiWrite(window, { kind: "runtime", runtimeId }),
           onWriteCommitted: (event) => {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
+            autoContext.noteOwnStructureChange();
           },
         },
         {
-          getExecutionMode: () => Promise.resolve(getExecutionMode()),
-          requestMutationApproval: (request) => {
-            return requestRuntimeToolApproval({
-              title: t("init.confirm.safeModeMutationTitle"),
-              message: buildMutationApprovalMessage(request),
-              confirmLabel: t("init.confirm.allowOnce"),
+          getExecutionMode: () => executionModeController.readMode(),
+          requestToolApproval: (request) => {
+            const deletesBackups = request.reason === "always";
+            const details = humanizeToolInput(request.toolName, request.params);
+            const overwrites = request.overwrites
+              ? t("approval.overwrites", {
+                count: request.overwrites.count,
+                sample: request.overwrites.sample
+                  .map((cell) => `${cell.address} = ${cell.content.length > 40 ? `${cell.content.slice(0, 40)}…` : cell.content}`)
+                  .join("; ") + (request.overwrites.count > request.overwrites.sample.length ? "; …" : ""),
+              })
+              : null;
+            const title = deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange");
+            // Announced like every other approval (requestRuntimeToolApproval).
+            announce(t("announce.approval", { title }));
+            return requestApproval({
+              title,
+              headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
+              ...(details ? { details } : {}),
+              note: deletesBackups ? t("approval.note.deleteBackups") : t("approval.note.confirmMode"),
+              confirmLabel: deletesBackups ? t("approval.allowDelete") : t("init.confirm.allowOnce"),
+              confirmTone: deletesBackups ? "danger" : "primary",
+              ...(request.signal ? { signal: request.signal } : {}),
+              ...(overwrites ? { overwrites } : {}),
+              onStop: stopRuntimeTurn,
+              ...approvalSource(),
             });
           },
         },
       );
 
-      const preflightTools = withConnectionPreflight(coordinatedTools, {
+      // Gates wrap the coordinated tools, so their approvals (direct JS,
+      // Python bridge) are asked before the call waits for the workbook lock.
+      const gatedTools = await applyExperimentalToolGates(coordinatedTools, {
+        getExecutionMode: () => executionModeController.readMode(),
+        requestOfficeJsExecuteApproval: (request) => {
+          const apiName = request.apiName ?? "Office.js";
+          return requestRuntimeToolApproval({
+            title: apiName === "WPS JSAPI"
+              ? t("init.confirm.wpsJsTitle")
+              : t("init.confirm.officeJsTitle"),
+            message: buildOfficeJsExecuteApprovalMessage(request),
+            confirmLabel: t("init.confirm.allowOnce"),
+            ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          });
+        },
+        requestPythonBridgeApproval: (request) => {
+          return requestRuntimeToolApproval({
+            title: t("init.confirm.pythonTitle"),
+            message: buildPythonBridgeApprovalMessage(
+              request.toolName,
+              request.bridgeUrl,
+              request.params,
+            ),
+            confirmLabel: t("init.confirm.allowBridge"),
+            ...(request.signal ? { signal: request.signal } : {}),
+            onStop: stopRuntimeTurn,
+            ...approvalSource(),
+          });
+        },
+        requestLocalChangeApproval: (request) => requestRuntimeToolApproval({
+          title: request.title,
+          message: request.message,
+          confirmLabel: request.confirmLabel,
+          ...(request.signal ? { signal: request.signal } : {}),
+          onStop: stopRuntimeTurn,
+          ...approvalSource(),
+        }),
+        assistantCreatedFiles: runtimeAssistantCreatedFiles,
+        listExtensions: () => extensionManager.list(),
+      });
+
+
+      const preflightTools = withConnectionPreflight(gatedTools, {
         connectionManager,
       });
 
@@ -899,6 +1190,7 @@ export async function initTaskpane(opts: {
 
     const initialModel = getActiveRuntime()?.agent.state.model
       ?? modelRefreshOwner.snapshot().defaultModel;
+    const autoContext = createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId });
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
@@ -917,7 +1209,8 @@ export async function initTaskpane(opts: {
       convertToLlm: createConvertToLlm({
         getContextWindow: () => runtimeAgent?.state.model.contextWindow,
       }),
-      transformContext: createContextInjector(changeTracker),
+      prepareRequest: autoContext.prepareRequest,
+      transformContext: autoContext.transformContext,
       streamFn,
     });
 
@@ -964,46 +1257,111 @@ export async function initTaskpane(opts: {
       }
     };
 
+    const tab = createTabState();
+    // Set when the user dismisses the connection dialog during this turn.
+    let missingCredentialsFor: string | null = null;
+    // Display label when this turn's login could not be refreshed and its token has expired.
+    let expiredLoginFor: string | null = null;
+
     // API key resolution
     agent.getApiKey = async (provider: string) => {
+      // OAuth access tokens expire during long sessions; refresh before the request, not at reload.
+      if (await oauthRefresher.ensureFresh(provider) === "expired") {
+        // Sending the stale token would only surface the provider's 401, and
+        // returning no key lets pi-ai fall back to that same stored token.
+        // Throwing fails the turn; the banner tells the user to sign in again.
+        expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
+        throw new Error(`The ${provider} login has expired and could not be refreshed.`);
+      }
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
       if (resolvedAuth) return resolvedAuth.auth.apiKey;
 
       // Extension provider credentials are configured through their host-owned
       // connection cards, never through the generic API-key dialog.
       if (modelRuntime.isExtensionProvider(provider)) {
-        showErrorBanner(errorRoot, t("runtime.error.noApiKey", { provider }));
+        tab.setError(t("runtime.error.noApiKey", { provider }));
         return undefined;
       }
 
       const success = await promptForProviderConnection(provider);
       await modelRefreshOwner.refreshConfiguredProviders(false);
       if (success) {
-        clearErrorBanner(errorRoot);
+        tab.setError(null);
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      showErrorBanner(errorRoot, `API key required for ${provider}.`);
+      missingCredentialsFor = provider;
       return undefined;
     };
 
-    const queueDisplay = createQueueDisplay({ agent });
+    const queueDisplay = createQueueDisplay({ agent, held: tab });
+    // Assigned below; compaction saves the session as soon as it rewrites history.
+    let savePersistence: () => Promise<void> = () => Promise.resolve();
     const actionQueue = createActionQueue({
       agent,
-      sidebar,
-      queueDisplay,
+      tab,
+      // The queue's last update comes after it stops running; re-read busy
+      // state then so the tab's idle transition (and markers) is not missed.
+      queueDisplay: {
+        ...queueDisplay,
+        setActionQueue: (items) => {
+          queueDisplay.setActionQueue(items);
+          runtimeManager.notifyRuntimeChanged();
+        },
+      },
       autoCompactEnabled,
-      runCompact: () => runCompactCommand(agent, ""),
+      runCompact: async (args, signal) => {
+        const before = agent.state.messages;
+        await runCompactCommand(agent, args, signal);
+        if (agent.state.messages !== before) {
+          // Redraw the context meter for the smaller history and save it now,
+          // so a reload right after compaction does not bring the old one back.
+          // Forced: compaction can archive every user message into the
+          // summary, which a "has the chat started" save gate would skip.
+          document.dispatchEvent(new CustomEvent("pi:status-update"));
+          await savePersistence();
+        }
+      },
+      onTurnSettled: ({ overflowAfterRecovery }) => {
+        const credentials = missingCredentialsFor;
+        missingCredentialsFor = null;
+        const expiredLogin = expiredLoginFor;
+        expiredLoginFor = null;
+        void getConfiguredProxyUrl().then((proxyUrl) => {
+          tab.setError(describeTurnFailure({
+            messages: agent.state.messages,
+            isContextOverflow: findTrailingContextOverflowError(agent.state) !== null,
+            overflowAfterRecovery,
+            missingCredentialsFor: credentials,
+            expiredLoginFor: expiredLogin,
+            online: navigator.onLine,
+            proxyUrl: proxyUrl ?? null,
+            defaultProxyUrl: DEFAULT_PROXY_URL,
+            proxyBlockedByBrowser: isProxyBlockedByBrowser(),
+          }));
+        });
+      },
+      onLeftUnsent: (count) => {
+        if (runtimeManager.getActiveRuntime()?.runtimeId !== runtimeId) return;
+        showToast(t("turn.toast.leftUnsent", { count, plural: count === 1 ? "" : "s" }));
+      },
     });
 
     const persistence = await setupSessionPersistence({
       agent,
       sessions,
       settings,
-      models: modelRuntime.models,
+      resolveModel: (persisted) => modelRefreshOwner.resolveModel(persisted),
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
+      onSaveError: (message) => {
+        showToast(t("sessions.toast.saveFailed", { error: message }));
+      },
+      onSavedAsCopy: () => {
+        showToast(t("init.sessionSavedAsCopy"), 8000);
+      },
     });
+    savePersistence = async () => { await persistence.saveSession({ force: true }); };
 
     runtimeSessionId = persistence.getSessionId();
     await refreshRuntimeCapabilities();
@@ -1019,11 +1377,13 @@ export async function initTaskpane(opts: {
       void refreshRuntimeCapabilities();
     });
 
-    const unsubscribeErrorTracking = agent.subscribe((ev) => {
-      const isActiveRuntime = runtimeManager.getActiveRuntime()?.runtimeId === runtimeId;
+    // The tab's draft is kept with its session, so a reload brings it back.
+    const unbindDraft = draftStore.bind(tab, persistence);
 
-      if (ev.type === "message_start" && ev.message.role === "user" && isActiveRuntime) {
-        clearErrorBanner(errorRoot);
+    const unsubscribeErrorTracking = agent.subscribe((ev) => {
+      // A new message clears the tab's previous error.
+      if (ev.type === "message_start" && ev.message.role === "user") {
+        tab.setError(null);
       }
 
       if (ev.type !== "agent_end") return;
@@ -1033,35 +1393,11 @@ export async function initTaskpane(opts: {
       // unloads mid-turn cannot leave its now-missing provider selected.
       window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
 
-      const wasUserAbort = abortedAgents.has(agent);
-      abortedAgents.delete(agent);
-
-      if (!isActiveRuntime) return;
-
-      const errorMessage = agent.state.errorMessage;
-      if (errorMessage) {
-        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
-        if (!isAbort) {
-          const err = errorMessage;
-          if (findTrailingContextOverflowError(agent.state)) {
-            showErrorBanner(
-              errorRoot,
-              autoCompactEnabled
-                ? "Context window exceeded — Pi will try compacting older history and retrying once. If this error persists, run /compact, scope your request to a smaller range, or use a larger-context model."
-                : "Context window exceeded. Run /compact to free up context, scope your request to a smaller range, or use a larger-context model.",
-            );
-          } else if (isLikelyCorsErrorMessage(err)) {
-            showErrorBanner(
-              errorRoot,
-              `Network error (likely CORS). If you're using OAuth, enable /settings → Proxy with ${DEFAULT_PROXY_URL} and retry. Guide: ${PROXY_HELPER_DOCS_URL}`,
-            );
-          } else {
-            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
-          }
-        }
-      } else {
-        clearErrorBanner(errorRoot);
-      }
+      // Classify from the run's own result, not from how it was stopped: a
+      // stop leaves no mark, an error is "failed", anything else "finished".
+      const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
+      const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
+      runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
     });
 
     return {
@@ -1069,6 +1405,7 @@ export async function initTaskpane(opts: {
       agent,
       actionQueue,
       queueDisplay,
+      tab,
       persistence,
       lockState: "idle",
       refreshCapabilities: refreshRuntimeCapabilities,
@@ -1076,6 +1413,7 @@ export async function initTaskpane(opts: {
         runtimeSkillReadCache.clearAll();
         unsubscribeSessionCapabilitySync();
         unsubscribeErrorTracking();
+        unbindDraft();
         queueDisplay.detach();
         actionQueue.shutdown();
         uninstallImageInputNormalization();
@@ -1099,7 +1437,12 @@ export async function initTaskpane(opts: {
   let tabLayoutReadSucceeded = false;
 
   const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
-    const workbookId = await resolveWorkbookId();
+    const key = await resolvePersistentWorkbookKey("read");
+    if (!key) {
+      tabLayoutReadSucceeded = true;
+      return null;
+    }
+    const workbookId = key.workbookId;
     let savedLayout: WorkbookTabLayout | null;
     try {
       savedLayout = await loadWorkbookTabLayout(settings, workbookId);
@@ -1110,13 +1453,20 @@ export async function initTaskpane(opts: {
     }
     if (!savedLayout) return null;
 
+    // Tabs keep their "Chat N" numbers across reloads, and closed tabs' numbers stay retired.
+    runtimeManager.seedNextTabNumber(savedLayout.nextTabNumber ?? 1);
     const runtimesBySessionId = new Map<string, SessionRuntime>();
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
+      // Keeping the saved id lets a blank tab keep its identity (and its
+      // unsent draft) across reloads, and the saved number keeps its "Chat N" label.
+      const tabNumber = savedLayout.tabNumbers?.[sessionId];
       const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
+        sessionId,
+        ...(tabNumber !== undefined ? { tabNumber } : {}),
       });
 
       const sessionData = await sessions.loadSession(sessionId);
@@ -1156,42 +1506,51 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const replaceActiveRuntimeSession = async (sessionData: SessionData): Promise<void> => {
-    const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) {
-      showToast(t("init.noActiveSession"));
-      return;
-    }
-
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
-    if (busy) {
-      showToast(t("init.currentTabBusy"));
-      return;
-    }
-
-    await activeRuntime.persistence.applyLoadedSession(sessionData);
-    syncRuntimeAfterSessionLoad(activeRuntime);
+  const getRuntimeTabTitle = (runtimeId: string): string => {
+    return runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title ?? t("session.untitled");
   };
 
-  const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
-    const runtime = await runtimeManager.createRuntime({
-      activate: true,
-      autoRestoreLatest: false,
-    });
+  /**
+   * Opens a saved session in a tab. A session is open in at most one tab, so
+   * a session that is already open switches to its tab. Shows the refusal
+   * toast itself and returns null when nothing was opened.
+   */
+  const openSavedSession = async (
+    sessionData: SessionData,
+    target: OpenSessionTarget,
+  ): Promise<{ outcome: "opened" | "replaced" | "focused"; title: string } | null> => {
+    const result = await runtimeManager.openSession(sessionData, target);
+    if (result.outcome === "missing") {
+      showToast(t("init.noActiveSession"));
+      return null;
+    }
+    if (result.outcome === "busy") {
+      showToast(t("init.currentTabBusy"));
+      return null;
+    }
 
-    await runtime.persistence.applyLoadedSession(sessionData);
-    syncRuntimeAfterSessionLoad(runtime);
-    return runtime;
+    // An open session is not "recently closed" any more.
+    recentlyClosed.removeBySessionId(result.runtime.persistence.getSessionId());
+    if (result.outcome !== "focused") {
+      syncRuntimeAfterSessionLoad(result.runtime);
+    }
+    return { outcome: result.outcome, title: getRuntimeTabTitle(result.runtime.runtimeId) };
   };
 
   const openResumePicker = async (defaultTarget: ResumeDialogTarget = "new_tab"): Promise<void> => {
     await showResumeDialog({
       defaultTarget,
-      onOpenInNewTab: async (sessionData: SessionData) => {
-        await openSessionInNewTab(sessionData);
-      },
-      onReplaceCurrent: async (sessionData: SessionData) => {
-        await replaceActiveRuntimeSession(sessionData);
+      onOpenSession: async (sessionData: SessionData, resumeTarget: ResumeDialogTarget) => {
+        if (resumeTarget === "new_tab") {
+          return openSavedSession(sessionData, { kind: "new_tab" });
+        }
+
+        const activeRuntime = getActiveRuntime();
+        if (!activeRuntime) {
+          showToast(t("init.noActiveSession"));
+          return null;
+        }
+        return openSavedSession(sessionData, { kind: "replace", runtimeId: activeRuntime.runtimeId });
       },
       getRecentlyClosedItems: () => recentlyClosed.snapshot(),
       onReopenRecentlyClosed: async (item) => {
@@ -1206,7 +1565,15 @@ export async function initTaskpane(opts: {
 
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
 
+  /** The undo toast shown for the most recent close, so reopening can retire it. */
+  let closeUndoToast: { itemId: string; toast: ActionToastHandle } | null = null;
+
   const reopenRecentlyClosedItem = async (item: RecentlyClosedItem): Promise<ReopenRecentlyClosedResult> => {
+    if (closeUndoToast?.itemId === item.id) {
+      closeUndoToast.toast.dismiss();
+      closeUndoToast = null;
+    }
+
     try {
       const sessionData = await sessions.loadSession(item.sessionId);
       if (!sessionData) {
@@ -1214,8 +1581,16 @@ export async function initTaskpane(opts: {
         return "missing";
       }
 
-      await openSessionInNewTab(sessionData);
-      showToast(t("init.reopened", { title: formatSessionTitle(item.title) }));
+      const opened = await openSavedSession(sessionData, {
+        kind: "new_tab",
+        ...(item.tabNumber !== undefined ? { tabNumber: item.tabNumber } : {}),
+      });
+      if (!opened) return "failed";
+      dismissToast(`closed-tab:${item.id}`);
+
+      showToast(opened.outcome === "focused"
+        ? t("init.alreadyOpen", { title: opened.title })
+        : t("init.reopened", { title: opened.title }));
       return "reopened";
     } catch {
       showToast(t("init.couldNotReopenSession"));
@@ -1252,15 +1627,17 @@ export async function initTaskpane(opts: {
   };
 
   const revertLatestCheckpoint = async (): Promise<void> => {
-    const latest = await workbookRecoveryLog.listForCurrentWorkbook(1);
-    const checkpoint = latest[0];
-
-    if (!checkpoint) {
+    // "Latest" is decided under the lock: while Pi is busy, the write in
+    // flight adds its backup first, and /revert undoes that one.
+    const preview = await runUserWorkbookOperation("workbook_history", async () => {
+      const latest = (await workbookRecoveryLog.listForCurrentWorkbook(1))[0];
+      return latest ? workbookRecoveryLog.previewRestore(latest.id) : null;
+    });
+    if (!preview) {
       showToast(t("init.noBackupsYet"));
       return;
     }
-
-    await restoreCheckpointById(checkpoint.id);
+    await restoreAfterConfirmation(preview);
   };
 
   const createManualFullBackup = async (): Promise<{
@@ -1268,8 +1645,9 @@ export async function initTaskpane(opts: {
     createdAt: number;
     sizeBytes: number;
   }> => {
-    const backup = await manualFullBackupStore.create();
-    await getFilesWorkspace().downloadFile(backup.path);
+    const backup = await manualFullBackupStore.createAndDownload({
+      runCapture: (capture) => runUserWorkbookOperation("manual_backup", capture),
+    });
     return toManualFullBackupSummary(backup);
   };
 
@@ -1297,8 +1675,8 @@ export async function initTaskpane(opts: {
     return resolved ? toManualFullBackupSummary(resolved) : null;
   };
 
-  const clearManualFullBackups = async (): Promise<number> => {
-    return manualFullBackupStore.clearForCurrentWorkbook();
+  const clearManualFullBackups = async (confirm: (count: number) => Promise<boolean>): Promise<number> => {
+    return manualFullBackupStore.clearForCurrentWorkbook(confirm);
   };
 
   const closeRuntimeWithRecovery = async (
@@ -1318,7 +1696,7 @@ export async function initTaskpane(opts: {
       return false;
     }
 
-    if (runtime.agent.state.isStreaming) {
+    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
       const proceed = await requestConfirmationDialog({
         title: t("init.confirm.stopAndCloseTitle"),
         message: t("init.confirm.stopAndCloseMessage"),
@@ -1328,21 +1706,36 @@ export async function initTaskpane(opts: {
       });
       if (!proceed) return false;
 
-      abortedAgents.add(runtime.agent);
-      runtime.agent.abort();
+      // The tab kept running while the dialog was open; check again what closing would break.
+      const current = runtimeManager.getRuntime(runtimeId);
+      if (current !== runtime) return false;
+      if (runtimeManager.listRuntimes().length <= 1) {
+        showToast(t("init.cantCloseLastTab"));
+        return false;
+      }
+      runtime.actionQueue.stop();
     }
+
+    // A write that already started (it may have taken the lock while the
+    // dialog was open) cannot be cancelled inside Excel. Keep the tab until
+    // its run has settled, so the change lands with its backup and is saved
+    // in the session instead of happening after the tab is gone.
+    // Only a write makes the user wait; an aborted model request settles at once.
+    if (runtime.lockState !== "idle") {
+      showToast(t("init.waitingForChangeBeforeClose"));
+    }
+    await runtime.agent.waitForIdle();
 
     await runtime.persistence.saveSession({ force: true });
 
-    const closeTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
-
+    const closingTab = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId);
     const closedItem: RecentlyClosedItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       sessionId: runtime.persistence.getSessionId(),
-      title: closeTitle,
+      title: closingTab?.title ?? formatSessionTitle(runtime.persistence.getSessionTitle()),
       closedAt: new Date().toISOString(),
       workbookId: await resolveWorkbookId(),
+      ...(closingTab ? { tabNumber: closingTab.tabNumber } : {}),
     };
 
     runtimeManager.closeRuntime(runtimeId);
@@ -1350,14 +1743,17 @@ export async function initTaskpane(opts: {
 
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
-      showActionToast({
+      const toast = showActionToast({
+        id: `closed-tab:${closedItem.id}`,
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
         duration: 9000,
         onAction: () => {
+          closeUndoToast = null;
           void reopenRecentlyClosedById(closedItem.id);
         },
       });
+      closeUndoToast = { itemId: closedItem.id, toast };
     }
 
     return true;
@@ -1370,7 +1766,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (isRuntimeBusy(runtime)) {
       showToast(t("init.waitBeforeRenaming"));
       return;
     }
@@ -1381,10 +1777,18 @@ export async function initTaskpane(opts: {
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
 
-    const nextTitleRaw = window.prompt("Rename tab", defaultTitle);
+    // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
+    const nextTitleRaw = await requestTextInputDialog({
+      title: t("init.renameTab.title"),
+      message: t("init.renameTab.message"),
+      initialValue: defaultTitle,
+      confirmLabel: t("init.renameTab.confirm"),
+    });
     if (nextTitleRaw === null) {
       return;
     }
+    // The tab may have started a turn while the dialog was open.
+    if (runtimeManager.getRuntime(runtimeId) !== runtime) return;
 
     const nextTitle = nextTitleRaw.trim();
     await runtime.persistence.renameSession(nextTitle);
@@ -1439,7 +1843,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
+    if (isRuntimeBusy(sourceRuntime)) {
       showToast(t("init.waitBeforeDuplicating"));
       return;
     }
@@ -1495,21 +1899,15 @@ export async function initTaskpane(opts: {
   workbookCoordinator.subscribe((event) => {
     if (event.operationType !== "write") return;
 
-    const runtime = runtimeManager.findRuntimeBySessionId(event.context.sessionId);
-    if (!runtime) return;
-
-    if (event.type === "queued") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "waiting_for_lock");
-      return;
-    }
-
-    if (event.type === "started") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "holding_lock");
-      return;
-    }
-
-    if (event.type === "completed" || event.type === "failed") {
-      runtimeManager.setRuntimeLockState(runtime.runtimeId, "idle");
+    // Recompute every tab on this workbook: one write finishing or queuing
+    // changes what the others are waiting for.
+    const snapshot = workbookCoordinator.getSnapshot(event.context.workbookId);
+    const finishedOpId = event.type === "completed" || event.type === "failed" ? event.context.opId : undefined;
+    for (const runtime of runtimeManager.listRuntimes()) {
+      runtimeManager.setRuntimeLockState(
+        runtime.runtimeId,
+        getSessionLockState(snapshot, runtime.persistence.getSessionId(), finishedOpId),
+      );
     }
   });
 
@@ -1527,6 +1925,7 @@ export async function initTaskpane(opts: {
     getModelSwitchBehavior,
     setModelSwitchBehavior,
     models: modelRuntime.models,
+    isAnyTabBusy: () => runtimeManager.snapshotTabs().some((tab) => tab.isBusy),
     onRulesSaved: async () => {
       await refreshWorkbookState();
     },
@@ -1545,11 +1944,13 @@ export async function initTaskpane(opts: {
     },
     backups: {
       loadCheckpoints: async () => {
-        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(40);
+        // Every backup of this workbook (at most "Keep at most"), so counts
+        // such as "Clear all" match what is stored.
+        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(MAX_RECOVERY_ENTRIES);
         return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
       },
       onRestore: async (snapshotId: string) => {
-        await restoreCheckpointById(snapshotId);
+        await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
       },
       onDelete: async (snapshotId: string) => {
         return workbookRecoveryLog.delete(snapshotId);
@@ -1566,6 +1967,7 @@ export async function initTaskpane(opts: {
       },
       setRetentionConfig: async (config) => {
         await writeRetentionLimit(config.maxSnapshots);
+        await workbookRecoveryLog.applyRetentionLimit();
       },
     },
   });
@@ -1604,7 +2006,6 @@ export async function initTaskpane(opts: {
     }
 
     const targetRuntimeId = activeRuntime.runtimeId;
-    const currentModel = activeRuntime.agent.state.model;
 
     void (async () => {
       try {
@@ -1615,9 +2016,18 @@ export async function initTaskpane(opts: {
 
       closeStatusPopover();
 
+      // Read the model after the refresh, which can swap a tab whose provider went away.
+      const currentModel = runtimeManager.getRuntime(targetRuntimeId)?.agent.state.model
+        ?? activeRuntime.agent.state.model;
       openModelSelectorDialog({
         models: modelRuntime.models,
         currentModel,
+        // Same rule from every entry point (/model, status bar): a busy tab keeps
+        // its model, so the list says so up front instead of refusing a pick.
+        getDisabledReason: () => {
+          const runtime = runtimeManager.getRuntime(targetRuntimeId);
+          return runtime && isRuntimeBusy(runtime) ? t("modelSelector.busy") : undefined;
+        },
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },
@@ -1666,8 +2076,8 @@ export async function initTaskpane(opts: {
     restoreManualFullBackup: async (backupId?: string) => {
       return restoreManualFullBackup(backupId);
     },
-    clearManualFullBackups: async () => {
-      return clearManualFullBackups();
+    clearManualFullBackups: async (confirm) => {
+      return clearManualFullBackups(confirm);
     },
     openInstructionsEditor: async () => {
       await openRulesEditor();
@@ -1693,7 +2103,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy = isRuntimeBusy(activeRuntime);
     const result = executeSlashCommand({
       name,
       args,
@@ -1721,22 +2131,39 @@ export async function initTaskpane(opts: {
   };
   document.addEventListener("pi:command-run", onCommandRun);
 
-  sidebar.onSend = (text) => {
-    clearErrorBanner(errorRoot);
+  sidebar.onSend = (text, { followUp }) => {
     const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) {
-      showToast(t("init.noActiveSession"));
-      return;
-    }
-    activeRuntime.actionQueue.enqueuePrompt(text);
+    const accepted = submitComposerText({ text, followUp, target: activeRuntime });
+    if (accepted && activeRuntime) activeRuntime.tab.setError(null);
+    return accepted;
   };
 
-  sidebar.onAbort = () => {
+  /**
+   * Stop is one behavior, from the Stop button or Escape: the run, compaction
+   * or retry wait is cancelled; steers, follow-ups and queued prompts stay
+   * as separate "Not sent" rows; queued commands are cancelled.
+   */
+  const stopActiveTab = (): void => {
     const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) return;
-    abortedAgents.add(activeRuntime.agent);
-    activeRuntime.agent.abort();
+    if (activeRuntime) stopTab(activeRuntime);
   };
+
+  /** A tab's Stop: also used by "Stop Pi" in that tab's approval dialogs (#794). */
+  function stopTab(runtime: SessionRuntime): void {
+    const { texts, cancelledCommands } = runtime.actionQueue.stop();
+    const count = texts.length;
+    const plural = count === 1 ? "" : "s";
+    const commands = cancelledCommands.join(", ");
+    if (count > 0 && commands) {
+      showToast(t("turn.toast.stopKeptCancelled", { count, plural, commands }));
+    } else if (count > 0) {
+      showToast(t("turn.toast.stopKept", { count, plural }));
+    } else if (commands) {
+      showToast(t("turn.toast.stopCancelled", { commands }));
+    }
+  }
+
+  sidebar.onAbort = stopActiveTab;
 
   sidebar.onCreateTab = () => {
     void createRuntimeFromUi();
@@ -1782,14 +2209,15 @@ export async function initTaskpane(opts: {
     void workspace.importFiles(files, {
       audit: { actor: "user", source: "input-drop" },
     })
-      .then((count) => {
+      .then((result) => {
+        const count = result.imported;
         if (count <= 0) {
           showToast(t("init.noFilesImported"));
           return;
         }
 
         const importedLabel = `${count} file${count === 1 ? "" : "s"}`;
-        showToast(t("init.importedIntoFiles", { label: importedLabel }));
+        showToast(t("init.importedIntoFiles", { label: importedLabel }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("init.importFailed", { error: error instanceof Error ? error.message : t("init.unknownError") }));
@@ -1809,48 +2237,71 @@ export async function initTaskpane(opts: {
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
-    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
+    // Without an identity in a real workbook there is no "latest session" of this workbook to restore.
+    const autoRestoreLatest = usesSharedUnidentifiedState || (await resolveWorkbookId()) !== null;
+    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest });
+  }
+  for (const tab of runtimeManager.snapshotTabs()) {
+    recentlyClosed.removeBySessionId(tab.sessionId);
   }
 
   const startupTabLayout = snapshotRuntimeTabLayout();
   tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
   tabLayoutPersistence.persist(startupTabLayout);
 
-  // ── Disclosure bar (onboarding banner) ──
-  // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
+  // Tabs follow the workbook when Save As gives it a new identity. Only in
+  // Office, where one taskpane serves one document: there a new identity is
+  // this document under a new name. A pane that follows the active workbook
+  // (WPS) sees another workbook instead.
+  if (spreadsheetHost.kind === "office") {
+    const identityFollower = createWorkbookIdentityFollower({
+      settings,
+      resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,
+      onIdentityChanged: async ({ from, to }) => {
+        for (const tab of runtimeManager.snapshotTabs()) {
+          await moveSessionToWorkbook(settings, tab.sessionId, from, to);
+        }
+        maybePersistTabLayout();
+        if (recentlyClosedWritable) await saveRecentlyClosed(settings, to, recentlyClosed.snapshot());
+        await tabLayoutPersistence.flush();
+      },
+    });
+    const followIdentity = () => {
+      void identityFollower.checkOnce().catch((error) => {
+        console.warn("[pi] Failed to move tabs to the workbook's new identity:", error);
+      });
+    };
+    followIdentity();
+    const identityPoll = setInterval(followIdentity, 4_000);
+    window.addEventListener("beforeunload", () => clearInterval(identityPoll), { once: true });
+  }
+
+  // ── Notice area: first-run disclosure + proxy warning (src/ui/banner.ts) ──
+  // Must run after runtime bootstrap so the sidebar has rendered #pi-notices.
   {
     const { createDisclosureBar } = await import("../ui/disclosure-bar.js");
-    const disclosureEl = createDisclosureBar({
+    const disclosure = createDisclosureBar({
       providerCount: modelRefreshOwner.snapshot().availableProviders.length,
       onOpenSettings: () => void openSettings(),
     });
-    if (disclosureEl) {
-      const messagesContainer = sidebar.querySelector(".pi-messages");
-      if (messagesContainer) {
-        messagesContainer.parentElement?.insertBefore(disclosureEl, messagesContainer);
+    if (disclosure) {
+      mountBanner(disclosure.root);
+    }
+
+    const proxyBanner = createProxyBannerController({
+      isProxyEnabled: async () => (await readTaskpaneProxySettings(settings)).enabled,
+    });
+    void proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
+
+    document.addEventListener("pi:proxy-state-changed", (event: Event) => {
+      if (!(event instanceof CustomEvent)) return;
+      const detail: unknown = event.detail;
+      if (!isTaskpaneInitPayloadShape(detail)) return;
+      const state = detail.state;
+      if (state === "detected" || state === "not-detected" || state === "unknown") {
+        void proxyBanner.update(state, isProxyBlockedByBrowser());
       }
-    }
-  }
-
-  // ── Proxy warning banner (state-driven) ──
-  {
-    const messagesContainer = sidebar.querySelector(".pi-messages");
-    const host = messagesContainer?.parentElement;
-    if (host && messagesContainer) {
-      const proxyBanner = createProxyBanner();
-      host.insertBefore(proxyBanner.root, messagesContainer);
-      proxyBanner.update(getProxyState());
-
-      document.addEventListener("pi:proxy-state-changed", (event: Event) => {
-        if (!(event instanceof CustomEvent)) return;
-        const detail: unknown = event.detail;
-        if (!isTaskpaneInitPayloadShape(detail)) return;
-        const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyBanner.update(state);
-        }
-      });
-    }
+    });
   }
 
   // ── Register extensions ──
@@ -1872,11 +2323,17 @@ export async function initTaskpane(opts: {
   // ── Keyboard shortcuts ──
   installKeyboardShortcuts({
     getActiveAgent,
-    getActiveQueueDisplay,
-    getActiveActionQueue,
+    isActiveTabBusy: () => {
+      const runtime = getActiveRuntime();
+      return runtime !== null && (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy());
+    },
     sidebar,
-    markUserAborted: (agent: Agent) => {
-      abortedAgents.add(agent);
+    stopActiveTab,
+    editLastQueued: () => {
+      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
+      if (edited) focusChatInputSoon();
+      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
+      return edited;
     },
     onCreateTab: () => {
       void createRuntimeFromUi();
@@ -1893,7 +2350,11 @@ export async function initTaskpane(opts: {
     onReopenLastClosed: () => {
       void reopenLastClosed();
     },
-    canUndoCloseTab: () => recentlyClosed.peekMostRecent() !== null,
+    // Ctrl/Cmd+Z reopens only the tab whose Undo toast is on screen. Recently
+    // closed now survives reloads, so a bare Ctrl+Z could otherwise bring back a
+    // tab closed days ago when the user meant to undo in Excel (CL-02).
+    // /reopen and the resume picker still reach older tabs.
+    canUndoCloseTab: () => closeUndoToast?.toast.isShowing() === true,
     onSwitchAdjacentTab: (direction: -1 | 1) => {
       const tabs = runtimeManager.snapshotTabs();
       if (tabs.length <= 1) {
@@ -1932,9 +2393,9 @@ export async function initTaskpane(opts: {
 
   // ── Wire command menu to textarea ──
   const wireTextarea = () => {
-    const ta = sidebar.getTextarea();
-    if (ta) {
-      wireCommandMenu(ta);
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
     } else {
       requestAnimationFrame(wireTextarea);
     }
@@ -2034,10 +2495,18 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    // Execution mode toggle
-    if (el.closest(".pi-status-mode")) {
-      closeStatusPopover();
-      void toggleExecutionModeFromUi();
+    // Execution mode: Auto / Confirm, chosen from a popover like its neighbours
+    const modeTrigger = el.closest(".pi-status-mode");
+    if (modeTrigger) {
+      toggleModePopover({
+        anchor: modeTrigger,
+        activeMode: getExecutionMode(),
+        onSelectMode: (mode) => {
+          void setExecutionMode(mode).catch(() => {
+            showToast(t("status.mode.saveFailed"));
+          });
+        },
+      });
       return;
     }
 

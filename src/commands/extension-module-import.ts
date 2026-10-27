@@ -1,5 +1,6 @@
 import {
   ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
+  classifyExtensionSource,
   isRemoteExtensionOptIn,
   type ExtensionSourceKind,
 } from "./extension-source-policy.js";
@@ -119,4 +120,27 @@ export function readRemoteExtensionOptInFromStorage(storage: Storage | null | un
   } catch {
     return false;
   }
+}
+
+/**
+ * Enforce the module-source policy for every runtime (host and sandbox):
+ * unsupported specifiers are rejected, and remote http(s) URLs need the
+ * explicit "Remote extension URLs" opt-in at load time, not only at install.
+ */
+export function assertExtensionModuleSourceAllowed(specifier: string): Exclude<ExtensionSourceKind, "unsupported"> {
+  const sourceKind = classifyExtensionSource(specifier);
+
+  if (sourceKind === "unsupported") {
+    throw new Error(
+      `Unsupported extension source "${specifier}". Only local module specifiers (./, ../, /), blob: URLs, and inline function activators are allowed by default.`,
+    );
+  }
+
+  if (sourceKind === "remote-url" && !readRemoteExtensionOptInFromStorage(globalThis.localStorage)) {
+    throw new Error(
+      "Remote extension URLs are turned off. Turn on \"Remote extension URLs\" in /experimental to load this extension.",
+    );
+  }
+
+  return sourceKind;
 }

@@ -15,6 +15,7 @@ import { t } from "../language/index.js";
 import type { ConnectionManager } from "../connections/manager.js";
 import {
   createExtensionAPI,
+  dismissLegacyWidgetOwnedBy,
   loadExtension,
   type ExtensionCommand,
   type ExtensionModelProviderDefinition,
@@ -31,13 +32,13 @@ import {
   type ExtensionRuntimeMode,
 } from "./runtime-mode.js";
 import { commandRegistry } from "../commands/types.js";
+import { assertExtensionModuleSourceAllowed } from "../commands/extension-module-import.js";
 import {
   describeExtensionCapability,
   describeStoredExtensionTrust,
   deriveStoredExtensionTrust,
   getDefaultPermissionsForTrust,
   isExtensionCapabilityAllowed,
-  listAllExtensionCapabilities,
   listGrantedExtensionCapabilities,
   setExtensionCapabilityAllowed,
   type ExtensionCapability,
@@ -168,7 +169,6 @@ export interface ExtensionRuntimeStatus {
   permissions: StoredExtensionPermissions;
   grantedCapabilities: ExtensionCapability[];
   effectiveCapabilities: ExtensionCapability[];
-  permissionsEnforced: boolean;
   commandNames: string[];
   toolNames: string[];
   modelProviderIds: string[];
@@ -235,15 +235,11 @@ export class ExtensionRuntimeManager {
   }
 
   list(): ExtensionRuntimeStatus[] {
-    const permissionsEnforced = isExperimentalFeatureEnabled("extension_permission_gates");
     const sandboxHostFallbackEnabled = isExperimentalFeatureEnabled("extension_sandbox_runtime");
 
     return this.entries.map((entry) => {
       const state = this.activeStates.get(entry.id);
       const grantedCapabilities = listGrantedExtensionCapabilities(entry.permissions);
-      const effectiveCapabilities = permissionsEnforced
-        ? grantedCapabilities
-        : listAllExtensionCapabilities();
       const runtimeMode = state
         ? state.runtimeMode
         : resolveExtensionRuntimeMode(entry.trust, sandboxHostFallbackEnabled);
@@ -261,8 +257,7 @@ export class ExtensionRuntimeManager {
         runtimeLabel: describeExtensionRuntimeMode(runtimeMode),
         permissions: entry.permissions,
         grantedCapabilities,
-        effectiveCapabilities,
-        permissionsEnforced,
+        effectiveCapabilities: grantedCapabilities,
         commandNames: state ? Array.from(state.commandNames).sort() : [],
         toolNames: state ? Array.from(state.toolNames).sort() : [],
         modelProviderIds: state ? Array.from(state.modelProviderIds).sort() : [],
@@ -397,22 +392,33 @@ export class ExtensionRuntimeManager {
   }
 
   async installFromUrl(name: string, url: string): Promise<string> {
+    const specifier = normalizeRemoteUrl(url);
+    assertExtensionModuleSourceAllowed(specifier);
     return this.installEntry({
       name: normalizeExtensionName(name),
       source: {
         kind: "module",
-        specifier: normalizeRemoteUrl(url),
+        specifier,
       },
     });
   }
 
-  async installFromCode(name: string, code: string): Promise<string> {
+  /**
+   * Install pasted/generated code. `grantCapabilities` are granted on top of
+   * the untrusted defaults; callers must have shown them to the user.
+   */
+  async installFromCode(
+    name: string,
+    code: string,
+    grantCapabilities: readonly ExtensionCapability[] = [],
+  ): Promise<string> {
     return this.installEntry({
       name: normalizeExtensionName(name),
       source: {
         kind: "inline",
         code: normalizeInlineCode(code),
       },
+      grantCapabilities,
     });
   }
 
@@ -613,18 +619,24 @@ export class ExtensionRuntimeManager {
   private async installEntry(input: {
     name: string;
     source: StoredExtensionSource;
+    grantCapabilities?: readonly ExtensionCapability[];
   }): Promise<string> {
     const now = new Date().toISOString();
     const id = `ext.${crypto.randomUUID()}`;
 
     const trust = deriveStoredExtensionTrust(id, input.source);
+    let permissions = getDefaultPermissionsForTrust(trust);
+    for (const capability of input.grantCapabilities ?? []) {
+      permissions = setExtensionCapabilityAllowed(permissions, capability, true);
+    }
+
     const entry: StoredExtensionEntry = {
       id,
       name: input.name,
       enabled: true,
       source: input.source,
       trust,
-      permissions: getDefaultPermissionsForTrust(trust),
+      permissions,
       createdAt: now,
       updatedAt: now,
     };
@@ -924,19 +936,14 @@ export class ExtensionRuntimeManager {
       };
     };
 
-    const isCapabilityEnabled = (capability: ExtensionCapability): boolean => {
-      if (!isExperimentalFeatureEnabled("extension_permission_gates")) {
-        return true;
-      }
-
-      return isExtensionCapabilityAllowed(entry.permissions, capability);
-    };
+    const isCapabilityEnabled = (capability: ExtensionCapability): boolean =>
+      isExtensionCapabilityAllowed(entry.permissions, capability);
 
     const formatCapabilityError = (capability: ExtensionCapability): string => {
       const capabilityLabel = describeExtensionCapability(capability);
       return (
         `Permission denied for extension "${entry.name}": cannot ${capabilityLabel}. `
-        + "Disable /experimental extension-permissions or adjust extension permissions."
+        + "Grant it in Settings → Plugins → this extension → Permissions."
       );
     };
 
@@ -966,6 +973,12 @@ export class ExtensionRuntimeManager {
 
     try {
       if (state.runtimeMode === "sandbox-iframe") {
+        // The sandbox imports module specifiers itself, so apply the same
+        // source policy (remote URL opt-in) the host loader applies.
+        if (entry.source.kind === "module") {
+          assertExtensionModuleSourceAllowed(entry.source.specifier);
+        }
+
         const source = entry.source.kind === "inline"
           ? {
             kind: "inline" as const,
@@ -1057,6 +1070,7 @@ export class ExtensionRuntimeManager {
 
     try {
       clearExtensionWidgets(state.entryId);
+      dismissLegacyWidgetOwnedBy(state.entryId);
     } catch (error) {
       failures.push(getRuntimeManagerErrorMessage(error));
     }

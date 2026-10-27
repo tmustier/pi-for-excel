@@ -6,8 +6,12 @@ function isTaskpaneTabLayoutPayloadShape(value: unknown): value is Record<string
  * Persistence for open session tabs per workbook.
  *
  * Stores tab layout in SettingsStore so reloading the taskpane restores
- * the same set of session tabs and active tab.
+ * the same set of session tabs, their "Chat N" numbers and the active tab.
+ * A session appears in the layout at most once: one session, one tab.
  */
+
+import { Type } from "typebox";
+import { Value } from "typebox/value";
 
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
@@ -18,7 +22,14 @@ const GLOBAL_WORKBOOK_LAYOUT_KEY = "__global__";
 export interface WorkbookTabLayout {
   sessionIds: string[];
   activeSessionId: string | null;
+  /** Default "Chat N" number per open session. Absent in layouts saved before numbers were kept. */
+  tabNumbers?: Record<string, number>;
+  /** Next number a new tab gets, so numbers of closed tabs are not reused after a reload. */
+  nextTabNumber?: number;
 }
+
+const tabNumbersSchema = Type.Record(Type.String(), Type.Integer({ minimum: 1 }));
+const tabNumberSchema = Type.Integer({ minimum: 1 });
 
 function normalizeSessionId(value: unknown): string | null {
   if (typeof value !== "string") return null;
@@ -43,7 +54,8 @@ export function normalizeWorkbookTabLayout(layout: WorkbookTabLayout): WorkbookT
 
   for (const rawSessionId of layout.sessionIds) {
     const normalized = normalizeSessionId(rawSessionId);
-    if (!normalized) continue;
+    // Older builds could list one session twice; it restores as one tab.
+    if (!normalized || sessionIds.includes(normalized)) continue;
     sessionIds.push(normalized);
   }
 
@@ -52,10 +64,25 @@ export function normalizeWorkbookTabLayout(layout: WorkbookTabLayout): WorkbookT
     ? normalizedActiveSessionId
     : (sessionIds[0] ?? null);
 
-  return {
-    sessionIds,
-    activeSessionId,
-  };
+  const normalized: WorkbookTabLayout = { sessionIds, activeSessionId };
+
+  if (layout.tabNumbers) {
+    const tabNumbers: Record<string, number> = {};
+    const usedNumbers = new Set<number>();
+    for (const sessionId of sessionIds) {
+      const tabNumber = layout.tabNumbers[sessionId];
+      if (tabNumber === undefined || usedNumbers.has(tabNumber)) continue;
+      usedNumbers.add(tabNumber);
+      tabNumbers[sessionId] = tabNumber;
+    }
+    normalized.tabNumbers = tabNumbers;
+  }
+
+  if (layout.nextTabNumber !== undefined) {
+    normalized.nextTabNumber = layout.nextTabNumber;
+  }
+
+  return normalized;
 }
 
 export function parseWorkbookTabLayout(value: unknown): WorkbookTabLayout | null {
@@ -70,6 +97,14 @@ export function parseWorkbookTabLayout(value: unknown): WorkbookTabLayout | null
       .filter((sessionId): sessionId is string => sessionId !== null),
     activeSessionId: normalizeSessionId(value.activeSessionId),
   };
+
+  // Malformed numbers fall back to fresh numbering rather than dropping the layout.
+  if (Value.Check(tabNumbersSchema, value.tabNumbers)) {
+    parsed.tabNumbers = value.tabNumbers;
+  }
+  if (Value.Check(tabNumberSchema, value.nextTabNumber)) {
+    parsed.nextTabNumber = value.nextTabNumber;
+  }
 
   const normalized = normalizeWorkbookTabLayout(parsed);
   if (normalized.sessionIds.length === 0) return null;

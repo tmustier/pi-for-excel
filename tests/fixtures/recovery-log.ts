@@ -5,6 +5,16 @@ export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 export interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown): Promise<void>;
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void>;
+}
+
+function updateIn(values: Map<string, unknown>) {
+  return <T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> => {
+    const next = change(parse(values.get(key) ?? null));
+    if (next === undefined) values.delete(key);
+    else values.set(key, next);
+    return Promise.resolve();
+  };
 }
 
 export interface RecoveringInMemorySettingsStore extends InMemorySettingsStore {
@@ -28,6 +38,14 @@ export function createRecoveringInMemorySettingsStore(): RecoveringInMemorySetti
       values.set(key, value);
       return Promise.resolve();
     },
+    // A read-modify-write reads first, so it fails the same seeded way.
+    update: <T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> => {
+      if (key === RECOVERY_SETTING_KEY && failRecoveryRead) {
+        failRecoveryRead = false;
+        return Promise.reject(new Error("seeded recovery read failure"));
+      }
+      return updateIn(values)(key, parse, change);
+    },
     seed: (key: string, value: unknown): void => {
       values.set(key, value);
     },
@@ -46,6 +64,7 @@ export function createInMemorySettingsStore(): InMemorySettingsStore {
       values.set(key, value);
       return Promise.resolve();
     },
+    update: updateIn(values),
   };
 }
 

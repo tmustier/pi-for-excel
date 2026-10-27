@@ -5,7 +5,11 @@
  * Purpose-built for a narrow sidebar. Replaces pi-web-ui's MessageEditor.
  *
  * Events:
- *   'pi-send'        → detail: { text: string }
+ *   'pi-send'        → detail: { text: string; followUp: boolean } — Enter and the
+ *                      send button both submit through this one event; the
+ *                      host decides what the text becomes (command, steer,
+ *                      follow-up, queued or sent) and clears the composer
+ *   'input'          → the draft changed (typing or programmatic)
  *   'pi-abort'       → (no detail)
  *   'pi-files-drop'  → detail: { files: File[] }
  *   'pi-open-files'  → (no detail)
@@ -14,11 +18,11 @@
 import { html, LitElement } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, state, query } from "lit/decorators.js";
+import { keyed } from "lit/directives/keyed.js";
 import { FileText } from "lucide";
 
-import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
 import { t } from "../language/index.js";
-import { getSendText, resolveInputAutoGrowHeight, shouldSendOnEnter } from "./pi-input-behavior.js";
+import { getSendText, isSubmitKey, resolveInputAutoGrowHeight } from "./pi-input-behavior.js";
 
 const PLACEHOLDER_HINT_KEYS = [
   "input.placeholder.ask",
@@ -34,6 +38,8 @@ function getPlaceholderHintKey(index: number): string {
 @customElement("pi-input")
 export class PiInput extends LitElement {
   @property({ type: Boolean }) isStreaming = false;
+  /** The tab is busy (responding, compacting or waiting to retry): Stop replaces Send. */
+  @property({ type: Boolean }) busy = false;
 
   @state() private _value = "";
   @state() private _placeholderIndex = 0;
@@ -41,24 +47,48 @@ export class PiInput extends LitElement {
   @query("textarea") private _textarea!: HTMLTextAreaElement;
 
   private _placeholderTimer: ReturnType<typeof setInterval> | undefined;
+  /** Bumped when another tab's draft is shown; renders a fresh textarea. */
+  private _draftOwner = 0;
 
   get value(): string { return this._value; }
   set value(v: string) {
+    const changed = v !== this._value;
     this._value = v;
     if (this._textarea) {
       this._textarea.value = v;
       this._autoGrow();
     }
+    if (changed) this.dispatchEvent(new Event("input", { bubbles: true }));
   }
 
   getTextarea(): HTMLTextAreaElement { return this._textarea; }
 
-  clear(): void {
-    this._value = "";
-    if (this._textarea) {
-      this._textarea.value = "";
+  /**
+   * Shows another tab's draft. The browser keeps one undo history per
+   * textarea, so the draft goes into a fresh textarea: Ctrl/Cmd+Z then never
+   * replays typing from the tab shown before.
+   */
+  loadDraft(text: string): void {
+    const hadFocus = this._textarea !== null && document.activeElement === this._textarea;
+    this._draftOwner += 1;
+    this._value = text;
+    this.requestUpdate();
+    void this.updateComplete.then(() => {
+      const ta = this._textarea;
+      if (!ta) return;
+      ta.value = this._value;
       this._autoGrow();
-    }
+      if (hadFocus) ta.focus();
+    });
+  }
+
+  clear(): void {
+    this.value = "";
+  }
+
+  /** Submits the draft exactly as Enter would. */
+  submit(opts?: { followUp?: boolean }): void {
+    this._send(opts?.followUp === true);
   }
 
   override focus(): void { this._textarea?.focus(); }
@@ -73,6 +103,7 @@ export class PiInput extends LitElement {
     const nextValue = this._readTextareaValue();
     if (nextValue !== this._value) {
       this._value = nextValue;
+      this.dispatchEvent(new Event("input", { bubbles: true }));
     }
     return nextValue;
   }
@@ -92,20 +123,11 @@ export class PiInput extends LitElement {
     this.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
+  // Escape (stop) is handled once, by the taskpane's keyboard shortcuts.
   private _onKeydown = (e: KeyboardEvent) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      const value = this._syncValueFromTextarea();
-      if (!shouldSendOnEnter({ key: e.key, shiftKey: e.shiftKey, isStreaming: this.isStreaming, value })) return;
-      e.preventDefault();
-      this._send();
-      return;
-    }
-
-    if (e.key === "Escape" && this.isStreaming) {
-      if (doesUiClaimStreamingEscape(e.target)) return;
-      e.preventDefault();
-      this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }));
-    }
+    if (!isSubmitKey(e)) return;
+    e.preventDefault();
+    this._send(e.altKey);
   };
 
   private _onDragEnter = (event: DragEvent) => {
@@ -161,7 +183,7 @@ export class PiInput extends LitElement {
   private _onSendClick = (event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    this._send();
+    this._send(false);
   };
 
   private _onAbortClick = (event: MouseEvent) => {
@@ -170,15 +192,21 @@ export class PiInput extends LitElement {
     this.dispatchEvent(new CustomEvent("pi-abort", { bubbles: true }));
   };
 
-  private _send() {
+  private _send(followUp: boolean) {
     const text = getSendText(this._syncValueFromTextarea());
     if (!text) return;
-    this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text } }));
+    this.dispatchEvent(new CustomEvent("pi-send", { bubbles: true, detail: { text, followUp } }));
   }
 
   private _autoGrow() {
     const ta = this._textarea;
     if (!ta) return;
+    // Measuring needs `height: auto`, which collapses the textarea for a
+    // moment. Holding the card at its current height keeps that collapse out
+    // of the pane's layout; otherwise the transcript above grows, the browser
+    // clamps its scroll position, and that jump reads as the user scrolling up.
+    const card = ta.closest<HTMLElement>(".pi-input-card");
+    if (card) card.style.minHeight = `${card.offsetHeight}px`;
     ta.style.height = "auto";
     const height = resolveInputAutoGrowHeight({
       scrollHeight: ta.scrollHeight,
@@ -186,6 +214,7 @@ export class PiInput extends LitElement {
       cssMaxHeight: this._getTextareaCssMaxHeight(ta),
     });
     ta.style.height = `${height}px`;
+    if (card) card.style.minHeight = "";
   }
 
   private _getTextareaCssMaxHeight(ta: HTMLTextAreaElement): number {
@@ -233,7 +262,7 @@ export class PiInput extends LitElement {
         >
           ${icon(FileText, "sm")}
         </button>
-        <textarea
+        ${keyed(this._draftOwner, html`<textarea
           class="pi-input-textarea"
           .value=${this._value}
           placeholder=${this.isStreaming ? t("input.streaming.placeholder") : t(getPlaceholderHintKey(this._placeholderIndex))}
@@ -244,11 +273,11 @@ export class PiInput extends LitElement {
           @change=${this._onInput}
           @keyup=${this._onInput}
           @keydown=${this._onKeydown}
-        ></textarea>
+        ></textarea>`)}
         ${this._isDragOver
           ? html`<div class="pi-input-drop-hint">${t("input.drop.hint")}</div>`
           : null}
-        ${this.isStreaming
+        ${this.busy
           ? html`
             <button
               class="pi-input-btn pi-input-btn--abort"

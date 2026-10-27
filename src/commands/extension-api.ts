@@ -26,12 +26,8 @@
 import type { AgentEvent } from "@earendil-works/pi-agent-core";
 
 import {
-  ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY,
-  classifyExtensionSource,
-} from "./extension-source-policy.js";
-import {
+  assertExtensionModuleSourceAllowed,
   importExtensionModule,
-  readRemoteExtensionOptInFromStorage,
 } from "./extension-module-import.js";
 import {
   collectActivationCleanups,
@@ -234,7 +230,10 @@ function resolveWidgetApiV2Enabled(options: CreateExtensionAPIOptions): boolean 
   return isExperimentalFeatureEnabled("extension_widget_v2");
 }
 
-function showLegacyWidget(el: HTMLElement): void {
+/** Extension whose legacy `widget.show` content is in the shared slot. */
+let legacyWidgetOwnerId: string | null = null;
+
+function showLegacyWidget(ownerId: string, el: HTMLElement): void {
   let slot = document.getElementById("pi-widget-slot");
   if (!slot) {
     // Fallback: insert before .pi-input-area inside the sidebar
@@ -257,13 +256,26 @@ function showLegacyWidget(el: HTMLElement): void {
 
   slot.replaceChildren(el);
   slot.style.display = "flex";
+  legacyWidgetOwnerId = ownerId;
 }
 
 function dismissLegacyWidget(): void {
+  legacyWidgetOwnerId = null;
   const slot = document.getElementById("pi-widget-slot");
   if (slot) {
     slot.style.display = "none";
     slot.replaceChildren();
+  }
+}
+
+/**
+ * Remove an extension's legacy (`widget.show` without Widget API v2) widget
+ * when it is disabled, reloaded or uninstalled. Another extension's widget
+ * in the shared slot is left alone.
+ */
+export function dismissLegacyWidgetOwnedBy(ownerId: string): void {
+  if (legacyWidgetOwnerId === ownerId) {
+    dismissLegacyWidget();
   }
 }
 
@@ -725,7 +737,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
         assertCapability("ui.widget");
 
         if (!widgetApiV2Enabled) {
-          showLegacyWidget(el);
+          showLegacyWidget(widgetOwnerId, el);
           return;
         }
 
@@ -740,7 +752,7 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
 
       dismiss() {
         if (!widgetApiV2Enabled) {
-          dismissLegacyWidget();
+          dismissLegacyWidgetOwnedBy(widgetOwnerId);
           return;
         }
 
@@ -817,20 +829,7 @@ export async function loadExtension(
   }
 
   const specifier = source.trim();
-  const sourceKind = classifyExtensionSource(specifier);
-
-  if (sourceKind === "unsupported") {
-    throw new Error(
-      `Unsupported extension source "${specifier}". Only local module specifiers (./, ../, /), blob: URLs, and inline function activators are allowed by default.`,
-    );
-  }
-
-  if (sourceKind === "remote-url" && !readRemoteExtensionOptInFromStorage(globalThis.localStorage)) {
-    throw new Error(
-      "Remote extension URL imports are disabled by default. "
-      + `Set localStorage['${ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY}']='1' to opt in (unsafe).`,
-    );
-  }
+  const sourceKind = assertExtensionModuleSourceAllowed(specifier);
 
   if (sourceKind === "remote-url") {
     console.warn(`[pi] WARNING: loading remote extension URL due to explicit opt-in: ${specifier}`);

@@ -107,19 +107,21 @@ const PYTHON_WRAPPER_CODE = [
   "import sys",
   "import traceback",
   "",
-  "raw_input = os.environ.get('PI_INPUT_JSON', '')",
+  // Code and input arrive on stdin: an environment variable is capped at 128 KB on Linux (E2BIG).
+  "payload = json.loads(sys.stdin.buffer.read().decode('utf-8') or '{}')",
+  "raw_input = payload.get('input_json') or ''",
   "input_data = None",
   "if raw_input:",
   "    input_data = json.loads(raw_input)",
   "",
-  "user_code = os.environ.get('PI_USER_CODE', '')",
+  "user_code = payload.get('code') or ''",
   "scope = {'__name__': '__main__', 'input_data': input_data}",
   "",
   "try:",
   "    exec(user_code, scope, scope)",
   "except Exception:",
   "    traceback.print_exc()",
-  "    raise",
+  "    sys.exit(1)",
   "",
   "if 'result' in scope:",
   "    try:",
@@ -133,11 +135,13 @@ class HttpError extends Error {
   /**
    * @param {number} status
    * @param {string} message
+   * @param {Record<string, unknown>} [details] extra response fields
    */
-  constructor(status, message) {
+  constructor(status, message, details = {}) {
     super(message);
     this.name = "HttpError";
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -482,7 +486,7 @@ function probeLibreOfficeBinary() {
 }
 
 /**
- * @param {{ command: string; args: string[]; timeoutMs: number; env?: NodeJS.ProcessEnv }} options
+ * @param {{ command: string; args: string[]; timeoutMs: number; env?: NodeJS.ProcessEnv; stdin?: string }} options
  */
 async function runCommandCapture(options) {
   let timedOut = false;
@@ -490,9 +494,15 @@ async function runCommandCapture(options) {
 
   const result = await new Promise((resolve, reject) => {
     const child = spawn(options.command, options.args, {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       env: options.env,
     });
+
+    if (options.stdin !== undefined && child.stdin) {
+      // The process may exit before reading everything; its exit code reports why.
+      child.stdin.on("error", () => {});
+      child.stdin.end(options.stdin, "utf8");
+    }
 
     let stdout = "";
     let stderr = "";
@@ -590,17 +600,12 @@ function splitPythonResult(stdout) {
  * @param {{ command: string }} pythonInfo
  */
 async function runPython(request, pythonInfo) {
-  const env = {
-    ...process.env,
-    PI_USER_CODE: request.code,
-    PI_INPUT_JSON: request.input_json || "",
-  };
-
   const result = await runCommandCapture({
     command: pythonInfo.command,
     args: ["-I", "-c", PYTHON_WRAPPER_CODE],
     timeoutMs: request.timeout_ms,
-    env,
+    env: process.env,
+    stdin: JSON.stringify({ code: request.code, input_json: request.input_json || "" }),
   });
 
   if (result.code !== 0) {
@@ -608,7 +613,13 @@ async function runPython(request, pythonInfo) {
       .map((value) => value.trim())
       .find((value) => value.length > 0) || `python exited with code ${result.code}`;
 
-    throw new HttpError(400, message);
+    // The code ran: return its exit code and output with the error.
+    throw new HttpError(400, message, {
+      action: "run_python",
+      exit_code: result.code,
+      stdout: normalizeOutput(result.stdout),
+      stderr: normalizeOutput(result.stderr),
+    });
   }
 
   const parsed = splitPythonResult(result.stdout);
@@ -976,6 +987,7 @@ const handler = async (req, res) => {
       : "Internal server error.";
 
     respondJson(res, status, {
+      ...(isHttpError ? error.details : {}),
       ok: false,
       error: message,
     });

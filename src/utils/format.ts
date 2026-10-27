@@ -3,28 +3,103 @@
  * Converts Excel data into compact, token-efficient text.
  */
 
+import { Type } from "typebox";
+
 import { colToLetter, parseCell } from "../excel/helpers.js";
+
+/** A cell value as Office.js and WPS return it in `range.values`. */
+export type CellValue = string | number | boolean | null | undefined;
+
+/** Parse `range.values` / `range.formulas` with `Value.Parse`. */
+export const cellValueGridSchema = Type.Refine(
+  Type.Unsafe<CellValue[][]>({}),
+  (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) =>
+    cell === null || typeof cell === "string" || typeof cell === "number" || typeof cell === "boolean")),
+  () => "cell values must be a grid of strings, numbers, booleans or nulls",
+);
+
+/** Parse `range.text` / `range.numberFormat` with `Value.Parse`. */
+export const textGridSchema = Type.Refine(
+  Type.Unsafe<string[][]>({}),
+  (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === "string")),
+  () => "cell text must be a grid of strings",
+);
+
+/**
+ * Render a raw cell value as text. Numbers use the shortest exact form
+ * (`String`), so 0 is "0" and no digits are lost.
+ */
+export function formatCellValue(v: CellValue): string {
+  if (v === null || v === undefined) return "";
+  return typeof v === "string" ? v : String(v);
+}
+
+/**
+ * Escape text for one markdown table cell: backslashes, pipes and line breaks
+ * would otherwise split or merge grid cells. Line breaks become a literal `\n`.
+ */
+export function escapeMarkdownCell(text: string): string {
+  return text
+    .replace(/\\/g, "\\\\")
+    .replace(/\|/g, "\\|")
+    .replace(/\r\n|\r|\n/g, "\\n");
+}
+
+/** True when displayed text such as "£1,234.50", "12.5%" or "(3.00)" denotes exactly `value`. */
+function displayDenotesValue(text: string, value: number): boolean {
+  let s = text.trim();
+  let sign = 1;
+  if (/^\(.*\)$/u.test(s)) {
+    sign = -1;
+    s = s.slice(1, -1);
+  }
+  const percent = s.endsWith("%");
+  const numeric = s.replace(/[^0-9.eE+-]/gu, "");
+  if (numeric === "" || !/\d/u.test(numeric)) return false;
+  const parsed = Number(numeric);
+  if (!Number.isFinite(parsed)) return false;
+  const shown = sign * (percent ? parsed / 100 : parsed);
+  return Math.abs(shown - value) <= 1e-9 * Math.max(1, Math.abs(value));
+}
+
+/**
+ * Render a cell the way the user sees it, keeping the underlying value when the
+ * display hides it: `01/01/2024 [45292]`, `£98,765.43 [98765.4321]`. Displays
+ * that denote the value exactly (`12.5%`, `£1,234.50`) are shown alone. Cells
+ * in General format, and "####" overflow displays, show the raw value.
+ *
+ * Returns `usedRaw` when a bracketed raw value was appended, so callers can
+ * add a legend once.
+ */
+export function formatDisplayedCell(
+  value: CellValue,
+  text: string | undefined,
+  numberFormat: string | undefined,
+): { text: string; usedRaw: boolean } {
+  const raw = formatCellValue(value);
+  if (typeof value !== "number" || text === undefined || numberFormat === undefined || numberFormat === "" || numberFormat === "General") {
+    return { text: raw, usedRaw: false };
+  }
+  const shown = text.trim();
+  if (shown === "" || shown === raw || /^#+$/u.test(shown)) return { text: raw, usedRaw: false };
+  if (displayDenotesValue(shown, value)) return { text: shown, usedRaw: false };
+  return { text: `${shown} [${raw}]`, usedRaw: true };
+}
 
 /**
  * Format a 2D array as a markdown table.
- * Uses the first row as header.
+ * Uses the first row as header. Cell text is escaped so pipes and line breaks
+ * stay inside their cell.
  */
 export function formatAsMarkdownTable(values: unknown[][]): string {
   if (!values || values.length === 0) return "(empty)";
 
-  const stringify = (v: unknown): string => {
-    if (v === null || v === undefined || v === "") return "";
-    if (typeof v === "number") {
-      // Avoid scientific notation for readability
-      if (Math.abs(v) < 1e15 && Math.abs(v) > 1e-6) return String(v);
-      return v.toExponential(4);
-    }
-    if (typeof v === "string") return v;
-    if (typeof v === "boolean") return String(v);
-    return JSON.stringify(v);
-  };
-
-  const rows = values.map((row) => row.map(stringify));
+  const rows = values.map((row) => row.map((v) => {
+    const text = v === null || v === undefined ? ""
+      : typeof v === "string" || typeof v === "number" || typeof v === "boolean" ? formatCellValue(v)
+        : JSON.stringify(v);
+    return escapeMarkdownCell(text);
+  }));
   const numCols = Math.max(...rows.map((r) => r.length));
 
   // Pad rows to uniform width
@@ -88,7 +163,7 @@ export function findErrors(
     if (row === undefined) continue;
     for (let c = 0; c < row.length; c++) {
       const v = row[c];
-      if (typeof v === "string" && v.startsWith("#")) {
+      if (isExcelError(v)) {
         errors.push({
           address: `${colToLetter(start.col + c)}${start.row + r}`,
           error: v,
@@ -112,9 +187,15 @@ export function countNonEmpty(values: unknown[][]): number {
   return count;
 }
 
-/** True for Excel error values like #REF!, #VALUE!, #N/A, etc. */
+const EXCEL_ERROR_VALUES = new Set([
+  "#NULL!", "#DIV/0!", "#VALUE!", "#REF!", "#NAME?", "#NUM!", "#N/A",
+  "#GETTING_DATA", "#SPILL!", "#CALC!", "#FIELD!", "#BLOCKED!", "#CONNECT!",
+  "#BUSY!", "#UNKNOWN!", "#EXTERNAL!", "#PYTHON!", "#TIMEOUT",
+]);
+
+/** True for Excel error values (#REF!, #N/A, #DIV/0!, …); text such as "#1 priority" is not an error. */
 export function isExcelError(value: unknown): value is string {
-  return typeof value === "string" && /^#\w+!?$/.test(value);
+  return typeof value === "string" && EXCEL_ERROR_VALUES.has(value);
 }
 
 /**

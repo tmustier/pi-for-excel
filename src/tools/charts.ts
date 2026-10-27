@@ -2,10 +2,11 @@
  * charts — list, create, update, delete, and capture Excel charts.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import { parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -25,6 +26,7 @@ import { formatRecoveryChartAddress } from "../workbook/recovery/chart-state.js"
 import { getErrorMessage } from "../utils/errors.js";
 import type { ChartListItemDetails, ChartsDetails } from "./tool-details.js";
 import { recoveryCheckpointUnavailable } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies, MutationRecoveryStep } from "./mutation/types.js";
@@ -479,7 +481,7 @@ function formatChartList(items: ChartListItemDetails[], sheetName: string | unde
 }
 
 async function executeList(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const sheets: Excel.Worksheet[] = [];
 
     if (params.sheet) {
@@ -523,7 +525,7 @@ async function executeList(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const chartSheet = resolveCreateChartSheet(context, params);
     const source = resolveRange(context, requireSourceRange(params), chartSheet);
     const chartType = toExcelChartType(requireChartType(params));
@@ -583,7 +585,7 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     const chart = target.chart;
     let sourceForAddress: ResolvedRange | null = null;
@@ -632,7 +634,7 @@ async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     target.sheet.load("name");
     target.chart.load("name");
@@ -662,7 +664,7 @@ async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeGetImage(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     target.sheet.load("name");
     target.chart.load("name,width,height");
@@ -843,7 +845,11 @@ export function createChartsTool(
 
         return result.result;
       } catch (error) {
-        const message = getErrorMessage(error);
+        const failure = await describeExcelFailure(parseExcelError(error), {
+          ...(params.sheet !== undefined ? { sheet: params.sheet } : {}),
+          ...(params.source_range !== undefined ? { range: params.source_range } : {}),
+        });
+        const message = failure.reason;
 
         if (isMutation) {
           const outputAddress = params.name ?? params.source_range ?? params.sheet;
@@ -861,13 +867,14 @@ export function createChartsTool(
         }
 
         return {
-          content: [{ type: "text", text: `Error (${params.action}): ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action})${isMutation ? unchangedClause(failure, "no chart was changed") : ""}. ${message}` }],
           details: {
             kind: "charts",
             action: params.action,
             ...(params.name !== undefined ? { name: params.name } : {}),
             ...(params.source_range !== undefined ? { sourceRange: params.source_range } : {}),
           },
+          isError: true,
         };
       }
     },

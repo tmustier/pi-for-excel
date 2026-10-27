@@ -13,6 +13,7 @@ import { Code, Loader } from "lucide";
 
 import { icon } from "../icons.js";
 import { t } from "../../language/index.js";
+import type { ToolCardDisclosure } from "../tool-card-header.js";
 
 export interface ToolRenderResult {
   content: TemplateResult;
@@ -23,7 +24,8 @@ export interface ToolRenderer<TParams = unknown> {
   render(
     params: TParams | undefined,
     result: ToolResultMessage | undefined,
-    isStreaming?: boolean,
+    isStreaming: boolean,
+    disclosure: ToolCardDisclosure,
   ): ToolRenderResult;
 }
 
@@ -147,10 +149,11 @@ export function renderTool(
   params: unknown,
   result: ToolResultMessage | undefined,
   isStreaming: boolean,
+  disclosure: ToolCardDisclosure,
 ): ToolRenderResult {
   const renderer = getToolRenderer(toolName);
   if (renderer) {
-    return renderer.render(params, result, isStreaming);
+    return renderer.render(params, result, isStreaming, disclosure);
   }
   return renderDefaultTool(params, result, isStreaming);
 }

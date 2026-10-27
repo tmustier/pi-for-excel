@@ -229,6 +229,17 @@ class FirstReadRejectingSettings {
     this.values.delete(key);
     return Promise.resolve();
   }
+
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    if (this.unreadKeys.delete(key)) {
+      return Promise.reject(new Error(`seeded read failure: ${key}`));
+    }
+    const next = change(parse(structuredClone(this.values.get(key) ?? null)));
+    this.writes.push(key);
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, structuredClone(next));
+    return Promise.resolve();
+  }
 }
 
 class SourceBackend implements WorkspaceBackend {
@@ -392,13 +403,13 @@ void test("file mutations retry unread metadata and audit without overwriting pe
     kind: "memory",
     label: "Restarted session memory",
     files: [
-      { path: "old.txt", text: "existing", modifiedAt: 100 },
+      { path: "renamed.txt", text: "existing", modifiedAt: 100 },
       { path: "later.txt", text: "later", modifiedAt: 200 },
     ],
   });
   const restarted = new FilesWorkspace({ initialBackend: restartedBackend, settings });
   const files = await restarted.listFiles();
-  assert.equal(files.find((file) => file.path === "old.txt")?.workbookTag?.workbookLabel, "Existing.xlsx");
+  assert.equal(files.find((file) => file.path === "renamed.txt")?.workbookTag?.workbookLabel, "Existing.xlsx");
   assert.equal(files.find((file) => file.path === "later.txt")?.workbookTag?.workbookLabel, "Later.xlsx");
 
   const audit = await restarted.listAuditEntries();
@@ -717,8 +728,8 @@ void test("importFiles defaults to workspace source when native folder is connec
     type: "text/plain",
   });
 
-  const importedCount = await workspace.importFiles([file]);
-  assert.equal(importedCount, 1);
+  const importResult = await workspace.importFiles([file]);
+  assert.equal(importResult.imported, 1);
 
   const files = await workspace.listFiles();
   const uploaded = files.find((entry) => entry.path === "uploaded.txt");
@@ -730,6 +741,29 @@ void test("importFiles defaults to workspace source when native folder is connec
     locationKind: "workspace",
   });
   assert.equal(uploadedRead.text, "uploaded content");
+});
+
+void test("importFiles keeps an existing file and saves a same-named import with a suffix", async () => {
+  const workspace = new FilesWorkspace({
+    initialBackend: new SourceBackend({ kind: "opfs", label: "Sandboxed workspace", files: [] }),
+  });
+
+  await workspace.importFiles([new File(["old"], "Budget.csv", { type: "text/csv" })]);
+  const result = await workspace.importFiles([
+    new File(["new"], "budget.csv", { type: "text/csv" }),
+    new File(["newer"], "budget.csv", { type: "text/csv" }),
+  ]);
+
+  assert.deepEqual(result, {
+    imported: 2,
+    renamed: [
+      { from: "budget.csv", to: "budget (2).csv" },
+      { from: "budget.csv", to: "budget (3).csv" },
+    ],
+  });
+  assert.equal((await workspace.readFile("Budget.csv", { mode: "text" })).text, "old");
+  assert.equal((await workspace.readFile("budget (2).csv", { mode: "text" })).text, "new");
+  assert.equal((await workspace.readFile("budget (3).csv", { mode: "text" })).text, "newer");
 });
 
 void test("workspace context summary includes only relevant folders and current workbook artifacts", () => {
@@ -755,6 +789,20 @@ void test("workspace context summary includes only relevant folders and current 
   assert.match(summary.summary, /imports\/: 1 file \(imports\/source\.csv\)\./);
   assert.doesNotMatch(summary.summary, /scratch\/temp\.txt/);
   assert.doesNotMatch(summary.summary, /forecast-q3/);
+});
+
+void test("without a workbook identity, untagged files (e.g. dropped on the composer) are relevant", () => {
+  const snapshot = createWorkspaceSnapshot([
+    { path: "dropped.csv" },
+    { path: "workbooks/other/data.csv", workbookId: "wb-b" },
+    { path: "scratch/temp.txt" },
+  ]);
+
+  const summary = buildWorkspaceContextSummary({ snapshot, currentWorkbookId: null });
+
+  assert.equal(summary.hasRelevantFiles, true);
+  assert.match(summary.summary, /Files \(not tied to a saved workbook\): 1 file \(dropped\.csv\)\./);
+  assert.doesNotMatch(summary.summary, /other\/data\.csv|temp\.txt/);
 });
 
 void test("workspace context relevance signature ignores scratch-only changes", () => {
@@ -856,4 +904,29 @@ void test("workspace scratch cleanup fails open when delete throws", async () =>
 
   assert.ok(workspacePaths.includes("notes/keep.md"));
   assert.ok(workspacePaths.includes("scratch/stale.txt"));
+});
+
+void test("audited reads and lists do not emit a workspace change", async () => {
+  const backend = new MemoryBackend();
+  const workspace = new FilesWorkspace({ initialBackend: backend, initialWorkspaceBackend: backend });
+  await workspace.writeTextFile("notes.txt", "hello");
+
+  const events: string[] = [];
+  const target = new EventTarget();
+  const previousDocument = Reflect.get(globalThis, "document");
+  Reflect.set(globalThis, "document", target);
+  target.addEventListener("pi:files-workspace-changed", (event) => {
+    events.push(String(Reflect.get(Reflect.get(event, "detail") ?? {}, "reason")));
+  });
+  try {
+    const audit = { actor: "user" as const, source: "files-dialog" };
+    await workspace.readFile("notes.txt", { mode: "text", audit });
+    await workspace.listFiles({ audit });
+    assert.deepEqual(events, [], "a read must not look like a change, or the Files dialog re-reads in a loop");
+
+    await workspace.writeTextFile("notes.txt", "changed", undefined, { audit });
+    assert.deepEqual(events, ["write"]);
+  } finally {
+    Reflect.set(globalThis, "document", previousDocument);
+  }
 });

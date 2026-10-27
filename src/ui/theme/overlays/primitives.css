@@ -83,8 +83,13 @@
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
 }
 
-.pi-overlay-inline-control:disabled {
+.pi-overlay-inline-control:disabled,
+.pi-overlay-textarea:disabled {
   opacity: 0.6;
+}
+
+.pi-overlay-textarea:disabled {
+  cursor: not-allowed;
 }
 
 .pi-overlay-footer {
@@ -298,6 +303,37 @@
   flex-direction: column;
   gap: 12px;
   padding-right: 4px;
+}
+
+/* Short panes (Excel on the web can be ~340px tall): the whole card is the one
+   scroll region and the header stays pinned, instead of a body squeezed to a
+   sliver under the header. Specific enough to beat per-dialog rules (e.g.
+   resume's saved list). */
+@media (max-height: 520px) {
+  .pi-overlay .pi-overlay-card {
+    overflow-y: auto;
+  }
+
+  .pi-overlay .pi-overlay-card .pi-overlay-body {
+    flex: none;
+    overflow: visible;
+  }
+
+  .pi-overlay .pi-overlay-card .pi-overlay-body > * {
+    flex-shrink: 0;
+    min-height: auto;
+  }
+
+  /* Full-bleed over the card's 12px/14px short-pane padding (welcome.css). */
+  .pi-overlay .pi-overlay-card > .pi-overlay-header {
+    position: sticky;
+    top: -12px;
+    z-index: 1;
+    margin: -12px -14px 0;
+    padding: 12px 14px 8px;
+    background: var(--background);
+    border-bottom: 1px solid var(--alpha-6);
+  }
 }
 
 .pi-overlay-section,
@@ -703,4 +739,45 @@
   border-radius: var(--radius-sm);
   overflow: hidden;
   background: var(--alpha-3);
+}
+
+/* Approval dialogs (src/ui/approval-dialog.ts) */
+.pi-approval__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pi-approval__source,
+.pi-approval__note,
+.pi-approval__waiting {
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted-foreground);
+}
+
+.pi-approval__headline {
+  margin: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.pi-approval__details {
+  max-height: 220px;
+  overflow: auto;
+}
+
+.pi-approval__stop {
+  margin-inline-end: auto;
+}
+
+.pi-approval-card:focus {
+  outline: none;
+}
+
+.pi-approval__overwrites {
+  margin: 0;
+  font-size: 12px;
+  color: var(--foreground);
+  overflow-wrap: anywhere;
 }

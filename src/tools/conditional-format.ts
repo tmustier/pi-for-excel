@@ -6,18 +6,18 @@
  * - Cell value rules (greater/less/equal/between)
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { captureConditionalFormatState } from "../workbook/recovery-states.js";
 import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
-import { getErrorMessage } from "../utils/errors.js";
 import type { ConditionalFormatDetails } from "./tool-details.js";
 import {
-  CHECKPOINT_SKIPPED_NOTE,
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
+import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
 import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
@@ -131,12 +131,14 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
               kind: "conditional_format",
               action: params.action,
             },
+            isError: true,
           };
         }
 
         return await addFormat(toolCallId, params);
       } catch (e) {
-        const message = getErrorMessage(e);
+        const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
+        const message = failure.reason;
 
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
@@ -151,11 +153,12 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
         });
 
         return {
-          content: [{ type: "text", text: `Error: ${message}` }],
+          content: [{ type: "text", text: `Error (${params.action} on ${params.range})${unchangedClause(failure, "conditional formats were not changed")}. ${message}` }],
           details: {
             kind: "conditional_format",
             action: params.action,
           },
+          isError: true,
         };
       }
     },
@@ -168,7 +171,7 @@ async function clearFormats(
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
   const checkpointState = await captureConditionalFormatState(params.range);
 
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address,rowCount,columnCount");
@@ -232,7 +235,6 @@ async function clearFormats(
       },
       appendResultNote: appendMutationResultNote,
       unavailableReason: recoveryUnavailableReason,
-      unavailableNote: CHECKPOINT_SKIPPED_NOTE,
     },
   });
 
@@ -247,7 +249,7 @@ async function addFormat(
 
   const checkpointState = await captureConditionalFormatState(params.range);
 
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address,rowCount,columnCount");
@@ -353,7 +355,6 @@ async function addFormat(
       },
       appendResultNote: appendMutationResultNote,
       unavailableReason: recoveryUnavailableReason,
-      unavailableNote: CHECKPOINT_SKIPPED_NOTE,
     },
   });
 

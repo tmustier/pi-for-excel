@@ -7,7 +7,7 @@
  */
 
 import { bytesToBase64 } from "../files/encoding.js";
-import { getFilesWorkspace } from "../files/workspace.js";
+import { getFilesWorkspace, type PendingWorkspaceDownload } from "../files/workspace.js";
 import type { WorkspaceFileEntry } from "../files/types.js";
 import {
   getOfficeDocumentFileAdapter,
@@ -25,7 +25,8 @@ const DEFAULT_LIST_LIMIT = 20;
 interface ManualFullBackupWorkspace {
   listFiles: () => Promise<WorkspaceFileEntry[]>;
   writeBase64File: (path: string, base64: string, mimeTypeHint?: string) => Promise<void>;
-  downloadFile: (path: string) => Promise<void>;
+  /** Must be called before any `await`, while the user's click still counts. */
+  beginDownload: () => PendingWorkspaceDownload;
   deleteFile: (path: string) => Promise<void>;
 }
 
@@ -321,7 +322,42 @@ export class ManualFullWorkbookBackupStore {
     return this.listForWorkbookId(workbookId, limit);
   }
 
-  async create(): Promise<ManualFullWorkbookBackup> {
+  /**
+   * Opens the download before anything slow happens (see `beginDownload`),
+   * runs `produce`, and downloads the file it returns. Nothing produced closes
+   * the window again.
+   */
+  private async withDownload<T extends ManualFullWorkbookBackup | null>(
+    produce: () => Promise<T>,
+  ): Promise<T> {
+    const pending = this.dependencies.getWorkspace().beginDownload();
+    try {
+      const backup = await produce();
+      if (!backup) {
+        pending.cancel();
+        return backup;
+      }
+      await pending.download(backup.path);
+      return backup;
+    } catch (error) {
+      pending.cancel();
+      throw error;
+    }
+  }
+
+  /**
+   * Captures the workbook, stores the copy in the Files workspace, and
+   * downloads it. `runCapture` lets the caller hold the workbook lock during
+   * the capture so a copy never includes half of one of Pi's changes.
+   */
+  async createAndDownload(options: {
+    runCapture?: (capture: () => Promise<ManualFullWorkbookBackup>) => Promise<ManualFullWorkbookBackup>;
+  } = {}): Promise<ManualFullWorkbookBackup> {
+    const runCapture = options.runCapture ?? ((capture) => capture());
+    return this.withDownload(() => runCapture(() => this.create()));
+  }
+
+  private async create(): Promise<ManualFullWorkbookBackup> {
     const workbookContext = await this.dependencies.getWorkbookContext();
     const scoped = assertWorkbookIdentity(workbookContext);
 
@@ -347,48 +383,42 @@ export class ManualFullWorkbookBackupStore {
   }
 
   async downloadLatestForCurrentWorkbook(): Promise<ManualFullWorkbookBackup | null> {
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const scoped = assertWorkbookIdentity(workbookContext);
+    return this.withDownload(async () => {
+      const workbookContext = await this.dependencies.getWorkbookContext();
+      const scoped = assertWorkbookIdentity(workbookContext);
 
-    const backups = await this.listForWorkbookId(scoped.workbookId, 1);
-    const latest = backups[0];
-
-    if (!latest) {
-      return null;
-    }
-
-    const workspace = this.dependencies.getWorkspace();
-    await workspace.downloadFile(latest.path);
-    return latest;
+      const backups = await this.listForWorkbookId(scoped.workbookId, 1);
+      return backups[0] ?? null;
+    });
   }
 
   async downloadByIdForCurrentWorkbook(backupId: string): Promise<ManualFullWorkbookBackup | null> {
-    const workbookContext = await this.dependencies.getWorkbookContext();
-    const scoped = assertWorkbookIdentity(workbookContext);
-
-    const trimmedBackupId = backupId.trim();
+    const trimmedBackupId = backupId.trim().replace(/^#/, "");
     if (trimmedBackupId.length === 0) {
       return null;
     }
 
-    const backups = await this.listForWorkbookId(scoped.workbookId);
-    const match = backups.find((backup) => backup.id === trimmedBackupId);
+    return this.withDownload(async () => {
+      const workbookContext = await this.dependencies.getWorkbookContext();
+      const scoped = assertWorkbookIdentity(workbookContext);
 
-    if (!match) {
-      return null;
-    }
-
-    const workspace = this.dependencies.getWorkspace();
-    await workspace.downloadFile(match.path);
-    return match;
+      const backups = await this.listForWorkbookId(scoped.workbookId);
+      return backups.find((backup) => backup.id === trimmedBackupId) ?? null;
+    });
   }
 
-  async clearForCurrentWorkbook(): Promise<number> {
+  /**
+   * Deletes every manual backup of the current workbook. Identity is checked
+   * and the backups counted before `confirm` is asked, so the user is never
+   * asked about a deletion that cannot happen; `confirm` is not asked when
+   * there is nothing to delete. Returns the number deleted.
+   */
+  async clearForCurrentWorkbook(confirm: (count: number) => Promise<boolean> = () => Promise.resolve(true)): Promise<number> {
     const workbookContext = await this.dependencies.getWorkbookContext();
     const scoped = assertWorkbookIdentity(workbookContext);
 
     const backups = await this.listForWorkbookId(scoped.workbookId);
-    if (backups.length === 0) {
+    if (backups.length === 0 || !await confirm(backups.length)) {
       return 0;
     }
 

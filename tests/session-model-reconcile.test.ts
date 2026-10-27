@@ -165,3 +165,31 @@ void test("provider refresh applies metadata-only changes to a session on the sa
 
   assert.deepEqual(selected, provider.models[0]);
 });
+
+void test("renaming a custom gateway keeps its tabs and saved sessions on that gateway", async () => {
+  const keys = new MemoryProviderKeys();
+  // Another usable provider, so a lost gateway would be swapped to OpenAI's default.
+  await keys.set("openai", "test-key");
+  const renamed = customProvider();
+  const catalogModel = renamed.models[0];
+  assert.ok(catalogModel);
+  const beforeRename = { ...catalogModel, provider: "Gateway · Old name" };
+  let selected = beforeRename;
+  const runtimes: ModelRefreshRuntime[] = [{
+    runtimeId: "session-a",
+    model: selected,
+    isBusy: false,
+    applyModel: (model) => {
+      selected = model;
+      runtimes[0].model = model;
+    },
+  }];
+
+  const owner = createOwner(keys, runtimes, [renamed]);
+  await owner.restoreCached();
+
+  assert.equal(selected.provider, "Gateway · Local provider");
+  assert.equal(selected.id, "plain-model");
+  // A saved session restored later resolves the same way.
+  assert.equal(owner.resolveModel(beforeRename)?.provider, "Gateway · Local provider");
+});

@@ -21,6 +21,7 @@ interface InMemorySettingsStore {
   get<T>(key: string): Promise<T | null>;
   set(key: string, value: unknown): Promise<void>;
   delete(key: string): Promise<void>;
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void>;
 }
 
 function createInMemorySettingsStore(): InMemorySettingsStore {
@@ -41,6 +42,12 @@ function createInMemorySettingsStore(): InMemorySettingsStore {
     },
     delete: (key: string): Promise<void> => {
       values.delete(key);
+      return Promise.resolve();
+    },
+    update: <T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> => {
+      const next = change(parse(values.get(key) ?? null));
+      if (next === undefined) values.delete(key);
+      else values.set(key, next);
       return Promise.resolve();
     },
   };
@@ -65,6 +72,17 @@ class TransientAuditReadSettings {
 
   delete(key: string): Promise<void> {
     this.values.delete(key);
+    return Promise.resolve();
+  }
+
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    if (this.failNextRead) {
+      this.failNextRead = false;
+      return Promise.reject(new Error("transient audit read failure"));
+    }
+    const next = change(parse(this.values.get(key) ?? null));
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, next);
     return Promise.resolve();
   }
 
@@ -188,6 +206,41 @@ void test("workbook change audit log appends and reloads entries", async () => {
   const entriesB = await logB.list();
   assert.equal(entriesB.length, 1);
   assert.equal(entriesB[0]?.toolCallId, "call-1");
+});
+
+void test("two taskpanes appending to one audit log keep each other's entries", async () => {
+  const settingsStore = createInMemorySettingsStore();
+  const getWorkbookContext = (): Promise<WorkbookContext> => Promise.resolve({
+    workbookId: "url_sha256:shared",
+    workbookName: "Shared.xlsx",
+    source: "document.url",
+  });
+  let counter = 0;
+  const createLog = () => new WorkbookChangeAuditLog({
+    getSettingsStore: () => Promise.resolve(settingsStore),
+    getWorkbookContext,
+    createId: () => `entry-${++counter}`,
+  });
+  const paneA = createLog();
+  const paneB = createLog();
+  // Both panes have read the (empty) log before either writes.
+  assert.equal((await paneA.list()).length, 0);
+  assert.equal((await paneB.list()).length, 0);
+
+  const write = (log: WorkbookChangeAuditLog, toolCallId: string) => log.append({
+    toolName: "write_cells",
+    toolCallId,
+    blocked: false,
+    outputAddress: "Sheet1!A1",
+    changedCount: 1,
+    changes: [],
+  });
+  await write(paneA, "from-a");
+  await write(paneB, "from-b");
+  await Promise.all([write(paneA, "from-a-2"), write(paneB, "from-b-2")]);
+
+  const ids = (await createLog().list()).map((entry) => entry.toolCallId).sort();
+  assert.deepEqual(ids, ["from-a", "from-a-2", "from-b", "from-b-2"]);
 });
 
 void test("workbook change audit buffers entries across a transient initial read failure", async () => {
@@ -535,7 +588,10 @@ void test("view_settings tool appends audit entries for mutate success and failu
   });
 
   assert.match(firstText(errorResult), /sheet is required for activate/u);
-  assert.match(firstText(errorResult), /Backup not created/u);
+  // Nothing changed, so the failure is an error result and says so, with no backup note.
+  assert.equal(errorResult.isError, true);
+  assert.match(firstText(errorResult), /the view was not changed/u);
+  assert.doesNotMatch(firstText(errorResult), /Backup not created/u);
   assert.equal(errorAuditCapture.entries.length, 1);
   assert.equal(errorAuditCapture.entries[0]?.toolName, "view_settings");
   assert.equal(errorAuditCapture.entries[0]?.blocked, true);
@@ -562,6 +618,7 @@ void test("workbook_history restore appends audit entries for success and missin
         address: "Sheet1!A1:A2",
         changedCount: 2,
       }),
+      previewRestore: (snapshotId: string) => Promise.resolve({ id: snapshotId, at: 1, address: "Sheet1!A1:A2", laterEdits: null }),
       delete: () => Promise.resolve(false),
       clearForCurrentWorkbook: () => Promise.resolve(0),
     }),
@@ -589,6 +646,7 @@ void test("workbook_history restore appends audit entries for success and missin
         address: "",
         changedCount: 0,
       }),
+      previewRestore: (snapshotId: string) => Promise.resolve({ id: snapshotId, at: 1, address: "Sheet1!A1:A2", laterEdits: null }),
       delete: () => Promise.resolve(false),
       clearForCurrentWorkbook: () => Promise.resolve(0),
     }),

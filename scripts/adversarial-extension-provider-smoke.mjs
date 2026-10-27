@@ -499,10 +499,6 @@ async function runScenario() {
       feature: "extension_sandbox_runtime",
       enabled: false,
     });
-    await sendCommand(bridgeAgent, clientId, "setExperiment", {
-      feature: "extension_permission_gates",
-      enabled: true,
-    });
     await sendCommand(bridgeAgent, clientId, "configureProxy", {
       enabled: true,
       url: "https://localhost:3003",
@@ -806,10 +802,6 @@ async function runScenario() {
             }, 15_000);
           }
         }
-        await sendCommand(bridgeAgent, clientId, "setExperiment", {
-          feature: "extension_permission_gates",
-          enabled: false,
-        }, 15_000);
       } catch {
         // Preserve the original scenario error; cleanup is best-effort.
       }

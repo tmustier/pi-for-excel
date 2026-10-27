@@ -105,6 +105,12 @@ void test("current OpenAI providers select GPT-6.1 Sol as the default", () => {
   }
 });
 
+void test("with both OpenAI logins connected the default bills the ChatGPT subscription", () => {
+  for (const providers of [["openai", "openai-codex"], ["openai-codex", "openai"]]) {
+    assert.equal(pickDefaultModel(providers).provider, "openai-codex");
+  }
+});
+
 void test("OpenAI defaults compare versions before tiers and keep Codex as a fallback", () => {
   const provider = modelsRuntime.getProvider("openai");
   assert.ok(provider);
@@ -229,6 +235,10 @@ void test("dev rewrite routes OAuth hosts to dedicated proxies", () => {
   assert.equal(
     rewriteDevProxyUrl("https://console.anthropic.com/v1/oauth/token"),
     "/oauth-proxy/anthropic/v1/oauth/token",
+  );
+  assert.equal(
+    rewriteDevProxyUrl("https://api.github.com/copilot_internal/v2/token"),
+    "/api-proxy/github/copilot_internal/v2/token",
   );
 });
 

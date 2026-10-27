@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { test } from "node:test";
+import { isCorsError } from "../src/auth/cors-error.ts";
 
 import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 
@@ -326,4 +327,12 @@ void test("OpenAI Codex browser OAuth requires account ID on the access token", 
     () => provider.login(callbacks),
     /access token is missing ChatGPT account ID/,
   );
+});
+
+void test("a login flow whose code cannot load is not reported as a CORS problem", () => {
+  const moduleFailure = new TypeError(
+    "Failed to fetch dynamically imported module: https://localhost:3141/node_modules/.vite/deps/github-copilot.js",
+  );
+  assert.equal(isCorsError(moduleFailure), false);
+  assert.equal(isCorsError(new TypeError("Failed to fetch")), true);
 });

@@ -31,6 +31,13 @@ class MemorySettings {
     this.values.delete(key);
     return Promise.resolve();
   }
+
+  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
+    const next = change(parse(structuredClone(this.values.get(key) ?? null)));
+    if (next === undefined) this.values.delete(key);
+    else this.values.set(key, structuredClone(next));
+    return Promise.resolve();
+  }
 }
 
 function validAuditEntry(overrides: Record<string, unknown> = {}): Record<string, unknown> {

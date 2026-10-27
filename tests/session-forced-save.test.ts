@@ -74,7 +74,11 @@ class MemoryStorageBackend implements StorageBackend {
   }
 }
 
-async function createRuntime(backend: StorageBackend, autoRestoreLatest = false) {
+async function createRuntime(
+  backend: StorageBackend,
+  autoRestoreLatest = false,
+  onSavedAsCopy?: (args: { fromSessionId: string; toSessionId: string; title: string }) => void,
+) {
   const { sessions, settings } = initAppStorage("session-forced-save-test", backend);
   const faux = fauxProvider();
   const models = createModels();
@@ -87,7 +91,7 @@ async function createRuntime(backend: StorageBackend, autoRestoreLatest = false)
     agent,
     sessions,
     settings,
-    models,
+    resolveModel: (persisted) => models.getModel(persisted.provider, persisted.id),
     autoRestoreLatest,
     spreadsheetHost: {
       getWorkbookContext: () => Promise.resolve({
@@ -97,8 +101,9 @@ async function createRuntime(backend: StorageBackend, autoRestoreLatest = false)
       }),
       sessionStorage: settingsBackedSessionStorage,
     },
+    ...(onSavedAsCopy ? { onSavedAsCopy } : {}),
   });
-  return { agent, persistence };
+  return { agent, persistence, sessions };
 }
 
 void test("a forced save before the first assistant response survives a taskpane restart", async () => {
@@ -117,4 +122,39 @@ void test("a forced save before the first assistant response survives a taskpane
   const afterRestart = await createRuntime(backend, true);
   assert.equal(afterRestart.persistence.getSessionId(), sessionId);
   assert.match(JSON.stringify(afterRestart.agent.state.messages), /waiting for the first answer/u);
+});
+
+void test("one session open in two taskpanes keeps both conversations", async () => {
+  const backend = new MemoryStorageBackend();
+  const paneA = await createRuntime(backend);
+  paneA.agent.state.messages.push({ role: "user", content: "first turn", timestamp: 1 });
+  await paneA.persistence.saveSession({ force: true });
+  const sharedId = paneA.persistence.getSessionId();
+
+  const copies: string[] = [];
+  const paneB = await createRuntime(backend, false, ({ toSessionId }) => copies.push(toSessionId));
+  const loaded = await paneB.sessions.get(sharedId);
+  assert.ok(loaded);
+  await paneB.persistence.applyLoadedSession(loaded);
+
+  paneA.agent.state.messages.push({ role: "user", content: "Write 11 in K1", timestamp: 2 });
+  paneB.agent.state.messages.push({ role: "user", content: "Write 22 in K2", timestamp: 3 });
+  await paneA.persistence.saveSession({ force: true });
+  await paneB.persistence.saveSession({ force: true });
+
+  // Pane A's turn is not overwritten by pane B's older copy...
+  assert.match(JSON.stringify((await paneA.sessions.get(sharedId))?.messages), /Write 11 in K1/u);
+  // ...and pane B's turn is kept as a new session, which pane B now continues.
+  assert.equal(copies.length, 1);
+  assert.equal(paneB.persistence.getSessionId(), copies[0]);
+  const copy = await paneB.sessions.get(copies[0] ?? "");
+  assert.match(JSON.stringify(copy?.messages), /Write 22 in K2/u);
+  assert.doesNotMatch(JSON.stringify(copy?.messages), /Write 11 in K1/u);
+
+  // Later saves from either pane go through normally.
+  paneB.agent.state.messages.push({ role: "user", content: "next", timestamp: 4 });
+  await paneB.persistence.saveSession({ force: true });
+  assert.equal(copies.length, 1);
+  paneA.persistence.dispose();
+  paneB.persistence.dispose();
 });

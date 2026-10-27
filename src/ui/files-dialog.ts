@@ -11,13 +11,14 @@ import {
   type WorkspaceFileLocationKind,
   type WorkspaceFileWorkbookTag,
 } from "../files/types.js";
-import { type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
+import { describeImportRenames, type FilesWorkspaceAuditContext, getFilesWorkspace } from "../files/workspace.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { MarkdownBlock } from "./messages/markdown-block.js";
 import {
   createFilesDialogDetailActions,
   type FilesDialogDetailActionFileRef,
 } from "./files-dialog-actions.js";
+import { requestConfirmationDialog } from "./confirm-dialog.js";
 import {
   buildFilesDialogSections,
   type FilesDialogFolderGroup,
@@ -398,6 +399,12 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const dialog = createOverlayDialog({
     overlayId: OVERLAY_ID,
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-files-dialog",
+    // Escape in a file preview goes back to the list, like the back arrow.
+    onEscape: () => {
+      if (currentView !== "detail") return false;
+      showListView();
+      return true;
+    },
   });
 
   const closeOverlay = dialog.close;
@@ -458,6 +465,11 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   actionsRow.append(uploadButton, connectFolderButton);
 
+  // Visible reason when "Connect folder" cannot work in this host.
+  const connectFolderHint = document.createElement("p");
+  connectFolderHint.className = "pi-overlay-hint pi-files-connect-hint";
+  connectFolderHint.hidden = true;
+
   const hiddenInput = document.createElement("input");
   hiddenInput.type = "file";
   hiddenInput.multiple = true;
@@ -501,6 +513,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     listHeaderElements.header,
     detailHeader,
     actionsRow,
+    connectFolderHint,
     hiddenInput,
     listBody,
     footer,
@@ -511,6 +524,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   let allFiles: WorkspaceFileEntry[] = [];
   let currentView: "list" | "detail" = "list";
   let detailFileRef: FilesDialogFileRef | null = null;
+  let ownMutationPending = false;
   let filterText = "";
   let activePreviewObjectUrl: string | null = null;
   let detailRenderVersion = 0;
@@ -545,6 +559,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     listHeaderElements.header.hidden = !showList;
     actionsRow.hidden = !showList;
+    connectFolderHint.hidden = !showList || (connectFolderHint.textContent ?? "").length === 0;
     listBody.hidden = !showList;
     footer.hidden = !showList;
 
@@ -567,6 +582,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       fileRef,
       workspace,
       auditContext: DIALOG_AUDIT_CONTEXT,
+      onMutationStateChange: (pending) => { ownMutationPending = pending; },
       onAfterRename: async (nextPath, locationKind) => {
         await refreshWorkspaceState();
         renderListView();
@@ -861,6 +877,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     connectFolderButton.disabled = connectState.disabled;
     connectFolderButton.title = connectState.title;
     connectFolderButton.setAttribute("aria-label", connectState.label);
+    const blockedReason = !connectState.hidden && connectState.disabled ? connectState.title : "";
+    connectFolderHint.textContent = blockedReason;
+    connectFolderHint.hidden = blockedReason.length === 0 || currentView !== "list";
 
     if (connectFolderButton.lastChild) {
       connectFolderButton.lastChild.textContent = ` ${connectState.label}`;
@@ -980,7 +999,14 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     });
   };
 
-  const onWorkspaceChanged: EventListener = () => {
+  const onWorkspaceChanged: EventListener = (event) => {
+    // Preview actions refresh after updating their file reference. Reacting to
+    // their earlier workspace event would mistake the old path for an external removal.
+    if (ownMutationPending) return;
+    // The dialog shows no audit trail, and reading a file for the detail view
+    // records one: re-rendering on it replaced the detail buttons in a loop.
+    const detail: unknown = event instanceof CustomEvent ? event.detail : null;
+    if (typeof detail === "object" && detail !== null && "reason" in detail && detail.reason === "audit") return;
     void (async () => {
       try {
         await refreshWorkspaceState();
@@ -1018,6 +1044,27 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       return;
     }
 
+    if (backendStatus?.nativeConnected) {
+      const folder = backendStatus.nativeDirectoryName ?? "";
+      void (async () => {
+        try {
+          const ok = await requestConfirmationDialog({
+            title: t("files-dialog.disconnect.title"),
+            message: t("files-dialog.disconnect.message", { folder }),
+            confirmLabel: t("files-dialog.disconnect.confirm"),
+            cancelLabel: t("confirm.cancel"),
+            restoreFocusOnClose: false,
+          });
+          if (!ok) return;
+          await workspace.disconnectNativeDirectory({ audit: DIALOG_AUDIT_CONTEXT });
+          showToast(t("files-dialog.toast.disconnected", { folder }));
+        } catch (error) {
+          showToast(t("files-dialog.toast.connectFolderFailed", { error: getErrorMessage(error) }));
+        }
+      })();
+      return;
+    }
+
     void workspace.connectNativeDirectory({
       audit: DIALOG_AUDIT_CONTEXT,
     }).catch((error: unknown) => {
@@ -1037,8 +1084,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     void workspace.importFiles(files, {
       audit: DIALOG_AUDIT_CONTEXT,
     })
-      .then((count) => {
-        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }));
+      .then((result) => {
+        const count = result.imported;
+        showToast(t("files-dialog.toast.imported", { count, plural: count === 1 ? "" : "s" }) + describeImportRenames(result));
       })
       .catch((error: unknown) => {
         showToast(t("files-dialog.toast.uploadFailed", { error: getErrorMessage(error) }));

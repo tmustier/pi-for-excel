@@ -42,16 +42,137 @@ void test("open tab titles survive a taskpane reload", async () => {
   });
 });
 
-void test("renaming a tab confirms the entered visible title", async () => {
+void test("renaming a tab uses the in-pane dialog, focused on the title field", async () => {
   await withTaskpane(async (page) => {
-    page.once("dialog", async (dialog) => {
-      assert.equal(dialog.type(), "prompt");
-      await dialog.accept("Revenue Model");
-    });
+    page.once("dialog", () => assert.fail("tab rename must not use a native browser dialog"));
     await page.locator(".pi-session-tab__main").dblclick();
+    const dialog = page.locator("#pi-text-input-dialog-overlay");
+    const input = dialog.getByRole("textbox");
+    await input.waitFor({ state: "visible" });
+    assert.equal(await input.evaluate((node) => node === document.activeElement), true);
+    await page.keyboard.press("ControlOrMeta+A");
+    await page.keyboard.type("Revenue Model");
+    await page.keyboard.press("Enter");
+    await dialog.waitFor({ state: "detached" });
 
     await page.locator(".pi-session-tab__title").filter({ hasText: "Revenue Model" }).waitFor({ state: "visible" });
     assert.equal(await page.locator(".pi-session-tab__title").innerText(), "Revenue Model");
+  });
+});
+
+void test("a busy tab's model picker lists models but cannot pick one, and unlocks when the turn ends", async () => {
+  await withTaskpane(async (page) => {
+    // A connected provider, so the picker has models to list.
+    await page.evaluate(async () => {
+      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
+      const storage = await import("../../src/storage/local/app-storage.ts");
+      await storage.getAppStorage().providerKeys.set("openai", "sk-test");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const modelBefore = await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
+      // The sidebar's agent is the active tab's Agent: a stream that never answers keeps the turn running.
+      const agent = sidebar.agent as {
+        state: { model: { id: string } };
+        getApiKey: () => Promise<string>;
+        streamFunction: (model: unknown, context: unknown, options?: { signal?: AbortSignal }) => Promise<never>;
+      };
+      agent.getApiKey = () => Promise.resolve("test-key");
+      // Never answers; Stop (abort) ends the turn.
+      agent.streamFunction = (_model, _context, options) => new Promise<never>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+      return agent.state.model.id;
+    });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) {
+      await welcome.dispatchEvent("click");
+      await welcome.waitFor({ state: "detached" });
+    }
+    await enterCommand(page, "Keep working");
+    await page.locator(".pi-input-btn--abort").waitFor({ state: "visible" });
+
+    await enterCommand(page, "/model");
+    const picker = page.locator("#pi-model-selector-overlay");
+    await picker.getByRole("status").filter({ hasText: "Pi is working in this tab" }).waitFor({ state: "visible" });
+    const rows = picker.locator(".pi-model-selector-item");
+    await rows.nth(1).waitFor({ state: "visible" });
+    assert.equal(await picker.locator(".pi-model-selector-item:not([aria-disabled=true])").count(), 0);
+
+    // force: Playwright will not click an aria-disabled row; the test proves clicking it does nothing.
+    await rows.nth(1).click({ force: true });
+    await page.keyboard.press("Enter");
+    assert.equal(await picker.isVisible(), true);
+    assert.equal(await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar && "agent" in sidebar ? (sidebar.agent as { state: { model: { id: string } } }).state.model.id : null;
+    }), modelBefore);
+
+    // The turn ends while the picker stays open: the rows unlock without reopening it.
+    await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (sidebar && "agent" in sidebar) (sidebar.agent as { abort: () => void }).abort();
+    });
+    await picker.getByRole("status").waitFor({ state: "hidden" });
+    await page.waitForFunction(() => document.querySelectorAll(
+      "#pi-model-selector-overlay .pi-model-selector-item[aria-disabled=true]",
+    ).length === 0);
+    const pickedId = await rows.nth(1).locator(".pi-model-selector-item-id").innerText();
+    await rows.nth(1).click();
+    await picker.waitFor({ state: "detached" });
+    await page.waitForFunction((id) => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { id: string } } }).state.model.id === id;
+    }, pickedId);
+  });
+});
+
+void test("a tab saved on a provider that is no longer connected reloads on a connected model", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
+      const storage = await import("../../src/storage/local/app-storage.ts");
+      await storage.getAppStorage().providerKeys.set("openai", "sk-test");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const activeModel = () => page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) return null;
+      return (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider;
+    });
+    await page.waitForFunction(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider === "openai";
+    });
+
+    // The tab's saved model belongs to Google, which has no credentials here.
+    await page.evaluate(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
+      const agent = sidebar.agent as { state: { model: Record<string, unknown> } };
+      agent.state.model = { ...agent.state.model, provider: "google", id: "gemini-2.5-flash-lite" };
+    });
+    // Renaming saves the session, model included.
+    await page.locator(".pi-session-tab.is-active .pi-session-tab__main").dblclick();
+    const dialog = page.locator("#pi-text-input-dialog-overlay");
+    await dialog.locator("input").fill("Gemini tab");
+    await dialog.getByRole("button", { name: "Rename" }).click();
+    await dialog.waitFor({ state: "detached" });
+    await page.waitForTimeout(300);
+
+    await page.reload();
+    await page.locator(".pi-session-tab__title").filter({ hasText: "Gemini tab" }).waitFor({ state: "visible", timeout: 20_000 });
+    await page.waitForFunction(() => {
+      const sidebar = document.querySelector("pi-sidebar");
+      return sidebar !== null && "agent" in sidebar
+        && (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider !== "google";
+    }, undefined, { timeout: 10_000 }).catch(() => undefined);
+    assert.equal(await activeModel(), "openai");
   });
 });
 
@@ -224,5 +345,91 @@ void test("direct JavaScript tool cards identify the host runtime being used", a
       "Run Office.js Inspect workbook metadata",
       "Run WPS JSAPI Inspect workbook metadata",
     ]);
+  });
+});
+
+void test("an expired login whose refresh fails asks the user to sign in again and sends no stale token", async () => {
+  await withTaskpane(async (page) => {
+    const sentToAnthropic: string[] = [];
+    await page.route("**/v1/oauth/token", (route) => route.fulfill({
+      status: 400,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ error: "invalid_grant" }),
+    }));
+    await page.route("**/v1/messages**", (route) => {
+      sentToAnthropic.push(route.request().headers()["authorization"] ?? route.request().headers()["x-api-key"] ?? "");
+      return route.fulfill({ status: 401, headers: { "access-control-allow-origin": "*" }, body: "{}" });
+    });
+    // A Claude login stored by an earlier session; its token expired a minute ago.
+    await page.evaluate(async () => {
+      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
+      const storage = await import("../../src/storage/local/app-storage.ts");
+      const appStorage = storage.getAppStorage();
+      await appStorage.settings.set("oauth.anthropic", {
+        access: "stale-access", refresh: "dead-refresh", expires: Date.now() - 60_000,
+      });
+      await appStorage.providerKeys.set("anthropic", "stale-access");
+    });
+    await page.reload();
+    await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) {
+      await welcome.dispatchEvent("click");
+      await welcome.waitFor({ state: "detached" });
+    }
+
+    await enterCommand(page, "/model");
+    const picker = page.locator("#pi-model-selector-overlay");
+    await picker.locator(".pi-model-selector-search").fill("claude");
+    await picker.locator(".pi-model-selector-item")
+      .filter({ has: page.locator(".pi-model-selector-item-provider", { hasText: /^anthropic$/u }) })
+      .first().click();
+    await picker.waitFor({ state: "detached" });
+
+    await enterCommand(page, "Hello");
+    await page.getByText("Your Anthropic login has expired and could not be renewed. Sign in again in Settings.", { exact: true })
+      .waitFor({ state: "visible", timeout: 20_000 });
+    assert.deepEqual(sentToAnthropic, [], "the expired token was sent to Anthropic");
+  });
+});
+
+void test("GitHub Copilot login reaches its device code, and closing the code dialog stops the login", async () => {
+  await withTaskpane(async (page, context) => {
+    let tokenPolls = 0;
+    // In development GitHub's login endpoints go through Vite's /oauth-proxy/github route.
+    await context.route("**/oauth-proxy/github/login/device/code", (route) => route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({
+        device_code: "device-1",
+        user_code: "ABCD-1234",
+        verification_uri: "https://github.com/login/device",
+        interval: 1,
+        expires_in: 900,
+      }),
+    }));
+    await context.route("**/oauth-proxy/github/login/oauth/access_token", (route) => {
+      tokenPolls += 1;
+      return route.fulfill({ contentType: "application/json", body: JSON.stringify({ error: "authorization_pending" }) });
+    });
+
+    await enterCommand(page, "/login");
+    await page.getByText("GitHub Copilot", { exact: true }).first().click();
+    const firstPoll = page.waitForResponse("**/oauth-proxy/github/login/oauth/access_token");
+    await page.getByRole("button", { name: "Login with GitHub Copilot" }).click();
+    // GitHub Enterprise domain: blank means github.com.
+    const prompt = page.locator("#pi-prompt-overlay");
+    await prompt.locator("input").waitFor({ state: "visible" });
+    await prompt.getByRole("button", { name: /continue/i }).click();
+
+    await prompt.locator("code").filter({ hasText: "ABCD-1234" }).waitFor({ state: "visible" });
+    await firstPoll;
+
+    await page.keyboard.press("Escape");
+    await prompt.waitFor({ state: "detached" });
+    const pollsAtClose = tokenPolls;
+    await page.waitForTimeout(3_000);
+    assert.equal(tokenPolls, pollsAtClose, "the login kept polling after its dialog closed");
+    await page.getByRole("button", { name: "Login with GitHub Copilot" }).waitFor({ state: "visible" });
   });
 });
