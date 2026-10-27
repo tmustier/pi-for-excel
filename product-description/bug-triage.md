@@ -162,7 +162,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-150](#p-150-after-several-tab-switches-a-tool-group-can-lose-a-card-until-reload) | After several tab switches a tool group can lose a card until reload | low | transcript | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-151](#p-151-the-first-ctrlcmdo-appears-to-do-nothing-and-expanded-cards-collapse-again-on-re-render) | The first Ctrl/Cmd+O appears to do nothing, and expanded cards collapse again on re-render | low | transcript | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-152](#p-152-the-stop-button-and-escape-treat-queued-prompts-and-commands-differently) | The Stop button and Escape treat queued prompts and commands differently | low | turn | product call | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
-| [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Assigned to #790 (follow-up; not yet in the PR) |
+| [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7 |
 
 ## High
 
@@ -1438,8 +1438,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. A feature is unusable and the taskpane burns CPU while the doc is open.
 - **Decision needed:** `fix`. Audited reads should not emit a change event, or the dialog should ignore "audit" changes.
 - **Raised by:** desktop pass, 27 October 2026 (while checking FILES-24 on PR #796).
-- **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`.
-- **Owner:** Assigned to #790 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel for Mac and Safari; code unchanged from `main`. Fixed in #790 (e65c3b7): audited reads no longer emit a change event. In Excel on the web: 199 "audit" events in 2 s before, 0 after, and Copy content works. Not yet re-checked on a Mac.
+- **Owner:** Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7
 
 ## Low
 
