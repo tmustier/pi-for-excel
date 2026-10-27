@@ -137,6 +137,40 @@ void test("toasts sit above the composer dock as it grows", async () => {
   });
 });
 
+void test("toasts never cover the open slash-command menu", async () => {
+  await withTaskpane({ width: 349, height: 662 }, async (page) => {
+    await page.evaluate(async () => {
+      const { showToast } = await import("/src/ui/toast.ts");
+      showToast("First fixture toast", 60_000);
+      showToast("Second fixture toast", 60_000);
+    });
+    await page.locator("pi-input textarea").fill("/");
+    const rows = page.locator("#pi-command-menu .pi-cmd-item");
+    await rows.first().waitFor({ state: "visible" });
+    const result = await rows.evaluateAll((items) => {
+      const menu = document.querySelector("#pi-command-menu")?.getBoundingClientRect();
+      // Only rows scrolled into the menu's own viewport can be clicked.
+      const visible = items.filter((item) => {
+        const box = item.getBoundingClientRect();
+        return menu !== undefined && box.top >= menu.top && box.bottom <= menu.bottom;
+      });
+      const covered = visible.filter((item) => {
+        const box = item.getBoundingClientRect();
+        const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2);
+        return hit === null || !item.contains(hit);
+      });
+      return { visible: visible.length, covered: covered.length };
+    });
+    assert.ok(result.visible > 0);
+    assert.equal(result.covered, 0);
+
+    // A pointer click on a row runs it (hovering must not re-render the row away).
+    await page.locator("pi-input textarea").fill("/share");
+    await page.locator("#pi-command-menu .pi-cmd-item").first().click();
+    await page.waitForFunction(() => document.querySelector("pi-input textarea")?.value === "", undefined, { timeout: 3_000 });
+  });
+});
+
 void test("a toast with the same id replaces a long progress toast", async () => {
   await withTaskpane({ width: 380, height: 622 }, async (page) => {
     const messages = await page.evaluate(async () => {
