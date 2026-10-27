@@ -164,17 +164,17 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-152](#p-152-the-stop-button-and-escape-treat-queued-prompts-and-commands-differently) | The Stop button and Escape treat queued prompts and commands differently | low | turn | product call | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-153](#p-153-opening-a-built-in-doc-in-files-starts-a-render-loop-so-its-download-and-copy-buttons-never-respond) | Opening a built-in doc in Files starts a render loop, so its Download and Copy buttons never respond | medium | files | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open): e65c3b7 |
 | [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
-| [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 74c167b |
 | [P-156](#p-156-tab-from-an-open-dialog-in-excel-on-the-web-moves-focus-out-of-the-add-in) | Tab from an open dialog in Excel on the web moves focus out of the add-in | medium | dialogs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): aff33d6 |
 | [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
 | [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
-| [P-160](#p-160-the-tab-bars-scroll-arrows-snap-back) | The tab bar's scroll arrows snap back | low | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
-| [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Assigned to #793 (follow-up; not yet in the PR) |
-| [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | medium | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-160](#p-160-the-tab-bars-scroll-arrows-snap-back) | The tab bar's scroll arrows snap back | low | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): b268152 |
+| [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 655e9d2 |
+| [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | medium | tabs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 995487b |
 | [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
-| [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997 |
 
 ## High
 
@@ -2064,8 +2064,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. The command can be selected and copied by hand.
 - **Decision needed:** `fix`. Use #795's copyText.
 - **Raised by:** PROXY-10 (integration-fixes verification, setup cluster, 27 October 2026)
-- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes a2b3f2d; code unchanged from `main`. Fixed in #793 74c167b: execCommand fallback; checked in Excel on the web.
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 74c167b
 
 ### P-157: Ctrl+Z in one tab's composer brings back text typed in another tab
 
@@ -2112,8 +2112,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Other tabs are still reachable by keyboard and through the tab menu.
 - **Decision needed:** `fix`. Scroll the active tab into view only when the active tab changes.
 - **Raised by:** foundations integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c. Fixed in #793 b268152; checked in Excel on the web.
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): b268152
 
 ### P-161: In Files, the first Escape drops focus to the page body
 
@@ -2124,8 +2124,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Keyboard users need an extra key press.
 - **Decision needed:** `fix`. Make Files follow the overlay primitive's Escape rule.
 - **Raised by:** foundations integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c. Fixed in #793 655e9d2; checked in Excel on the web.
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 655e9d2
 
 ### P-162: The hover × draws over the tab title
 
@@ -2136,8 +2136,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `medium`. A click meant to switch closes a chat (Undo recovers it). Regression from #793 aff33d6 (TABS-05).
 - **Decision needed:** `fix`. Reserve space for the × on hover.
 - **Raised by:** ui and cross-cutting, and sessions-and-commands (TABS-05) integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 995487b: back to main's always-visible × kept in the layout; checked in Excel on the web.
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): 995487b
 
 ### P-163: Workbook approvals are not announced to screen readers
 
@@ -2148,7 +2148,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`. Announce workbook approvals through the shared announcer.
 - **Raised by:** ui and cross-cutting integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Only in the integration build: on #793 every approval goes through requestRuntimeToolApproval, which announces; #793 keeps that when merging #794.
 - **Owner:** Assigned to #793 (follow-up; not yet in the PR)
 
 ### P-164: A model picker opened while busy stays read-only after the turn ends
@@ -2172,5 +2172,5 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Clears in a few seconds.
 - **Decision needed:** `fix`.
 - **Raised by:** MENU-15, sessions-and-commands integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6. Fixed in #793 c88b997: the open menu sits above toasts; also stops hover re-renders that swallowed clicks (on main too).
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): c88b997
