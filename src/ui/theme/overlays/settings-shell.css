@@ -302,6 +302,10 @@
   outline: none;
 }
 
+.dark .pi-set-row__select {
+  background: var(--muted);
+}
+
 .pi-set-row__select:focus,
 .pi-set-row__select:focus-visible {
   border-color: var(--green-alpha-25);
