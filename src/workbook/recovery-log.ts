@@ -730,7 +730,10 @@ export class WorkbookRecoveryLog {
     return (await this.dependencies.getStore())?.move(args.fromWorkbookId, args.toWorkbookId, args.workbookLabel) ?? 0;
   }
 
-  async restore(snapshotId: string): Promise<RestoreWorkbookRecoverySnapshotResult> {
+  async restore(
+    snapshotId: string,
+    attribution: { turnId?: string; toolCallId?: string } = {},
+  ): Promise<RestoreWorkbookRecoverySnapshotResult> {
     const snapshot = await this.read(snapshotId);
     if (!snapshot) {
       throw new Error("Snapshot not found.");
@@ -748,7 +751,7 @@ export class WorkbookRecoveryLog {
       append: (args: TArgs, scope: RecoveryWorkbookScope) => Promise<WorkbookRecoverySnapshot | null>,
     ) => async (args: TArgs, appendScope: RecoveryWorkbookScope): Promise<WorkbookRecoverySnapshot | null> => {
       try {
-        return await append(args, appendScope);
+        return await append({ ...args, ...attribution }, appendScope);
       } catch (error) {
         inverse.error = getErrorMessage(error);
         return null;

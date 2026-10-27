@@ -320,10 +320,11 @@ function wrapDirectWorkbookJsToolWithHardGate(
       // workbook JS runs in the taskpane page realm, and workbook content is
       // untrusted input.
       const mode = await (dependencies.getExecutionMode?.() ?? Promise.resolve("safe" as const));
-      if (mode !== "yolo" || risk.flagged) {
+      if (mode !== "yolo" || risk.flagged || risk.destructive) {
         const approved = await requestApproval({
           ...request,
           ...(risk.flagged ? { riskIdentifiers: risk.identifiers } : {}),
+          ...(risk.destructive ? { destructive: true } : {}),
           ...(signal ? { signal } : {}),
         });
         throwIfAborted(signal);

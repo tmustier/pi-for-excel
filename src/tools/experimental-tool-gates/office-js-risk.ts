@@ -144,6 +144,7 @@ export interface OfficeJsCodeRiskAssessment {
   flagged: boolean;
   /** Catalog-ordered unique identifiers that triggered the assessment. */
   identifiers: string[];
+  destructive: boolean;
 }
 
 /**
@@ -163,5 +164,8 @@ export function assessOfficeJsCodeRisk(code: string): OfficeJsCodeRiskAssessment
   return {
     flagged: identifiers.length > 0,
     identifiers,
+    // Conservative tripwire, including bracket access and encoded identifiers.
+    // False positives ask once; this is not a sandbox or proof of reversibility.
+    destructive: scanTargets.some((target) => /\b(?:delete|clear|deleteAll|remove|removeAll|Delete|Clear|DeleteAll)\b/u.test(target)),
   };
 }

@@ -8,6 +8,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FillFormulaDetails } from "./tool-details.js";
@@ -40,7 +41,7 @@ import {
 
 const schema = Type.Object({
   range: Type.String({
-    description: 'Target range to fill, e.g. "B2:B20" or "Sheet1!C3:F20". Single contiguous range only.',
+    description: 'Sheet-qualified target range to fill, e.g. "Sheet1!C3:F20". Sheet name required. Single contiguous range only.',
   }),
   formula: Type.String({
     description: 'Formula to fill, starting with "=", e.g. "=SUM(B2:B10)". Relative refs will adjust.',
@@ -134,7 +135,7 @@ async function reportRefusedFill(toolCallId: string, outcome: RefusedFill): Prom
   });
 }
 
-export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDetails> & ApprovalPrecheck<typeof schema, FillFormulaDetails> & StopReporting {
+export function createFillFormulaTool(attribution: RecoveryAttribution = {}): AgentTool<typeof schema, FillFormulaDetails> & ApprovalPrecheck<typeof schema, FillFormulaDetails> & StopReporting {
   return {
     name: "fill_formula",
     label: "Fill Formula",
@@ -329,6 +330,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           result: toolResult,
           appendRecoverySnapshot: () => before
             ? getWorkbookRecoveryLog().append({
+              ...recoveryTurn(attribution, toolCallId),
               toolName: "fill_formula",
               toolCallId,
               address: fullAddr,

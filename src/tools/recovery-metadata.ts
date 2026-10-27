@@ -1,6 +1,15 @@
 import { MAX_RECOVERY_CELLS } from "../workbook/recovery/constants.js";
 import type { RecoveryCheckpointDetails } from "./tool-details.js";
 
+export interface RecoveryAttribution {
+  getTurnId?: (toolCallId: string) => string | undefined;
+}
+
+export function recoveryTurn(attribution: RecoveryAttribution, toolCallId: string): { turnId?: string } {
+  const turnId = attribution.getTurnId?.(toolCallId);
+  return turnId === undefined ? {} : { turnId };
+}
+
 export const CHECKPOINTED_TOOL_LABEL = "`write_cells`, `fill_formula`, `python_transform_range`, `format_cells`, `conditional_format`, `comments`, `charts` create/update, and supported `modify_structure` actions";
 
 export const NON_CHECKPOINTED_MUTATION_REASON =

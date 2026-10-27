@@ -3,6 +3,7 @@
  */
 
 import { Type, type Static } from "typebox";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import {
@@ -67,7 +68,7 @@ type RestoreResult = {
 interface WorkbookHistoryRecoveryLogLike {
   listForCurrentWorkbook(limit?: number): Promise<Array<Pick<RecoveryMetadata, "id">>>;
   pageForCurrentWorkbook(options?: RecoveryPageOptions): Promise<RecoveryPage>;
-  restore(snapshotId: string): Promise<RestoreResult>;
+  restore(snapshotId: string, attribution?: { turnId?: string; toolCallId?: string }): Promise<RestoreResult>;
   previewRestore(snapshotId: string): Promise<WorkbookRecoveryRestorePreview>;
   delete(snapshotId: string): Promise<boolean>;
   clearForCurrentWorkbook(): Promise<number>;
@@ -122,6 +123,7 @@ async function resolveSnapshotId(
 
 export function createWorkbookHistoryTool(
   dependencies: Partial<WorkbookHistoryToolDependencies> = {},
+  attribution: RecoveryAttribution = {},
 ): AgentTool<typeof schema, WorkbookHistoryDetails> {
   const resolvedDependencies: WorkbookHistoryToolDependencies = {
     getRecoveryLog: dependencies.getRecoveryLog ?? defaultDependencies.getRecoveryLog,
@@ -242,7 +244,7 @@ export function createWorkbookHistoryTool(
             };
           }
 
-          const restored = await log.restore(snapshotId);
+          const restored = await log.restore(snapshotId, { ...recoveryTurn(attribution, toolCallId), toolCallId });
           const lines: string[] = [];
           lines.push(`✅ Restored backup \`${(restored.restoredSnapshotId)}\` (from ${age}) at **${restored.address}**.`);
           lines.push(`Changed item(s): ${restored.changedCount.toLocaleString()}.`);

@@ -10,6 +10,9 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
  */
 
 import { html, render } from "lit";
+import { Value } from "typebox/value";
+import { readTurnBackups, summarizeTurnChanges, turnChangeActionSchema, undoTurnChanges } from "../messages/turn-changes.js";
+import { createOverlayDialog, createOverlayHeader } from "../ui/overlay-dialog.js";
 import { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
@@ -706,7 +709,7 @@ export async function initTaskpane(opts: {
   const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
 
   /** Every restore the user starts (/revert, the Backups page) runs here. */
-  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
+  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<boolean> => {
     const edits = preview.laterEdits;
     if (edits && !await requestConfirmationDialog({
       title: t("init.confirm.restoreOverEditsTitle"),
@@ -721,7 +724,7 @@ export async function initTaskpane(opts: {
       cancelLabel: t("init.confirm.keepEdits"),
       confirmButtonTone: "danger",
       restoreFocusOnClose: true,
-    })) return;
+    })) return false;
 
     const restored = await runUserWorkbookOperation(
       "workbook_history", () => restoreNotingTabs(preview.id),
@@ -729,10 +732,52 @@ export async function initTaskpane(opts: {
     const address = restored.address;
     if (restored.inverseSnapshotError) {
       showToast(t("init.revertedWithoutRollback", { address }), { duration: 8000, variant: "error" });
-      return;
+      return true;
     }
     showToast(t("init.revertedAddress", { address, age: formatBackupAge(preview.at) }));
+    return true;
   };
+
+  const undoingTurns = new Set<string>();
+  document.addEventListener("pi:turn-change-action", (event) => {
+    if (!(event instanceof CustomEvent)) return;
+    const raw: unknown = event.detail;
+    if (!Value.Check(turnChangeActionSchema, raw)) return;
+    const runtime = getActiveRuntime();
+    const summary = runtime?.agent.state.messages.find((message) => message.role === "turnChanges" && message.turnId === raw.summary.turnId);
+    if (!runtime || summary?.role !== "turnChanges") return;
+    if (raw.action === "review") {
+      const dialog = createOverlayDialog({ overlayId: "pi-turn-changes-review", cardClassName: "pi-overlay-card pi-overlay-card--s" });
+      const { header } = createOverlayHeader({ title: t("turnChanges.reviewTitle"), onClose: () => dialog.close() });
+      const body = document.createElement("div");
+      body.className = "pi-overlay-body";
+      for (const change of summary.changes) {
+        const row = document.createElement("p");
+        row.textContent = t("turnChanges.reviewChange", { address: change.address, count: change.changedCount });
+        const backup = document.createElement("p");
+        backup.textContent = change.backupIds.length > 0
+          ? t("turnChanges.reviewBackups", { ids: change.backupIds.join(", ") }) : t("turnChanges.partial");
+        body.append(row, backup);
+      }
+      dialog.card.append(header, body);
+      dialog.mount();
+      return;
+    }
+    if (undoingTurns.has(summary.turnId)) return;
+    undoingTurns.add(summary.turnId);
+    void undoTurnChanges(summary, async (id) => {
+      const preview = await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.previewRestore(id));
+      return restoreAfterConfirmation(preview);
+    }).catch((error) => {
+      showToast(t("turnChanges.undoFailed", { error: getErrorMessage(error) }), { variant: "error" });
+    }).finally(() => {
+      undoingTurns.delete(summary.turnId);
+      sidebar.syncFromAgent();
+      void runtime.persistence.saveSession({ force: true }).catch(() => {
+        showToast(t("turnChanges.summaryFailed"), { variant: "error" });
+      });
+    });
+  });
 
   const toRecoveryCheckpointSummary = (
     snapshot: RecoveryMetadata,
@@ -1008,12 +1053,16 @@ export async function initTaskpane(opts: {
     signal?: AbortSignal;
     source?: string;
     onStop?: () => void;
+    allowForTurn?: boolean;
+    note?: string;
   }): Promise<boolean> => {
     announce(t("announce.approval", { title: args.title }));
     return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
+      ...(args.allowForTurn ? { allowForTurn: true } : {}),
+      ...(args.note ? { note: args.note } : {}),
       ...(args.signal ? { signal: args.signal } : {}),
       ...(args.source ? { source: args.source } : {}),
       ...(args.onStop ? { onStop: args.onStop } : {}),
@@ -1030,6 +1079,9 @@ export async function initTaskpane(opts: {
     const runtimeAssistantCreatedFiles = new Set<string>();
 
     let runtimeAgent: Agent | null = null;
+    let currentTurnId = crypto.randomUUID();
+    const toolTurns = new Map<string, string>();
+    let currentTurnCalls = new Set<string>();
 
     /** Names this tab in its approvals when another tab is on screen. */
     /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
@@ -1060,6 +1112,7 @@ export async function initTaskpane(opts: {
         hostKind: spreadsheetHost.kind,
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
+        getTurnId: (toolCallId) => toolTurns.get(toolCallId),
         skillReadCache: runtimeSkillReadCache,
       }).filter(isRuntimeAgentTool);
 
@@ -1084,7 +1137,10 @@ export async function initTaskpane(opts: {
           getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         },
         {
-          onWriteStarted: (window) => changeTracker.notePiWrite(window, { kind: "runtime", runtimeId }),
+          onWriteStarted: (window) => {
+            if (toolTurns.get(window.toolCallId) === currentTurnId) currentTurnCalls.add(window.toolCallId);
+            changeTracker.notePiWrite(window, { kind: "runtime", runtimeId });
+          },
           onWriteCommitted: (event) => {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
@@ -1095,6 +1151,7 @@ export async function initTaskpane(opts: {
           getExecutionMode: () => executionModeController.readMode(),
           requestToolApproval: (request) => {
             const deletesBackups = request.reason === "always";
+            const irreversible = request.reason === "irreversible";
             const details = humanizeToolInput(request.toolName, request.params);
             const overwrites = request.overwrites
               ? t("approval.overwrites", {
@@ -1111,9 +1168,15 @@ export async function initTaskpane(opts: {
               title,
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
               ...(details ? { details } : {}),
-              note: deletesBackups ? t("approval.note.deleteBackups") : t("approval.note.confirmMode"),
+              note: deletesBackups ? t("approval.note.deleteBackups")
+                : irreversible ? t("approval.note.irreversible") : t("approval.note.confirmMode"),
+              allowForTurn: request.reason === "confirm_mode",
+              ...(irreversible && workbookId ? { secondaryApproval: {
+                label: t("approval.fullBackupFirst"),
+                onApprove: async () => { await createManualFullBackup(); },
+              } } : {}),
               confirmLabel: deletesBackups ? t("approval.allowDelete") : t("init.confirm.allowOnce"),
-              confirmTone: deletesBackups ? "danger" : "primary",
+              confirmTone: deletesBackups || irreversible ? "danger" : "primary",
               ...(request.signal ? { signal: request.signal } : {}),
               ...(overwrites ? { overwrites } : {}),
               onStop: stopRuntimeTurn,
@@ -1135,6 +1198,8 @@ export async function initTaskpane(opts: {
               : t("init.confirm.officeJsTitle"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
+            allowForTurn: !request.destructive && !request.riskIdentifiers?.length,
+            ...(request.destructive ? { note: t("approval.note.irreversible") } : {}),
             ...(request.signal ? { signal: request.signal } : {}),
             onStop: stopRuntimeTurn,
             ...approvalSource(),
@@ -1382,7 +1447,14 @@ export async function initTaskpane(opts: {
     // The tab's draft is kept with its session, so a reload brings it back.
     const unbindDraft = draftStore.bind(tab, persistence);
 
-    const unsubscribeErrorTracking = agent.subscribe((ev) => {
+    const unsubscribeErrorTracking = agent.subscribe(async (ev, signal) => {
+      if (ev.type === "agent_start") {
+        currentTurnId = crypto.randomUUID();
+        currentTurnCalls = new Set();
+      }
+      if (ev.type === "tool_execution_start") {
+        toolTurns.set(ev.toolCallId, currentTurnId);
+      }
       // A new message clears the tab's previous error.
       if (ev.type === "message_start" && ev.message.role === "user") {
         tab.setError(null);
@@ -1400,6 +1472,27 @@ export async function initTaskpane(opts: {
       const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
       const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
       runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
+      const endedTurnId = currentTurnId;
+      const endedTurnCalls = currentTurnCalls;
+      try {
+        const backups = await readTurnBackups(workbookRecoveryLog, endedTurnId);
+        const summary = summarizeTurnChanges({
+          turnId: endedTurnId,
+          timestamp: Date.now(),
+          outcome: signal.aborted || stopReason === "aborted" ? "stopped" : stopReason === "error" ? "failed" : "finished",
+          toolCallIds: endedTurnCalls,
+          audit: await getWorkbookChangeAuditLog().list(500),
+          backups,
+        });
+        if (summary) {
+          agent.state.messages = [...agent.state.messages, summary];
+          if (getActiveRuntime()?.runtimeId === runtimeId) sidebar.syncFromAgent();
+          await persistence.saveSession({ force: true });
+        }
+      } catch (error) {
+        console.warn("[pi] Could not summarize workbook changes:", getErrorMessage(error));
+        showToast(t("turnChanges.summaryFailed"), { variant: "error" });
+      }
     });
 
     return {

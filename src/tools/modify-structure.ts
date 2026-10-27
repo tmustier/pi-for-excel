@@ -5,10 +5,12 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { colToLetter } from "../excel/helpers.js";
+import { colToLetter, excelRun } from "../excel/helpers.js";
+import type { ApprovalPrecheck } from "./with-workbook-coordinator.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { MAX_RECOVERY_CELLS, getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import {
@@ -50,8 +52,7 @@ const schema = Type.Object({
   sheet: Type.Optional(
     Type.String({
       description:
-        "Target sheet name. Required for sheet operations and row/column operations on a specific sheet. " +
-        "If omitted for row/column ops, uses the active sheet.",
+        "Target sheet name. Required for every action except add_sheet. Never uses the active sheet.",
     }),
   ),
   position: Type.Optional(
@@ -579,7 +580,7 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStructureDetails> {
+export function createModifyStructureTool(attribution: RecoveryAttribution = {}): AgentTool<typeof schema, ModifyStructureDetails> & ApprovalPrecheck<typeof schema, ModifyStructureDetails> {
   return {
     name: "modify_structure",
     label: "Modify Structure",
@@ -588,6 +589,23 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
       "add/delete/rename/duplicate/hide/unhide sheets. " +
       "Be careful with deletions — there is no undo.",
     parameters: schema,
+    alwaysCheckBeforeApproval: true,
+    checkBeforeApproval: async (_toolCallId, params) => {
+      if (params.action !== "delete_sheet" && params.action !== "delete_rows" && params.action !== "delete_columns") return null;
+      return excelRun(async (context) => {
+        const sheet = targetSheet(context, params.sheet);
+        const count = Math.max(1, Math.floor(params.count ?? 1));
+        const position = params.position ?? 1;
+        const target = params.action === "delete_sheet" ? sheet
+          : params.action === "delete_rows" ? sheet.getRange(`${position}:${position + count - 1}`)
+          : sheet.getRange(`${columnNumberToLetter(position)}:${columnNumberToLetter(position + count - 1)}`);
+        const used = target.getUsedRangeOrNullObject(true);
+        used.load("isNullObject,rowCount,columnCount");
+        await context.sync();
+        const cells = used.isNullObject ? 0 : used.rowCount * used.columnCount;
+        return cells > MAX_RECOVERY_CELLS ? { unbackableCellCount: cells } : null;
+      });
+    },
     execute: async (
       toolCallId: string,
       params: Params,
@@ -647,6 +665,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
               }
 
               return getWorkbookRecoveryLog().appendModifyStructure({
+                ...recoveryTurn(attribution, toolCallId),
                 toolName: "modify_structure",
                 toolCallId,
                 address: checkpointAddress,

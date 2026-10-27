@@ -26,8 +26,8 @@ void test("system prompt renders Confirm execution mode guidance", () => {
   const prompt = buildSystemPrompt({ executionMode: "safe" });
 
   assert.match(prompt, /Current mode:\s*\*\*Confirm\*\*/);
-  assert.match(prompt, /explicit user confirmation before mutating workbook tools/i);
-  assert.match(prompt, /destructive structure operations as high-risk/i);
+  assert.match(prompt, /tool approval dialog is the confirmation/i);
+  assert.doesNotMatch(prompt, /Ask for explicit user confirmation before mutating|reconfirm before proceeding/i);
 });
 
 void test("system prompt embeds provided user and workbook instructions", () => {

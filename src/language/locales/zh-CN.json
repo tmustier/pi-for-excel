@@ -11,6 +11,10 @@
   "apiKeyDialog.title": "连接 {label}",
   "banner.dismiss": "关闭",
   "approval.allowDelete": "删除",
+  "approval.allowForTurn": "允许本轮剩余操作",
+  "approval.note.irreversible": "此操作无法通过备份撤销。无论哪种模式，Pi 都会询问此操作。",
+  "approval.fullBackupFirst": "先创建完整备份",
+  "approval.preparationFailed": "无法准备此更改。请重试或拒绝。",
   "approval.decline": "拒绝",
   "approval.fromTab": "来自标签页“{title}”",
   "approval.note.confirmMode": "确认模式：Pi 在每次更改工作簿前都会询问。",
@@ -1401,5 +1405,15 @@
   "tool-card.stopped.nothing": "— 未写入任何内容",
   "tool-card.stopped.after": "{address} — 已写入 {count} 个",
   "tool-card.stopped.afterCount": "— 已写入 {count} 个",
-  "tool-card.stopped.unknown": "{address} — 请检查已写入的内容"
+  "tool-card.stopped.unknown": "{address} — 请检查已写入的内容",
+  "turnChanges.summary": "已更改 {ranges}（{count} 项更改）",
+  "turnChanges.review": "查看",
+  "turnChanges.undo": "撤销本轮更改",
+  "turnChanges.undone": "已撤销",
+  "turnChanges.partial": "部分更改没有备份，无法在此撤销。",
+  "turnChanges.reviewTitle": "本轮更改",
+  "turnChanges.reviewChange": "{address} — 已更改 {count} 项",
+  "turnChanges.reviewBackups": "备份：{ids}",
+  "turnChanges.undoFailed": "无法完成本轮撤销：{error}",
+  "turnChanges.summaryFailed": "无法加载本轮更改。请检查工具卡片和备份。"
 }

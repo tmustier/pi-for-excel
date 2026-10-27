@@ -11,6 +11,10 @@
   "apiKeyDialog.title": "Connect {label}",
   "banner.dismiss": "Dismiss",
   "approval.allowDelete": "Delete",
+  "approval.allowForTurn": "Allow for the rest of this turn",
+  "approval.note.irreversible": "This can't be undone from Backups. Pi asks for this in every mode.",
+  "approval.fullBackupFirst": "Take a full backup first",
+  "approval.preparationFailed": "Couldn't prepare this change. Try again or decline.",
   "approval.decline": "Decline",
   "approval.fromTab": "From tab “{title}”",
   "approval.note.confirmMode": "Confirm mode: Pi asks before each change to the workbook.",
@@ -1401,5 +1405,15 @@
   "tool-card.stopped.nothing": "— nothing written",
   "tool-card.stopped.after": "{address} — {count} written",
   "tool-card.stopped.afterCount": "— {count} written",
-  "tool-card.stopped.unknown": "{address} — check what was written"
+  "tool-card.stopped.unknown": "{address} — check what was written",
+  "turnChanges.summary": "Changed {ranges} · Total: {count}",
+  "turnChanges.review": "Review",
+  "turnChanges.undo": "Undo this turn",
+  "turnChanges.undone": "Undone",
+  "turnChanges.partial": "Some changes have no backup and can't be undone here.",
+  "turnChanges.reviewTitle": "This turn's changes",
+  "turnChanges.reviewChange": "{address} — {count} changed",
+  "turnChanges.reviewBackups": "Backups: {ids}",
+  "turnChanges.undoFailed": "Couldn't finish undoing this turn: {error}",
+  "turnChanges.summaryFailed": "Couldn't load this turn's changes. Check the tool cards and Backups."
 }

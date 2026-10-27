@@ -13,6 +13,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
@@ -61,8 +62,8 @@ export { countOccupiedCells } from "./mutation/range-write.js";
 const schema = Type.Object({
   start_cell: Type.String({
     description:
-      'Top-left cell to write from, e.g. "A1", "Sheet2!B3". ' +
-      "If no sheet is specified, uses the active sheet.",
+      'Sheet-qualified top-left cell to write from, e.g. "Sheet2!B3". ' +
+      "The sheet name is required; unqualified addresses are refused.",
   }),
   values: Type.Array(Type.Array(Type.Any()), {
     description:
@@ -177,11 +178,13 @@ function refusedOutcome(
 
 export function createWriteCellsTool(
   dependencies: Partial<WriteCellsToolDependencies> = {},
+  attribution: RecoveryAttribution = {},
 ): AgentTool<typeof schema, WriteCellsDetails> & ApprovalPrecheck<typeof schema, WriteCellsDetails> & StopReporting {
   const resolvedDependencies: WriteCellsToolDependencies = {
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
-    appendRecoverySnapshot:
-      dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
+    appendRecoverySnapshot: (args) => (dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot)({
+      ...args, ...recoveryTurn(attribution, args.toolCallId),
+    }),
   };
   const mutationFinalizeDependencies: MutationFinalizeDependencies = {
     appendAuditEntry: resolvedDependencies.appendAuditEntry,

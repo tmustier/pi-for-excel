@@ -48,8 +48,7 @@ const schema = Type.Object({
   sheet: Type.Optional(
     Type.String({
       description:
-        "Target sheet name. Defaults to the active sheet for most actions. " +
-        "Required for hide/show/very_hide and activate.",
+        "Target sheet name. Required for mutations; get may use the active sheet.",
     }),
   ),
   count: Type.Optional(

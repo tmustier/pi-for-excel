@@ -74,6 +74,7 @@ import {
   type WriteVerification,
 } from "./mutation/range-write.js";
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { STOPPED_AFTER_CHANGE_NOTE, type StopReporting } from "./with-workbook-coordinator.js";
 
 const MIN_TIMEOUT_MS = 100;
@@ -82,7 +83,7 @@ const MAX_TIMEOUT_MS = 120_000;
 const schema = Type.Object({
   range: Type.String({
     description:
-      "Source range to read, e.g. \"A1:C20\" or \"Sheet2!B3:F200\".",
+      "Sheet-qualified source range to read, e.g. \"Sheet2!B3:F200\". Sheet name required.",
   }),
   code: Type.String({
     minLength: 1,
@@ -92,7 +93,7 @@ const schema = Type.Object({
   }),
   output_start_cell: Type.Optional(Type.String({
     description:
-      "Top-left destination cell for transformed output. Defaults to source range top-left on the same sheet.",
+      "Sheet-qualified top-left destination cell for transformed output. If supplied, sheet name is required. Defaults to source range top-left on the same sheet.",
   })),
   allow_overwrite: Type.Optional(Type.Boolean({
     description:
@@ -648,6 +649,7 @@ async function finishInterrupted(
   writeResult: Extract<WriteOutputResult, { blocked: false }>,
   interrupted: { text: string; stopped: boolean },
   context: { toolCallId: string; sourceAddress: string; bridgeUrl: string | undefined; withOutput: (text: string) => string },
+  attribution: RecoveryAttribution,
 ): Promise<AgentToolResult<PythonTransformRangeDetails>> {
   const { toolCallId, sourceAddress } = context;
   const changedCount = writeResult.rowsWritten * writeResult.colsWritten;
@@ -691,6 +693,7 @@ async function finishInterrupted(
       result,
       appendRecoverySnapshot: () => beforeValues && beforeFormulas
         ? getWorkbookRecoveryLog().append({
+          ...recoveryTurn(attribution, toolCallId),
           toolName: "python_transform_range",
           toolCallId,
           address: writeResult.outputAddress,
@@ -708,6 +711,7 @@ async function finishInterrupted(
 
 export function createPythonTransformRangeTool(
   dependencies: PythonTransformRangeToolDependencies = {},
+  attribution: RecoveryAttribution = {},
 ): AgentTool<TSchema, PythonTransformRangeDetails> & StopReporting {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
@@ -889,7 +893,7 @@ export function createPythonTransformRangeTool(
             sourceAddress,
             bridgeUrl: bridgeUrlUsed,
             withOutput,
-          });
+          }, attribution);
         }
 
         const changes = writeResult.changes;
@@ -945,6 +949,7 @@ export function createPythonTransformRangeTool(
               }
 
               return getWorkbookRecoveryLog().append({
+                ...recoveryTurn(attribution, toolCallId),
                 toolName: "python_transform_range",
                 toolCallId,
                 address: writeResult.outputAddress,
