@@ -52,7 +52,7 @@ export async function finalizeMutationRecoveryStep<TDetails extends MutationResu
     recovery.result.details.recovery = recoveryCheckpointUnavailable(reason);
     recovery.appendResultNote(
       recovery.result,
-      `⚠️ ${reason} This change cannot be reverted from backups.`,
+      `⚠️ ${reason.replace(/[.!?]?$/, ".")} This change cannot be reverted from backups.`,
     );
     notifyBackupSaveFailed();
     return {
