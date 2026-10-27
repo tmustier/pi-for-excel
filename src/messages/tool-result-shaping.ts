@@ -4,6 +4,11 @@ interface ToolResultShapingConfig {
   recentToolResultsToKeep: number;
   maxCharsBeforeCompaction: number;
   previewChars: number;
+  /**
+   * Tool calls whose results are compacted even when recent: large results
+   * of answered requests kept after a compaction summary.
+   */
+  compactToolCallIds?: ReadonlySet<string>;
 }
 
 export const DEFAULT_TOOL_RESULT_SHAPING: Readonly<ToolResultShapingConfig> = {
@@ -56,6 +61,7 @@ function clampPositiveInteger(value: number, fallback: number): number {
 
 function normalizeConfig(config: Partial<ToolResultShapingConfig> | undefined): ToolResultShapingConfig {
   return {
+    ...(config?.compactToolCallIds ? { compactToolCallIds: config.compactToolCallIds } : {}),
     recentToolResultsToKeep: clampPositiveInteger(
       config?.recentToolResultsToKeep ?? DEFAULT_TOOL_RESULT_SHAPING.recentToolResultsToKeep,
       DEFAULT_TOOL_RESULT_SHAPING.recentToolResultsToKeep,
@@ -198,7 +204,7 @@ export function shapeToolResultsForLlm(
       content: normalizeToolResultContent(message),
     };
 
-    if (recentSet.has(index)) return normalizedMessage;
+    if (recentSet.has(index) && !resolvedConfig.compactToolCallIds?.has(message.toolCallId)) return normalizedMessage;
 
     const payload = collectToolResultPayload(normalizedMessage.content);
     if (!shouldCompactToolResult(payload, resolvedConfig.maxCharsBeforeCompaction)) {
@@ -210,4 +216,11 @@ export function shapeToolResultsForLlm(
       content: [summarizeToolResult(normalizedMessage, payload, resolvedConfig.previewChars)],
     };
   });
+}
+
+/** A tool result as the model sees it once compacted (its preview). */
+export function compactToolResult(message: ToolResultMessage): ToolResultMessage {
+  const normalized: ToolResultMessage = { ...message, content: normalizeToolResultContent(message) };
+  const payload = collectToolResultPayload(normalized.content);
+  return { ...normalized, content: [summarizeToolResult(normalized, payload, DEFAULT_TOOL_RESULT_SHAPING.previewChars)] };
 }

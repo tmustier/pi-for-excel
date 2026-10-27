@@ -17,7 +17,7 @@ import type { Message } from "@earendil-works/pi-ai";
 import { effectiveRecentToolResultsToKeep } from "../context/window-budgets.js";
 import { autoContextToUserMessage } from "./auto-context.js";
 import { convertAttachments, isArtifactMessage, isUserMessageWithAttachments } from "./attachments.js";
-import { compactionSummaryToUserMessage } from "./compaction.js";
+import { compactionSummaryToUserMessage, getCompactedToolCallIds } from "./compaction.js";
 import { shapeToolResultsForLlm } from "./tool-result-shaping.js";
 
 /**
@@ -93,6 +93,7 @@ export function createConvertToLlm(options: {
 
     const shaped = shapeToolResultsForLlm(normalized, {
       recentToolResultsToKeep: effectiveRecentToolResultsToKeep(options.getContextWindow?.()),
+      compactToolCallIds: getCompactedToolCallIds(messages),
     });
     return convertStandardMessagesToLlm(shaped);
   };

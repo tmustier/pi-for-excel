@@ -10,6 +10,9 @@
 import type { Usage } from "@earendil-works/pi-ai";
 import type { AgentMessage, AgentState } from "@earendil-works/pi-agent-core";
 
+import { getCompactedToolCallIds } from "../messages/compaction.js";
+import { compactToolResult } from "../messages/tool-result-shaping.js";
+
 const CHARS_PER_TOKEN = 4;
 
 export function estimateTextTokens(text: string): number {
@@ -125,6 +128,10 @@ export function estimateContextTokens(
   }
 
   const usageIsStale = lastUsage !== null && lastCompactionTimestamp > lastUsageTimestamp;
+  const compacted = getCompactedToolCallIds(messages);
+  const estimate = (message: AgentMessage) => estimateMessageTokens(
+    message.role === "toolResult" && compacted.has(message.toolCallId) ? compactToolResult(message) : message,
+  );
 
   let totalTokens = 0;
   if (lastUsage && lastUsageIndex !== null && !usageIsStale) {
@@ -132,14 +139,14 @@ export function estimateContextTokens(
     for (let i = lastUsageIndex + 1; i < messages.length; i++) {
       const msg = messages[i];
       if (msg !== undefined) {
-        totalTokens += estimateMessageTokens(msg);
+        totalTokens += estimate(msg);
       }
     }
   } else {
     // No reliable usage signal (or it became stale after /compact). Estimate from scratch.
     totalTokens = estimateTextTokens(state.systemPrompt);
     for (const m of messages) {
-      totalTokens += estimateMessageTokens(m);
+      totalTokens += estimate(m);
     }
   }
 
