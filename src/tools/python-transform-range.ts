@@ -640,7 +640,8 @@ function formatBlockedMessage(
     "",
     `Source: **${inputAddress}**`,
     "",
-    "To overwrite, confirm with the user and retry with `allow_overwrite: true`.",
+    "If the user asked to change these cells, retry with `allow_overwrite: true`. " +
+      "Otherwise show the user the existing data and ask before overwriting.",
   ].join("\n");
 }
 
