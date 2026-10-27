@@ -43,7 +43,9 @@ export class WorkingIndicator extends LitElement {
       <div class="pi-working pi-working--fixed">
         <span class="pi-working__pill">
           <span class="pi-working__spinner" aria-hidden="true"></span>
-          ${this.primaryText || this._whimsical || t("working.default")}
+          <span class="pi-working__label" title=${this.primaryText || this._whimsical || t("working.default")}>
+            ${this.primaryText || this._whimsical || t("working.default")}
+          </span>
         </span>
         <span class="pi-working__hint">${this.hintText || t("working.hint.escape")}</span>
       </div>
