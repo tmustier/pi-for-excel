@@ -13,6 +13,7 @@ export const DEV_REWRITES: ReadonlyArray<readonly [prefix: string, proxy: string
   ["https://oauth2.googleapis.com/", "/api-proxy/google-oauth/"],
 
   // API endpoints
+  ["https://api.github.com/", "/api-proxy/github/"],
   ["https://api.anthropic.com/", "/api-proxy/anthropic/"],
   ["https://api.openai.com/", "/api-proxy/openai/"],
   ["https://chatgpt.com/", "/api-proxy/chatgpt/"],

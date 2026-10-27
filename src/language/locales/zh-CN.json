@@ -1265,6 +1265,7 @@
   "turn.toast.unknownCommand": "没有命令 /{command}。以空格开头即可作为消息发送",
   "turn.error.apiKeyRequired": "{provider} 需要 API 密钥。",
   "turn.error.loginExpired": "您的 {provider} 登录已过期且无法续期。请在设置中重新登录。",
+  "turn.error.copilotModelUnavailable": "您的 Copilot 套餐不支持此模型。请在模型选择器中尝试 GPT-5.4 nano，或选择其他服务商。",
   "turn.error.contextOverflow": "超出上下文窗口。请运行 /compact 释放上下文、缩小请求范围，或使用上下文更大的模型。",
   "turn.error.contextOverflowAfterRetry": "压缩并重试后仍超出上下文窗口。请运行 /compact、缩小请求范围，或使用上下文更大的模型。",
   "turn.error.offline": "你已离线。重新连接后再发送消息。",

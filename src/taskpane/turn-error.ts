@@ -45,6 +45,9 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
       ? t("turn.error.contextOverflowAfterRetry")
       : t("turn.error.contextOverflow");
   }
+  if (last.provider === "github-copilot" && /\bmodel_not_supported\b/u.test(error)) {
+    return t("turn.error.copilotModelUnavailable");
+  }
   if (isLikelyCorsErrorMessage(error)) {
     if (!context.online) return t("turn.error.offline");
     if (context.proxyUrl) return t("turn.error.proxyUnreachable", { url: context.proxyUrl });
