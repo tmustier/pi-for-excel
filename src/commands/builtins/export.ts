@@ -521,13 +521,12 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
             showToast(t("export.toast.copy_failed", { error: getErrorMessage(error) }), { variant: "error" });
             return;
           }
-          triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-          showToast(t("export.toast.transcript_download_instead", { count: String(countChatMessages(msgs)) }));
-          return;
         }
 
         triggerJsonDownload(`pi-session-${new Date().toISOString().slice(0, 10)}.json`, json);
-        showToast(t("export.toast.transcript_downloaded", { count: String(countChatMessages(msgs)) }));
+        showToast(t(destination === "download"
+          ? "export.toast.transcript_downloaded"
+          : "export.toast.transcript_download_instead", { count: String(countChatMessages(msgs)) }));
       },
     },
   ];
