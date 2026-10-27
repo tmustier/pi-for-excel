@@ -50,7 +50,7 @@ import {
   type SentGrid,
   type WriteBlock,
   type WriteTargetInspection,
-  type WriteVerification,
+  type WriteReadBack,
 } from "./mutation/range-write.js";
 
 export { countOccupiedCells } from "./mutation/range-write.js";
@@ -93,14 +93,10 @@ type WriteOutcome =
   | { kind: "occupied"; inspection: WriteTargetInspection }
   | { kind: "too_large_to_back_up"; inspection: WriteTargetInspection }
   | { kind: "stopped"; inspection: WriteTargetInspection }
-  | {
+  | ({
     kind: "written";
     inspection: WriteTargetInspection;
-    verification: WriteVerification | null;
-    verifyError: string | null;
-    /** Stop was pressed after the last chunk landed, so verification was skipped. */
-    stopped: boolean;
-  };
+  } & WriteReadBack);
 
 interface WriteCellsToolDependencies {
   appendAuditEntry: MutationFinalizeDependencies["appendAuditEntry"];
@@ -336,11 +332,6 @@ export function createWriteCellsTool(
       return successResult;
     },
   };
-}
-
-function countSentCells(padded: CellScalar[][]): number {
-  return padded.reduce((total, row) =>
-    total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0);
 }
 
 type InterruptCause =
@@ -598,7 +589,7 @@ function formatWritten(
   padded: CellScalar[][],
   fullAddr: string,
 ): AgentToolResult<WriteCellsDetails> {
-  const { inspection, verification, verifyError } = outcome;
+  const { inspection } = outcome;
   const qualify = (address: string): string => qualifiedAddress(inspection.sheetName, address);
   const startCell = `${colToLetter(block.startCol)}${block.startRow}`;
   const size = `(${block.rowCount}×${block.columnCount})`;
@@ -617,17 +608,18 @@ function formatWritten(
     };
   }
 
-  if (!verification) {
+  if (!outcome.verification) {
     return {
       content: [{
         type: "text",
-        text: `Written to **${fullAddr}** ${size}, but the result could not be read back to verify it: ${verifyError ?? "unknown error"}\n\n` +
+        text: `Written to **${fullAddr}** ${size}, but the result could not be read back to verify it: ${outcome.verifyError}\n\n` +
           "Read the range before relying on it.",
       }],
       details: { kind: "write_cells", blocked: false, address: fullAddr, verification: "failed" },
     };
   }
 
+  const verification = outcome.verification;
   const lines: string[] = [];
   const notWritten = verification.notWrittenCount;
   const totalCells = block.rowCount * block.columnCount;
@@ -678,7 +670,8 @@ function formatWritten(
       afterValues: verification.values,
       afterFormulas: verification.formulas,
     })
-    : sampledChanges(inspection.sheetName, block, verification, countSentCells(padded));
+    : sampledChanges(inspection.sheetName, block, verification, padded.reduce((total, row) =>
+      total + row.filter((value) => value !== "" && value !== null && value !== undefined).length, 0));
 
   if (changes.changedCount > 0) {
     lines.push("");

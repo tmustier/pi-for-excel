@@ -34,6 +34,7 @@ import {
   type SentGrid,
   type WriteBlock,
   type WriteTargetInspection,
+  type WriteReadBack,
   type WriteVerification,
 } from "./mutation/range-write.js";
 
@@ -59,15 +60,11 @@ type FillOutcome =
   | { kind: "obstacle"; inspection: WriteTargetInspection; block: WriteBlock; reason: string }
   | { kind: "occupied"; inspection: WriteTargetInspection; block: WriteBlock }
   | { kind: "too_large_to_back_up"; inspection: WriteTargetInspection; block: WriteBlock }
-  | {
+  | ({
     kind: "filled";
     inspection: WriteTargetInspection;
     block: WriteBlock;
-    verification: WriteVerification | null;
-    verifyError: string | null;
-    /** Stop was pressed after the fill landed, so verification was skipped. */
-    stopped: boolean;
-  }
+  } & WriteReadBack)
   | { kind: "stopped"; inspection: WriteTargetInspection; block: WriteBlock };
 
 const mutationFinalizeDependencies: MutationFinalizeDependencies = {
@@ -261,11 +258,11 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         ? formatFilled(inspection, block, verification, params.formula, fullAddr)
         : {
           content: [{
-            type: "text" as const,
-            text: `Filled formula across **${fullAddr}**, but the result could not be read back to verify it: ${outcome.verifyError ?? "unknown error"}\n\n` +
+            type: "text",
+            text: `Filled formula across **${fullAddr}**, but the result could not be read back to verify it: ${outcome.verifyError}\n\n` +
               "Read the range before relying on it.",
           }],
-          details: { kind: "fill_formula" as const, blocked: false, address: fullAddr, verification: "failed" as const },
+          details: { kind: "fill_formula", blocked: false, address: fullAddr, verification: "failed" },
         };
 
       if (signal?.aborted && !outcome.stopped) appendMutationResultNote(toolResult, STOPPED_AFTER_CHANGE_NOTE);
