@@ -829,6 +829,7 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
       }
       const runtime = options.getActiveRuntime();
       if (!runtime || isRuntimeBusy(runtime)) throw new Error("An idle active chat is required.");
+      const { workbookId } = await options.getWorkbookContext();
       await setIntegrationEnabledInScope({
         settings: getAppStorage().settings,
         scope: "session",
@@ -836,6 +837,7 @@ async function executeCommand(command: BridgeCommand, options: BridgeOptions): P
         integrationId: command.payload.integrationId,
         enabled: command.payload.enabled,
         knownIntegrationIds: INTEGRATION_IDS,
+        applyDefaultsWhenUnconfigured: workbookId === null,
       });
       dispatchIntegrationsChanged({ reason: "scope" });
       await runtime.refreshCapabilities();
