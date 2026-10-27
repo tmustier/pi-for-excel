@@ -236,13 +236,19 @@ export function createActionQueue(opts: {
   /**
    * Retries a run that failed with a transient provider error: drops the
    * failed response, waits with a visible countdown, and continues the turn.
-   * Stop during the wait keeps the failure in the transcript.
+   * If the turn still ends in an error (Stop during the wait, a retry that
+   * fails differently, or no retries left), the transcript keeps the first
+   * failed response: it holds any answer that streamed before the failure,
+   * which a retry that fails before streaming would otherwise replace. It
+   * carries the latest error, since that is why the turn ended.
    */
   async function retryTransientFailure(signal: AbortSignal): Promise<void> {
+    let firstFailure: AssistantMessage | null = null;
     for (let attempt = 1; attempt <= PROVIDER_RETRY_LIMIT; attempt++) {
       const failure = lastAssistant(agent.state.messages);
-      if (!failure || failure.stopReason !== "error" || signal.aborted) return;
-      if (!isRetryableAssistantError(failure) || findTrailingContextOverflowError(agent.state)) return;
+      if (!failure || failure.stopReason !== "error" || signal.aborted) break;
+      if (!isRetryableAssistantError(failure) || findTrailingContextOverflowError(agent.state)) break;
+      firstFailure ??= failure;
 
       agent.state.messages = agent.state.messages.slice(0, -1);
       const delayMs = retryDelayMs({ baseDelayMs: PROVIDER_RETRY_BASE_DELAY_MS }, attempt);
@@ -262,13 +268,21 @@ export function createActionQueue(opts: {
       } catch (error) {
         if (!(error instanceof StoppedError)) throw error;
         agent.state.messages = [...agent.state.messages, failure];
-        return;
+        break;
       } finally {
         tab.setActivity(null);
       }
 
       if (closed) return;
       await agent.continue();
+    }
+
+    const last = lastAssistant(agent.state.messages);
+    if (firstFailure && last && last !== firstFailure && last.stopReason === "error" && !findTrailingContextOverflowError(agent.state)) {
+      const kept: AssistantMessage = last.errorMessage === undefined
+        ? firstFailure
+        : { ...firstFailure, errorMessage: last.errorMessage };
+      agent.state.messages = [...agent.state.messages.slice(0, -1), kept];
     }
   }
 
