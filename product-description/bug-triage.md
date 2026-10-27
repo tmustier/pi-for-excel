@@ -178,7 +178,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): d32fd2b |
 | [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Fixed in [#806](https://github.com/tmustier/pi-for-excel/pull/806) (merged 27 October 2026) |
-| [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Open: not reproduced on the web; Mac cause unknown |
+| [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Not reproduced on main ff15b31 (closed) |
 | [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Fixed in [#802](https://github.com/tmustier/pi-for-excel/pull/802) (merged 27 October 2026) |
 | [P-171](#p-171-undo-this-turn-does-not-cover-direct-officejs-changes) | "Undo this turn" does not cover direct Office.js changes | low | workbook | fix | Follow-up (not started); [#808](https://github.com/tmustier/pi-for-excel/pull/808) (merged) shows the warning |
 
@@ -2226,8 +2226,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`.
 - **Decision needed:** `fix`.
 - **Raised by:** Desktop pass (HUB-16) on stack top 97e15a3, 27 October 2026
-- **Status:** Seen once in Excel for Mac. Does not reproduce in Excel on the web (trusted pointer click, keyboard and DOM activation all work, flag on and off); the Mac cause is unknown.
-- **Owner:** Open: not reproduced on the web; Mac cause unknown
+- **Status:** Not reproduced on main ff15b31, 27 October 2026. In Excel for Mac, background clicks and AXPress on Install, the gear, Send and Got it all deliver trusted pointer and click events and act; Install shows the remote-URL toast or "Enter a URL first." Also works on the web. The earlier failure (97e15a3) is attributed to a contended test harness.
+- **Owner:** Not reproduced on main ff15b31 (closed)
 
 ### P-170: Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs
 
