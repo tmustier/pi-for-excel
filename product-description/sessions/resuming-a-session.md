@@ -2,29 +2,22 @@
 
 ## Summary
 
-As of [PR #805](https://github.com/tmustier/pi-for-excel/pull/805) (CL-10), `/resume` and "Resume session" in the utilities menu open the same picker. Choosing a session focuses or opens a tab automatically. There are no target buttons, "Replace current tab" mode, default-target hint or `/resume-here` command.
+Resuming opens a saved [session](../foundations/sessions-and-tabs.md#what-a-session-is) again, so the user can pick up any earlier conversation, in this workbook or another. It happens in the resume picker, an [overlay](../glossary.md#the-taskpane) titled "Resume session". There are three ways in:
 
-Resume works while Pi is busy and needs no connected provider. It never replaces a conversation that is already in a tab.
+- `/resume`, which opens the picker with "Open in new tab" selected;
+- "Resume session" in the [utilities menu](../ui/the-utilities-menu.md), which does the same;
+- `/resume-here`, which opens it with "Replace current tab" selected.
 
-## Choosing a session
+The picker lists recently closed tabs and up to 30 saved sessions. By default it shows only sessions linked to this workbook or not linked to any. `/resume` and the menu work while the active tab is busy. `/resume-here` is refused while the active tab is busy, and so is "Replace current tab" chosen inside the picker. No provider is needed.
 
-The picker lists recently closed tabs and up to 30 saved sessions. Entries show the saved title (including model-written titles), visible chat-message count and modification date. Hidden bookkeeping messages do not count. The list is a snapshot taken when the picker opens.
+## The simple case
 
-When the workbook identity is known, "Show sessions from all workbooks" defaults off: linked sessions for this workbook and unlinked sessions are shown. With no known identity, all sessions are shown and the filter is absent. An entry linked to another workbook asks "Resume session from another workbook?" before loading. The confirmation does not promise a replacement target.
+The user types `/resume` and presses Enter. The picker opens over the taskpane. It shows "Open in new tab" highlighted, the hint "Default action: Open in new tab", a "Show sessions from all workbooks" checkbox with the workbook's file name, and a "Saved sessions" list. Each entry shows the session's saved title and "{count} messages · {date}", for example "12 messages · 2h ago". The most recently modified sessions come first.
 
-<<<<<<< Updated upstream
-Clicking a saved entry follows this order:
-=======
-The user clicks an entry. The picker closes and the conversation becomes active, with its saved model, thinking level, chosen title and unsent text. A new tab opens unless that session is already open, in which case Pi focuses it rather than duplicating it. The toast distinguishes those outcomes. Focus returns to the opener, or the composer if the opener no longer exists.
->>>>>>> Stashed changes
+The user clicks an entry. The picker closes, a new tab appears at the right end of the tab strip with that conversation, and it becomes active. The toast says "Resumed in new tab: {title}", and focus is in the composer. The user carries on the conversation from where it ended, with the session's model and thinking level.
 
-1. If that session is already open, focus its existing tab, even if that tab is busy. Do not reload it or overwrite its live state.
-2. Otherwise, reuse the active tab only if it is idle and has no visible conversation messages. Hidden setup instructions do not make a tab non-empty.
-3. Otherwise, open a new tab and activate it. A busy empty tab is not reused.
+## The interaction, event by event
 
-<<<<<<< Updated upstream
-The saved model, thinking level and title are restored when a session is loaded. The same session cannot be open twice. Recently closed entries use the reopen path and likewise focus an already-open session rather than duplicate it.
-=======
 ```mermaid
 stateDiagram-v2
     [*] --> picker : /resume, /resume-here, or "Resume session"
@@ -38,63 +31,50 @@ stateDiagram-v2
     picker --> reopened : choose a recently closed entry (new tab)
     loading --> new_tab : Open in new tab (tab added)
     loading --> replaced : Replace current tab, idle (transcript swapped)
-    loading --> picker : Replace current tab, busy (refusal, stays open)
+    loading --> refused : Replace current tab, busy (see Open questions)
     loading --> [*] : session missing ("Session not found")
     new_tab --> [*]
     replaced --> [*]
     refused --> [*]
     reopened --> [*]
 ```
->>>>>>> Stashed changes
 
-## After resume
+### Opening the picker
 
-The picker closes, focus returns to the composer, and the outcome toast distinguishes an opened, reused or focused tab. The layout and latest-session pointer are saved. An unlinked session is linked to the current workbook; an existing link to another workbook is preserved.
+When the picker opens, it reads the list of saved sessions once and works out the current [workbook identity](../foundations/sessions-and-tabs.md#workbook-links-and-workbook-identity). Then it shows these parts, top to bottom:
 
-The workbook itself is not restored or changed. Old backups belong to the workbook rather than to this conversation. The next message continues the stored conversation, and later saves use the same session identity.
+- **Header.** "Resume session", with the subtitle "Select a session to resume in a new tab or current tab." and a × button ("Close resume session").
+- **Target buttons.** "Open in new tab" and "Replace current tab". One is highlighted, and the hint below names it ("Default action: {action}"). `/resume` and the menu preselect "Open in new tab"; `/resume-here` preselects "Replace current tab". Clicking a target button changes the selection and does nothing else.
+- **Workbook filter.** "Show sessions from all workbooks", unchecked, followed by the workbook's label (its file name, see [workbook identity](../foundations/sessions-and-tabs.md#workbook-links-and-workbook-identity)). This row appears only when the workbook identity is known. When it is unknown, every session is shown and there is no checkbox. In this project's Excel on the web session the identity was unknown, and the picker had no checkbox (confirmed).
+- **"Recently closed".** The hint "Reopen recently closed tabs directly in a new tab.", then up to 6 tabs closed in this taskpane, newest first. With the filter unchecked, entries from other workbooks are hidden. The section is hidden when empty. See [reopening closed tabs](reopening-closed-tabs.md). Clicking an entry reopens it in a new tab even when "Replace current tab" is selected (confirmed in Excel on the web).
+- **"Saved sessions".** Up to 30 entries, each with its [saved title](../glossary.md#sessions-and-tabs) (or "Untitled") and "{count} messages · {date}". The date reads "just now", "{n}m ago", "{n}h ago", "{n}d ago", or a calendar date after a week. With the filter unchecked, sessions linked to this workbook come first, newest first, followed by sessions with no workbook link, newest first. Checking the filter shows every session, newest first. If nothing matches, the list says "No available sessions for this workbook."
 
-<<<<<<< Updated upstream
-## Cancel and failure
-=======
-Already-open sessions remain listed; choosing one focuses its existing tab.
->>>>>>> Stashed changes
+Sessions that are already open in a tab, including the active tab's own session, are listed like any other.
 
-- No saved or recently closed sessions: "No previous sessions".
-- A missing saved entry: "Session not found"; no conversation is replaced.
-- Close button, backdrop or Escape: dismiss without resuming; cancelling the cross-workbook confirmation returns to the picker.
-- Loading is local storage work, not a provider request. Provider failure does not prevent opening a saved session.
-- Closing the taskpane before choosing records nothing.
+### Ends at once
 
-<<<<<<< Updated upstream
-The picker uses the common modal focus/Escape handling; tab shortcuts and other overlay rules are owned by the keyboard and overlay documents.
-=======
 - **Nothing saved at all.** If there are no saved sessions and nothing recently closed, no picker opens. The toast says "No previous sessions".
-- **Dismissed.** ×, Escape or backdrop closes it without a resume. The picker takes and traps focus; typing and shortcuts do not act on the composer behind it. Escape dismisses only the topmost surface, not a running turn. Focus returns to the opener or composer fallback.
+- **Dismissed.** The ×, Escape, or a click on the dimmed backdrop closes the picker without doing anything. Focus returns to the composer. The picker does not take focus when it opens. After `/resume` or `/resume-here` from the composer, focus stays in the composer behind the picker: typing goes into it, and the first Escape only moves focus out of the composer to the tab strip. The second Escape closes the picker. Confirmed in Excel on the web. If the active tab is responding, that first Escape does not leave the composer: it stops the turn, with the picker still open (confirmed). The picker claims Escape only when focus is not in the composer: opened from the utilities menu while the tab was responding, Escape closed the picker and the turn carried on (confirmed).
 - **Cross-workbook confirmation cancelled.** If the chosen session is linked to a different workbook, a confirmation opens over the picker. Its title is "Resume session from another workbook?" and its message is "This session was created for a different workbook. Resume anyway in a new tab?" or "This session was created for a different workbook. Resume anyway and replace the current chat?", depending on the target. "Cancel" or Escape returns to the picker. Nothing is recorded. Confirmed in Excel on the web with the workbook address stubbed to two different OneDrive addresses (the real session reports none): the dialog, its new-tab wording, Escape returning to the picker, and "Resume anyway" opening the session in a new tab.
 - **`/resume-here` while busy.** The command is refused with "Can't run /resume-here while Pi is busy", and no picker opens.
->>>>>>> Stashed changes
 
-## Verification
+### Resumed
 
-<<<<<<< Updated upstream
-PR #805 has public runtime tests distinguishing focus-existing, idle-empty reuse and new-tab opening from a non-empty tab. Its Excel-web evidence exercises real saved sessions. This replaces the earlier observations about duplicate tabs, explicit replacement, busy replacement refusals and false replacement success toasts.
-=======
 The commitment is the click on an entry, or "Resume anyway". The session is read from storage. If it is no longer there, the toast is "Session not found" and the picker closes. Otherwise the picker closes and one of these happens:
 
-- **Already open.** Focus that session's existing tab, with an already-open notice; do not reload or duplicate its runtime.
-- **Open in new tab.** Add a tab at the right, carrying saved transcript, resolved current model, thinking level, chosen title and unsent text. An unnamed session uses a new default number. Show "Resumed in new tab: {title}".
-- **Replace current tab, idle.** Load the selected session and its title, model, thinking and unsent state into the current tab. The previous session remains saved; it is not added to recently closed. Show "Resumed in current tab: {title}".
-- **Replace current tab, busy.** Refuse with "Current tab is busy — use open in new tab or wait for it to finish"; keep the picker open and do not show a success toast.
+- **Open in new tab.** A new tab is added at the right end of the strip and becomes active. It holds the session's transcript, model (looked up again in the current model list) and thinking level. The tab's label is the next free "Chat N", not the session's saved title (see [tab labels](../foundations/sessions-and-tabs.md#tab-labels)). The toast says "Resumed in new tab: {title}".
+- **Replace current tab, while it is idle.** The active tab's transcript is replaced by the session's. Its model and thinking level become the session's. Its queue strip is cleared, and any chosen title is cleared, so the label goes back to the tab's own "Chat N". The session the tab held before stays in storage as it was last saved. It is not added to recently closed, and anything never saved, such as a draft-only tab, is gone. The toast says "Resumed in current tab: {title}". Confirmed in Excel on the web: the blank "Chat 1" took the "Q3 budget" transcript and kept its label.
+- **Replace current tab, while it is busy.** Nothing is replaced, and a toast says "Current tab is busy — use open in new tab or wait for it to finish". The picker then closes anyway, and that toast is immediately replaced by "Resumed in current tab: {title}", which is wrong (see [Open questions](#open-questions-and-verification)). Confirmed in Excel on the web: both toasts appeared in turn, the picker closed, and the tab's transcript and running turn were unchanged.
 
 In both success cases the session becomes this workbook's latest session, and the tab layout is saved. If the session was not linked to any workbook, it is now linked to this one. A session linked to another workbook keeps that link, so the confirmation appears again next time.
 
 ### While loading
 
-The picker stays open and exposes `aria-busy` until the load finishes. Repeated clicks are ignored while an open is in progress.
+Loading one session is quick, and there is no indicator. The picker stays open until the load finishes. A second click during that time starts a second resume.
 
 ### After resuming
 
-The user is in the resumed tab with its own composer/Not sent rows and per-tab error state. No workbook state is restored by resuming a conversation. The next save writes to the same session.
+The user is in the resumed tab with focus in the composer. The composer keeps whatever text it had, because it is [shared by all tabs](../foundations/sessions-and-tabs.md#what-a-tab-owns). The error banner, if one was showing, stays. Nothing in the workbook changes. The conversation continues from the session's last message, and the next save writes to the same session.
 
 ## Modifiers
 
@@ -113,9 +93,9 @@ The list is a snapshot taken when the picker opens. Sessions saved by other tabs
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Escape closes only the top confirmation/picker, not the turn underneath. | Loading is not cancellable. |
-| The user sends something else | Modal focus prevents sending behind the picker. | Not applicable. |
-| Tab switched, created, closed or reopened | Modal blocks tab shortcuts behind it. | Not applicable. |
+| Stop (button or Escape) | Escape closes the cross-workbook confirmation if it is open, otherwise the picker. If focus is still in the composer, the first Escape only leaves the composer, or, while the tab is responding, stops the turn behind the open picker. With focus elsewhere, Escape does not stop a responding tab while the picker is open. The Stop button is under the backdrop. | Loading cannot be stopped. |
+| The user sends something else | If focus is still in the composer behind the picker, typing and Enter reach it: a message or slash command is sent to the active tab while the picker stays open. Confirmed in Excel on the web: a message typed after `/resume` started a turn behind the open picker. | Not applicable. |
+| Tab switched, created, closed or reopened | The picker covers the tab strip. Ctrl/Cmd+T, Ctrl/Cmd+W and Ctrl/Cmd+Shift+T still act behind it, and "Replace current tab" then targets whichever tab is active at the moment of the click. | Not applicable. |
 | An overlay or menu opens | The cross-workbook confirmation is the only overlay expected on top. | Not applicable. |
 | Model or thinking level changes | Not reachable while the picker is open. | Not applicable. |
 | The provider fails | No effect. Resuming makes no network request. | Not applicable. |
@@ -132,7 +112,7 @@ After a cancelled picker the user is back on the tab they started from, with the
 
 **Workbook changes and recovery.** No interaction. A resumed session does not bring back the workbook state it was used with, and its old [backups](../workbook/backups-and-revert.md) belong to the workbook, not the session.
 
-**Other tabs and sessions.** At most one runtime per session in a taskpane. Resume/reopen focuses an existing tab. This does not prevent another taskpane opening the same session.
+**Other tabs and sessions.** Resuming a session that is already open in another tab opens a second tab on the same session. "Replace current tab" can also put a session into a tab next to another tab that already holds it. Two tabs on one session overwrite each other's saves. The picker gives no sign that a session is open.
 
 **Execution mode and approvals.** No interaction.
 
@@ -146,27 +126,31 @@ After a cancelled picker the user is back on the tab they started from, with the
 
 **Host differences.** See the Host row above and [host differences](../cross-cutting/host-differences.md).
 
-**Language.** Picker and outcome toasts are translated; stored/user text is not rewritten.
+**Language.** The picker text is translated. In the success toast, the words "new tab" and "current tab" are hard-coded English. The "Untitled" saved title stored with sessions is English too.
 
-**Accessibility and keyboard.** Modal dialog with focus entry, trapped Tab and focus restoration. Entries and target controls are buttons; target uses `aria-pressed`. The card/list can scroll in a short pane. Tab moves through entries; no list search is supplied.
+**Accessibility and keyboard.** The picker is marked as a modal dialog, but it does not move focus into itself and does not make the sidebar behind it inert. A keyboard user who opened it from the composer has to press Escape, or Tab out of the composer, to reach it. The entries and target buttons are buttons. The target buttons expose their state with `aria-pressed`. There is no search or arrow-key navigation in the list, so Tab moves through entries.
 
 ## Edge cases
 
 - Only the 30 most recent sessions that pass the filter are listed. Older sessions cannot be reached from the picker, and sessions are never deleted.
 - Blank tabs that were closed or restored appear as "Untitled" with "1 messages", because message counts include Pi's hidden instructions.
 - With the filter unchecked, a recent unlinked session appears below every linked session, however old they are.
-- Choosing the active tab's session focuses it without reloading its saved copy.
+- Choosing the active tab's own session with "Replace current tab" reloads it from its last save. Unsaved changes, such as a chosen title, are lost.
 - A session saved while the workbook had no identity is unlinked and appears in every workbook's picker.
-- The picker is single-instance; the modal prevents typing another command behind it.
+- Running `/resume` again while the picker is open closes it instead of opening a second one. This can happen by typing into the composer behind the picker.
 
 ## Open questions and verification
 
-- Merged `openSession`, resume-overlay and shared modal code establish deduplication, truthful refusal, saved title, focus and in-flight guard behavior. Earlier failures remain historical checklist evidence.
+- "Replace current tab" on a busy tab shows "Current tab is busy — …", but the picker then closes and shows "Resumed in current tab: {title}" even though nothing was replaced. `src/taskpane/init.ts:1166-1170` returns without signalling failure, and `src/commands/builtins/resume-overlay.ts:389-397` always closes and shows the success toast. Confirmed in Excel on the web (RESUME-08). Looks like a bug.
+- Resuming does not check whether the session is already open in another tab. Confirmed in the standalone taskpane: "Open in new tab" on a session that was open as "Chat 3" produced "Chat 4" with the same session, and the saved tab layout listed the session ID twice. After a reload, the first of the two became active instead of the one that had been. Confirmed again in Excel on the web (RESUME-07, SESS-09). Looks like a bug. `findRuntimeBySessionId` exists in `src/taskpane/session-runtime-manager.ts:234` but is not used here.
+- The resumed tab shows "Chat N", not the session's saved title, because loading clears the chosen-title flag (`src/taskpane/sessions.ts:296`). Consistent with [renaming a tab](renaming-a-tab.md). Probably unintentional.
+- The picker carries the overlay Escape claim (`src/ui/overlay-escape.ts:31` sets `data-claims-escape`, matched by `src/utils/escape-guard.ts:9`), so Escape closes it rather than stopping a responding tab. This matches goal.md, but only when focus is outside the composer. After `/resume` focus stays in the composer, the composer's own Escape handler sees no claim on its target, and the first Escape stops the turn (`src/ui/pi-input.ts:104-108`). Confirmed in Excel on the web (RESUME-17). Looks like a bug, a consequence of the picker not taking focus.
+- The picker leaves focus in the composer when opened by command, so typing goes behind it and Enter would send. Confirmed in Excel on the web: text typed after `/resume` landed in the composer, Escape had to be pressed twice, and a message sent with Enter started a turn behind the open picker. `createOverlayDialog` in `src/ui/overlay-dialog.ts:190-271` never moves focus into the card. Looks like a bug, likely shared by other overlays.
+- A double click on an entry can start two resumes, because there is no in-flight guard (`src/commands/builtins/resume-overlay.ts:325-398`). Read from code, not confirmed.
 - Message counts in the list include hidden instruction messages. Confirmed: a blank session shows "1 messages".
-- Short-pane scrolling needs acceptance at each host's actual pane size; the shared card is now scrollable.
+- In a short taskpane the list of entries is tiny. With the pane about 340 px tall, the picker card is cut off at the bottom (it does not scroll) and the list inside it is 28 px tall, so only the top strip of one entry shows; the rest has to be scrolled into that strip with the wheel. Clicks below the strip land on the card and do nothing. This explains the failed clicks in the first pass (RESUME-16), which aimed at the middle of an entry. Confirmed in Excel on the web (RESUME-18). Looks like a bug: the card should scroll or the list should get the remaining height.
 - The resume picker exposes an "Untitled" entry for blank sessions created by closing or restoring blank tabs; see [sessions and tabs](../foundations/sessions-and-tabs.md#edge-cases).
 - "No previous sessions" confirmed in Excel on the web after clearing the saved sessions. `/resume` typed while the picker is open was not run.
 - Checked in Excel on the web on 2026-10-26; see [the checklist](../verification/sessions-and-commands.md#sessionsresuming-a-sessionmd).
 
-Verified against pi-for-excel commit `1f51cf8` (source inspection; earlier live runs are historical).
->>>>>>> Stashed changes
+Verified against pi-for-excel commit `ec453df`.

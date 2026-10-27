@@ -1,10 +1,8 @@
 # Settings
 
-**CL-11/CL-12 update:** [PR #805](https://github.com/tmustier/pi-for-excel/pull/805) removes "Fork model switch into new tab". Old stored values are ignored: a model choice always stays in the current conversation and can be made while busy for the next turn. `/settings` and `/login` are local actions and remain available while busy.
-
 ## Summary
 
-Settings controls providers, the proxy, behavior switches, rules, backups, extensions and reference pages. It is one overlay with a stack of pages: a back arrow, title, close button and scrolling body. Reach it from the [utilities menu](../ui/the-utilities-menu.md), `/settings`, `/login`, or a command for a particular page (`/rules`, `/extensions`, `/plugins`, `/skills`, `/tools`, `/history`, `/shortcuts`, `/experimental`). It works with no provider connected and while the active tab is busy. Opening Settings sends nothing to the model.
+Settings is the one place where the user changes how Pi behaves outside a conversation: which providers are connected, the proxy, a few behavior switches, rules, backups, extensions, and reference pages. It is a single overlay holding a stack of pages. The header has a back arrow ("Back", hidden on the first page), the page title and subtitle, and a close button ("Close settings"); the body scrolls; some pages add a sticky footer. It is reached from the [utilities menu](../ui/the-utilities-menu.md) ("Settings", or "Rules", "Extensions", "Backups", "Keyboard shortcuts" for a specific page), from `/settings` ("Settings (providers and advanced options)"), `/login` ("Open provider settings"), and from commands that open one page directly (`/rules`, `/extensions`, `/plugins`, `/skills`, `/tools`, `/history`, `/shortcuts`, `/experimental`). It works with no provider connected and on every host. While the tab is busy the utilities menu still opens it, but `/settings` and `/login` are refused. Settings never sends anything to the model.
 
 ## The simple case
 
@@ -17,6 +15,8 @@ They click "Model providers". The page slides in from the right with the title "
 ```mermaid
 stateDiagram-v2
     [*] --> closed
+    closed --> refused : /settings or /login while busy (toast)
+    refused --> closed
     closed --> root : utilities menu "Settings" or /settings
     closed --> page : /login, /rules, /history, … (stack root → page)
     root --> page : click a row (page pushed)
@@ -46,9 +46,10 @@ Focus moves to the page body so that Tab starts inside the page.
 - **"Custom gateway"** ("OpenAI-compatible endpoints"). The value is the number of gateways or "None".
 - **"Proxy"** ("Route API calls through a helper"). The value is "On" or "Off".
 
-"Behavior", controls that act at once, with no Save:
+"Behavior", three controls that act at once, with no Save:
 
 - **"Auto mode"** ("Pi applies changes immediately without asking"), on by default. Turning it off switches the [execution mode](../workbook/confirm-mode-and-approvals.md) to Confirm; the toast says "Confirm mode." or "Auto mode.". The switch follows changes made elsewhere (the status bar, `/yolo`) while the page is open. On failure: "Couldn't update execution mode." and the switch flips back.
+- **"Fork model switch into new tab"** ("For non-empty chats, open a cloned tab instead of switching this tab in place."), off by default. Toasts "Model switching will open a new tab for non-empty chats." and "Model switching will stay in the current tab."; on failure "Couldn't update model switch setting.". See [models and providers](../foundations/models-and-providers.md#changing-the-model).
 - **"Language / 语言"**, a list with "English" and "中文（简体）· AI 翻译". Choosing the other language shows "Language changed. Reloading..." and reloads the taskpane a second later. See [language and theme](../ui/language-and-theme.md).
 
 "Rules & data": **"Rules & conventions"** ("Guidance Pi follows in every chat") and **"Backups"** ("Snapshots saved before Pi changes data").
@@ -76,6 +77,7 @@ Each page is described where its behavior is owned; this is what each one lets t
 
 Nothing changes when:
 
+- **`/settings` or `/login` is used while the tab is busy**: "Can't run /settings while Pi is busy" (or `/login`). The utilities menu has no such check.
 - **The user closes Settings without touching anything**: Escape on the root page, the × button, a click on the backdrop, or `/settings` / the utilities menu "Settings" again.
 - **The user navigates without editing.** Moving between pages records nothing.
 
@@ -104,7 +106,7 @@ When Settings closes, focus returns to the composer.
 | Thinking level | No effect. Settings has no thinking control. | No effect. |
 | Execution mode | "Auto mode" shows and changes it. | Switching takes effect from the next mutation, as in [turns](../foundations/turns.md#modifiers). |
 | Files in the workspace, or an overlay open | No effect from files. Opening Settings closes nothing else; dialogs opened from a page (confirmations, login prompts) appear above it. | No effect. |
-| Tab state (new, restored, another tab busy) | Settings is not tied to a tab, except that "This file" rules and "Backups" belong to the current workbook. | `/settings` and `/login` work while busy; another tab being busy does not matter. |
+| Tab state (new, restored, another tab busy) | Settings is not tied to a tab, except that "This file" rules and "Backups" belong to the current workbook. | `/settings` and `/login` are refused if the active tab is busy; another tab being busy does not matter. |
 | Host (desktop or web) | Same pages on every host. | No effect. |
 
 A change made in Settings applies to every tab at its next boundary; nothing in Settings interrupts a running turn.
@@ -136,7 +138,7 @@ After closing Settings the user is in the composer of the tab that was active wh
 
 **Execution mode and approvals.** "Auto mode" is the same switch as the status-bar mode control and `/yolo`.
 
-**Models and providers.** Providers, gateways and the proxy live here. There is no fork or default-model setting.
+**Models and providers.** Providers, gateways, the proxy and the fork setting live here. There is no default-model setting.
 
 **Offline and provider errors.** Settings opens and saves offline. Logins and the proxy status need the network.
 
@@ -160,8 +162,8 @@ After closing Settings the user is in the composer of the tab that was active wh
 
 ## Open questions and verification
 
-- Historical Excel-web verification covered the root groups and values, navigation, close/focus behavior and Rules unsaved-edit protection. The former fork switch and its toasts are removed by PR #805, not current behavior.
-- The earlier SETTINGS-04/05 busy-command refusals are superseded by CL-12 in PR #805: all settings entry points are available while busy.
+- Confirmed in Excel on the web: the root page groups, rows and values ("1 connected", later "2 connected" while three gateways showed "3" on their own row, "None", "On"/"Off", Plugins "1 installed" for the bundled extension), focus moving to the page body, the fork switch's two toasts, `/login` opening "Model providers" with Back shown and Back leading to the root page, Escape stepping back from a page to the root and then closing with focus returned to the composer, the first Escape only leaving a text field, "Close settings" closing from a page, a half-filled gateway form being dropped without a question on Back, and the Rules page asking "Discard changes?" on both Escape and "Close settings" ("Keep editing" stays, "Discard" closes).
+- The utilities menu opens Settings while the tab is busy, but `/settings` and `/login` are refused ("Can't run /settings while Pi is busy", "Can't run /login while Pi is busy"): both confirmed in Excel on the web (SETTINGS-04, SETTINGS-05). Probably unintentional inconsistency (`src/commands/busy-command-policy.ts`).
 - Only the Rules page guards unsaved edits (`ctx.setBeforeLeave` is used only in `src/commands/builtins/settings-pages/rules-page.ts:1014`). A half-typed gateway is lost silently (confirmed). Probably worth a guard.
 - The "Proxy" page has no subtitle under its title, unlike "Model providers" and the gateway page.
 - F2 moves focus from Settings to the composer behind it, where typing works: `/settings` closed Settings and `/login` switched it to "Model providers" (SETTINGS-14). A modal dialog that lets focus out may be worth treating as a bug.
