@@ -91,16 +91,18 @@ pi-sidebar {
   display: none;
 }
 
+/* Tabs shrink (titles ellipsize) until they reach min-width; only then does
+   the strip scroll, so a few tabs always fit a narrow pane. */
 .pi-session-tab {
   display: flex;
   align-items: center;
-  flex-shrink: 0;
+  flex-shrink: 1;
   position: relative;
   border: 1px solid var(--alpha-10);
   border-radius: var(--radius-sm);
   background: var(--white-alpha-25);
   color: var(--muted-foreground);
-  min-width: 0;
+  min-width: 60px;
   transition:
     background var(--duration-fast),
     border-color var(--duration-fast),
