@@ -34,6 +34,20 @@ import {
 import { getResolvedConventions } from "../conventions/store.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 
+/**
+ * After a failed call: did any formatting land? A call Excel refused outright
+ * (e.g. a protected sheet) changed nothing, and a backup of it would only
+ * shadow older backups for /revert. Assume it changed if the range can't be read.
+ */
+async function formattingChangedSince(address: string, before: FormatCellsCapturedState): Promise<boolean> {
+  try {
+    const now = await captureFormatCellsState(address, before.selection, { maxCellCount: MAX_RECOVERY_CELLS });
+    return !now.state || JSON.stringify(now.state) !== JSON.stringify(before);
+  } catch {
+    return true;
+  }
+}
+
 const DEFAULT_FONT_NAME = "Arial";
 const DEFAULT_FONT_SIZE = 10;
 // Excel columnWidth in Office.js uses points. Approx conversion for Arial 10:
@@ -616,7 +630,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         // formatting changed. Store the state captured before the call so the
         // user can still revert whatever was applied.
         let backupNote = "";
-        if (capturedState) {
+        if (capturedState && await formattingChangedSince(params.range, capturedState)) {
           try {
             const snapshot = await getWorkbookRecoveryLog().appendFormatCells({
               toolName: "format_cells",
