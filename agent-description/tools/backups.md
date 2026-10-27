@@ -49,7 +49,7 @@ One mutation under the lock.
 
 ### The result
 
-A table or receipt, with truthful capture/storage limitations. Snapshot size is capped at 20,000 cells. Checked writes refuse occupied larger targets rather than silently skipping overwrite protection. Retention is per workbook (5–120, default 120), with global cap 240; save/reload does not clear backups. Failed rollback capture/storage is reported.
+A table or receipt, with truthful capture/storage limitations. Snapshot size is capped at 20,000 cells. Checked writes refuse occupied larger targets rather than silently skipping overwrite protection. History has a shared 512 MiB compressed-payload-plus-metadata ceiling across all workbooks, evicting oldest first with no count/age limit or protected minimum. Lists page 50 metadata entries at a time; save/reload does not clear backups. Failed rollback capture/storage is reported. See the current [storage and migration contract](../../product-description/workbook/backups-and-revert.md).
 
 ## Workbook and host state
 

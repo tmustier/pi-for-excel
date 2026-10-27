@@ -22,7 +22,7 @@ stateDiagram-v2
 
 ### Forms the call
 
-Chart actions take `name`; comments take `range`. A wrong parameter name is not a schema error when the parameter is optional: the call runs and fails inside (`Error (add on "undefined"): Cannot read properties of undefined (reading 'includes')` when `cell` was sent instead of `range` — a JavaScript error, not a hint).
+Chart actions take `name`; comments take `range`. Chart mutations require an explicit `sheet`, except creation can derive it from a qualified `source_range`. Comment mutations require a sheet-qualified range. Missing comment ranges receive domain validation feedback rather than the historical undefined-property exception.
 
 ### Rejected at once
 
@@ -60,15 +60,15 @@ Receipts as above. The image block is large and is always [shaped](../hostility/
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | — |
-| The user changes the selection or the active sheet | Unqualified ranges follow it. | — |
+| The user is editing a cell | Waits up to 60 seconds, then precise failure. | Does not replay syncs after changes already applied. |
+| The user changes the selection or the active sheet | Mutating targets must name a sheet; read actions can still use active-sheet resolution. | Selection changes do not retarget an explicit mutation. |
 | The user changes data the call depends on | Chart reflects it. | — |
 | Another tab's write holds the workbook lock | Mutations wait. | — |
-| Excel throttles, times out or rejects the payload | Image capture could be slow; no timeout. | — |
+| Excel throttles, times out or rejects the payload | Shared 60-second host-call timeout. | Already-submitted changes may still land; later abandoned syncs are blocked. |
 | Recalculation is pending | Stale chart. | — |
 | The workbook is co-authored | Comments by others are listed with authors. | — |
-| Autosave or a save boundary | Clears backups. | — |
-| The user presses Stop | `Aborted`. | Completes. |
+| Autosave or a save boundary | Keeps backups. | Retention/deletion is separate. |
+| The user presses Stop | `Aborted`. | Shared bounded stop; submitted Excel work cannot be unsent. |
 | The context fills | Images are shaped early. | — |
 
 ## Interactions with other systems
@@ -80,4 +80,4 @@ Receipts as above. The image block is large and is always [shaped](../hostility/
 - Confirmed: CHART-01 to CHART-03, COMMENT-01, COMMENT-02.
 - Looks like a bug: unhelpful internal errors for wrong parameters ([B-21](../bug-triage.md#b-21-small-result-format-slips)).
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection; CHART/COMMENT observations above are historical).

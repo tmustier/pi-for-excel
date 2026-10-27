@@ -24,7 +24,7 @@ stateDiagram-v2
 
 ### Forms the call
 
-Positions are 1-indexed rows or columns; `add_sheet` position is 0-indexed. Deleting is by position, not by content: nothing checks that row 3 is still the row the agent read.
+Positions are 1-indexed rows or columns; `add_sheet` position is 0-indexed. Structure mutations other than `add_sheet`, and mutating view actions, require an explicit `sheet`. Deleting is by position, not by content: nothing checks that row 3 is still the row the agent read.
 
 ### Rejected at once
 
@@ -62,15 +62,15 @@ A one-line receipt; no listing of what was deleted.
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | — |
-| The user changes the selection or the active sheet | Row/column actions without `sheet` use the active sheet. | — |
+| The user is editing a cell | Waits up to 60 seconds before a precise failure. | Does not replay earlier successful mutation syncs. |
+| The user changes the selection or the active sheet | Mutations require an explicit sheet, except `add_sheet`. | Selection changes do not retarget the call. |
 | The user changes data the call depends on | Positions computed from an earlier read now point elsewhere. | — |
 | Another tab's write holds the workbook lock | Waits. | — |
 | Excel throttles, times out or rejects the payload | Rare. | — |
 | Recalculation is pending | No effect. | — |
 | The workbook is co-authored | Structural edits during co-authoring are restricted by Excel; not observed. | — |
-| Autosave or a save boundary | Clears backups. | — |
-| The user presses Stop | `Aborted`. | Completes. |
+| Autosave or a save boundary | Keeps backups. | Retention/deletion, not saving, removes them. |
+| The user presses Stop | `Aborted`. | Submitted work can land; abandoned runs send no later syncs. |
 | The context fills | Small results. | — |
 
 ## Interactions with other systems
@@ -80,6 +80,6 @@ A one-line receipt; no listing of what was deleted.
 ## Open questions and verification
 
 - Confirmed: STRUCT-01 to STRUCT-04.
-- Looks like a bug: [B-10](../bug-triage.md#b-10-excel-failures-arrive-as-generic-text-in-results-marked-successful); filtered-table deletes unreported ([B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do)).
+- Merged failures carry `isError` and distinguish definite refusal from possibly applied work. Shared reads report table/filter state, but positional deletion still requires the agent to choose the right rows; it is not a visible-rows-only operation. Historical STRUCT results are not a fresh acceptance pass.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

@@ -18,7 +18,7 @@ and received `Executed Office.js: Read exact displayed text in selected cells`, 
 
 ## Why the agent uses it
 
-In eleven real turns the agent called it in six, each time to learn something no structured tool reports: displayed text; merge areas (`getMergedAreas`); calculation mode, then `range.calculate()`; protection state; visible rows of a filtered table (`getVisibleView`); and an aggregation over 200,000 rows that `read_range` could not read. Each use is a symptom listed in [B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do). In Confirm mode each costs the user an approval.
+In the historical eleven-turn pass the agent used it six times to inspect information then missing from structured tools. At the merged baseline, structured reads report displayed values, merges, protection, calculation and filter state, and large reads page. The escape hatch is still needed for unsupported operations, custom aggregation and explicit host inspection. It asks once in Confirm, through its own gate before the workbook lock.
 
 ## The call, event by event
 
@@ -48,7 +48,7 @@ Whatever the code does, in as many syncs as it makes.
 
 ### While running
 
-No timeout; the lock is held for the whole run.
+The lock is held during the run. The shared Excel call timeout is 60 seconds. A timed-out batch already sent may still land, but later syncs from the abandoned run are blocked. Arbitrary code does not acquire structured-tool read-back verification or backups.
 
 ### The result
 
@@ -74,15 +74,15 @@ JSON pretty-printed with two-space indentation, cut at 8,000 characters (`…` a
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | A later sync fails after earlier syncs applied; no backup. |
+| The user is editing a cell | Bounded wait, up to 60 seconds. | Retry is safe only before the first successful sync; earlier changes are not replayed. |
 | The user changes the selection or the active sheet | `getActiveWorksheet` follows the user. | Same. |
 | The user changes data the call depends on | Reflected. | Between syncs. |
 | Another tab's write holds the workbook lock | Waits (it is a mutation even for reads). | — |
-| Excel throttles, times out or rejects the payload | — | Payload error; no timeout. |
+| Excel throttles, times out or rejects the payload | — | Explicit failure; a submitted batch may have applied. Later syncs are blocked after abandonment. |
 | Recalculation is pending | The agent can calculate. | — |
 | The workbook is co-authored | Not observed. | — |
 | Autosave or a save boundary | No backup either way. | — |
-| The user presses Stop | `Aborted`. | Runs to completion. |
+| The user presses Stop | `Aborted`. | Already-submitted Excel work cannot be cancelled; shared Stop waits a bounded grace period and reports uncertainty if it does not settle. |
 | The context fills | Tail truncation keeps the end of the JSON. | — |
 
 ## Interactions with other systems
@@ -94,4 +94,4 @@ JSON pretty-printed with two-space indentation, cut at 8,000 characters (`…` a
 - Confirmed: OJS-01 to OJS-04; six of eleven real turns used it.
 - Looks like a bug: no backup note; read-only use treated as structural mutation (lock, approval, blueprint rebuild) ([B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do)); JSON indentation wastes the 8,000 characters ([B-21](../bug-triage.md#b-21-small-result-format-slips)).
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection; cited eleven-turn run is historical).

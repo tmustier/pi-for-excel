@@ -76,7 +76,7 @@ Heading, formula pattern, example endpoints, changes, formula/validation problem
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
 | The user is editing a cell | Bounded wait before a successful sync. | No unsafe retry after work may have applied. |
-| The user changes the selection or the active sheet | Unqualified range lands on the new active sheet. | — |
+| The user changes the selection or the active sheet | A sheet-qualified target is required; an unqualified range is refused. | Selection changes do not retarget the call. |
 | The user changes data the call depends on | Overwrite check sees current data. | Edits between pre-read and fill are overwritten. |
 | Another tab's write holds the workbook lock | Waits without limit. | — |
 | Excel throttles, times out or rejects the payload | Request is one formula/copy. | Failure reports known applied/unknown state; read-back separate. |

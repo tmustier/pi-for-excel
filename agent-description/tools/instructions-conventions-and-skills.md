@@ -2,7 +2,7 @@
 
 ## Summary
 
-Four tools that do not touch the workbook. `instructions` appends to or replaces the user's rules ("All my files", "This file"); `conventions` reads and sets formatting defaults; `skills` lists and reads bundled and installed Agent Skills; `files` lists, reads, writes and deletes Files-workspace files (write/delete only when the Files feature is on). All are read calls for the coordinator, so none waits for the lock or asks for approval in Confirm mode, although `instructions` and `conventions` change what the agent is told next.
+Four tools that do not mutate workbook cells. `instructions` changes local rules; `conventions` changes formatting defaults; `skills` lists/reads/installs/uninstalls Agent Skills; `files` lists/reads/writes/deletes workspace files. None takes the workbook lock. Guidance changes refresh runtime instructions without reload. Confirm asks before user-rule, convention and skill changes; workbook-rule changes always ask. Successful guidance changes offer a conflict-safe Undo toast. Files consent is ownership-based in both modes: overwriting/deleting a file Pi did not create in this chat asks; new files and changes to its own files do not. If a required approval has no UI, the change does not run.
 
 ## The simple case
 
@@ -25,8 +25,8 @@ These calls run against browser storage, not Excel: no Excel batch, no payload l
 | External links | No effect. | No effect. |
 | Very large used range | No effect. | No effect. |
 | Number formats and locale | `conventions` defines format strings in en-US codes. | No effect. |
-| Host and API set | "This file" rules need a workbook identity; with an unknown identity (web anonymous link) they are keyed to the shared unknown bucket (read from code). | No effect. |
-| Execution mode | Never approved, even in Confirm mode, though the prompt asks the agent to confirm workbook rules first. | No effect. |
+| Host and API set | Workbook rules require a usable identity; missing identity fails, not a shared unknown bucket. | No effect. |
+| Execution mode | Guidance and Files changes use local consent, not workbook approval/locking. | Next consent decision uses current mode. |
 
 ## Hostility and interrupts
 
@@ -45,10 +45,10 @@ These calls run against browser storage, not Excel: no Excel batch, no payload l
 
 ## Interactions with other systems
 
-**What the agent is told.** The Rules, Workspace and Available Agent Skills sections of the prompt. **Verification.** None. **Backups and recovery.** None. **The workbook lock and parallel calls.** Not involved. **Execution mode and approvals.** Not involved. **Truncation and history shaping.** Large reads shaped later. **Auto-context.** The files summary reflects `files` writes on the next call when the set changes. **Prompt caching.** `instructions` and `conventions` change the system prompt, breaking the cached prefix from the next call. **Host differences.** Identity. **What the user sees.** `/rules`, Settings, Files.
+**What the agent is told.** Rules, Workspace and Available Agent Skills. **Verification.** Local storage results, not Excel read-back. **Backups and recovery.** No workbook backups. **The workbook lock and parallel calls.** Not involved. **Execution mode and approvals.** Separate Files consent. **Truncation and history shaping.** Large reads shaped later. **Auto-context.** Changed file summaries are durable notes. **Prompt caching.** Guidance changes refresh the prompt; unchanged capability fingerprints do not rebuild tools. **Host differences.** Identity and real-folder availability. **What the user sees.** Rules, Settings and Files with focused consent dialogs.
 
 ## Open questions and verification
 
 - Read from code; not exercised in this pass.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

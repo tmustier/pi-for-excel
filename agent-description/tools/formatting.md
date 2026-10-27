@@ -59,24 +59,24 @@ Formatting is several batches for large multi-property calls.
 
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
-| The user is editing a cell | Edit-mode error. | Later batches fail after earlier ones applied: partial formatting, error result (read from code). |
-| The user changes the selection or the active sheet | Unqualified ranges follow the active sheet. | — |
+| The user is editing a cell | Bounded wait up to 60 seconds. | Partial formatting is reported as an error, with backup if something changed. No replay after successful sync. |
+| The user changes the selection or the active sheet | A sheet-qualified range is required; unqualified mutations are refused. | Selection changes do not retarget the call. |
 | The user changes data the call depends on | No effect. | No effect. |
 | Another tab's write holds the workbook lock | Waits. | — |
 | Excel throttles, times out or rejects the payload | Rare. | Rare. |
 | Recalculation is pending | No effect. | No effect. |
 | The workbook is co-authored | Not observed. | — |
-| Autosave or a save boundary | Clears backups. | — |
-| The user presses Stop | `Aborted`. | Completes. |
+| Autosave or a save boundary | Keeps backups. | Retention/deletion separate. |
+| The user presses Stop | `Aborted`. | Submitted changes may land; abandoned runs send no later syncs. |
 | The context fills | Small results; large schema in every request. | — |
 
 ## Interactions with other systems
 
-**What the agent is told.** The prompt's Conventions section is mostly about `format_cells` styles. **Verification.** Column width only. **Backups and recovery.** Both tools back up. **The workbook lock and parallel calls.** Mutations; parallel formatting calls in Confirm mode race their approvals ([B-09](../bug-triage.md#b-09-parallel-confirm-mode-approvals-decline-each-other)). **Execution mode and approvals.** Per call. **Truncation and history shaping.** No interaction. **Auto-context.** Formatting changes appear in the change list as user changes (read from code: `onChanged` fires for format changes on the web only for some properties; not observed). **Prompt caching.** Conventions overrides alter the prompt. **Host differences.** None observed. **What the user sees.** A format card with colour chips.
+**What the agent is told.** Conventions and styles. **Verification.** Column width, not full visual appearance. **Backups and recovery.** Both tools back up; a wholly refused call creates no spurious backup, while a partial change keeps one. **The workbook lock and parallel calls.** Mutations serialize; approval requests queue before taking the lock. **Execution mode and approvals.** Once per call. **Truncation and history shaping.** No interaction. **Auto-context.** Own writes are suppressed where identifiable; external edits remain durable notes. **Prompt caching.** Conventions refresh the prompt. **Host differences.** Rendering can differ. **What the user sees.** Format card with colour chips.
 
 ## Open questions and verification
 
 - Confirmed: FMT-01 to FMT-04.
-- Looks like a bug: [B-10](../bug-triage.md#b-10-excel-failures-arrive-as-generic-text-in-results-marked-successful); no way to read formats back ([B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do)).
+- Merged failures set `isError` and state whether formatting may have applied. Structured reads still do not expose every font/fill property; use Office.js when exact visual-property inspection is needed. FMT observations above are historical, not a new appearance acceptance pass.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

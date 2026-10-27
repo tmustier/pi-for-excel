@@ -24,7 +24,7 @@ stateDiagram-v2
 
 ### Forms the call
 
-The agent writes Python against raw values: dates are serial numbers, percentages fractions, as in [the workbook as the agent sees it](../foundations/the-workbook-as-the-agent-sees-it.md).
+The agent writes Python against raw values or displayed text, as in [the workbook as the agent sees it](../foundations/the-workbook-as-the-agent-sees-it.md). Transforms require a sheet-qualified input `range` and, when supplied, a sheet-qualified `output_start_cell`; they do not follow the user's active sheet.
 
 ### Rejected at once
 
@@ -63,7 +63,7 @@ Transform stdout/stderr are included. Ragged output is padded to a rectangle wit
 | Event | Before Excel is touched | While running |
 | --- | --- | --- |
 | The user is editing a cell | Shared bounded Excel wait. | No unsafe whole-run retry after work may have applied. |
-| The user changes the selection or the active sheet | Unqualified ranges follow it. | Read and write may resolve different sheets. |
+| The user changes the selection or the active sheet | Transform ranges must explicitly name their sheets. | Selection changes do not retarget the read or write. |
 | The user changes data the call depends on | — | Output computed from stale input overwrites newer data. |
 | Another tab's write holds the workbook lock | Read proceeds; write waits. | — |
 | Excel throttles, times out or rejects the payload | As read/write. | Receipt distinguishes applied, unverified and unknown outcomes. |

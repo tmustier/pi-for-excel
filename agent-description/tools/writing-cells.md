@@ -26,7 +26,7 @@ stateDiagram-v2
 
 ### Forms the call
 
-The agent emits `start_cell`, a 2D `values` grid and optional `allow_overwrite`. Ragged rows are padded with empty strings, which can clear cells. Large JSON can exceed model output limits before a tool runs. Use qualified addresses: an omitted sheet resolves the active sheet for the call and is disclosed. The source's shallow formula syntax check catches unmatched quotes/parentheses and trailing operators, not every Excel error.
+The agent emits a sheet-qualified `start_cell`, a 2D `values` grid and optional `allow_overwrite`. Ragged rows are padded with empty strings, which can clear cells. Large JSON can exceed model output limits before a tool runs. An omitted sheet is refused: "Name the sheet, e.g. Sheet1!B2. Mutating tools do not use the active sheet." The shallow formula syntax check catches unmatched quotes/parentheses and trailing operators, not every Excel error.
 
 ### Rejected at once
 
