@@ -1,5 +1,7 @@
 # Sending and the response
 
+**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802), CC-04 and CC-05 (not merged), adds completed-answer actions on the turn/tabs stack.
+
 ## Summary
 
 An accepted message starts work in its tab. Pi streams text, reasoning and tool calls until it answers, is stopped or fails. Each tab owns its activity and error state, so background work cannot put a compaction line or error on an unrelated tab.
@@ -50,6 +52,8 @@ Ordinary work starts with "Working…", then playful phrases and keyboard hints 
 ### Finishes
 
 Done keeps the final answer. Stop keeps the partial answer with "Request aborted" and no error banner. Final failure keeps the partial text and reason, with a dismissible tab-owned banner below the tabs. Offline, unavailable proxy, blocked loopback access, missing login and overflow have distinct guidance. Error text merely containing "cancel" or "abort" is not a deliberate Stop.
+
+Completed assistant text offers Copy answer and a Copy table action for each Markdown table. Tables copy as TSV; thinking and tool cards are excluded from answer copying. Valid sheet-qualified A1 references in completed prose become links selecting those cells in Excel. Actions do not appear on currently streaming text, but earlier answers remain usable while another turn runs. Copying and selecting a reference neither starts a turn nor writes workbook values. See [message rendering](../ui/message-rendering.md) for matching, exclusions and manual-copy fallback.
 
 One overflow can compact-and-retry; a second is final. Ordinary eligible transient errors retry with visible countdowns. Undelivered text becomes separate Not sent rows; stopped commands are cancelled and named. Nothing leaks unasked into the next turn.
 
