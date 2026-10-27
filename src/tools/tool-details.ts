@@ -332,8 +332,14 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   formulasReplacedCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
-  /** Stop was pressed; the result says what was written before it took effect. */
-  stopped: Type.Optional(Type.Boolean()),
+  /** How the write was checked (see write_cells). */
+  verification: Type.Optional(StringEnum(["full", "sampled", "failed"])),
+  /** Cells that do not hold the value sent (merged cells, spills, …). */
+  notWrittenCount: Type.Optional(Type.Number()),
+  /** Text values Excel converted to numbers, dates or booleans. */
+  convertedCount: Type.Optional(Type.Number()),
+  /** Result rows shorter than the widest row, padded with blank cells. */
+  paddedRowCount: Type.Optional(Type.Number()),
   ...bridgeGateProperties,
 });
 

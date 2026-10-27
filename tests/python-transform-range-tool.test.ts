@@ -15,6 +15,7 @@ import {
   type PythonBridgeRequest,
   type PythonBridgeResponse,
 } from "../src/tools/python-run.ts";
+import { FakeExcelHost, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
 function firstText(result: AgentToolResult<PythonTransformRangeDetails>): string {
   const first = result.content[0];
@@ -244,4 +245,113 @@ void test("python_transform_range requires result_json from python execution", a
   assert.match(firstText(result), /returned no result_json/u);
   assert.equal(result.details?.blocked, false);
   assert.match(result.details?.error ?? "", /result_json/u);
+});
+
+void test("python_transform_range writes through the checked write path and shows stdout/stderr", async () => {
+  const host = new FakeExcelHost(["Py"]);
+  host.sheet("Py").merge("F1:G1");
+  let result_json = "";
+  const tool = createPythonTransformRangeTool({
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    callBridge: () => Promise.resolve({
+      ok: true,
+      action: "run_python",
+      exit_code: 0,
+      stdout: "hello stdout",
+      stderr: "warn",
+      result_json,
+    }),
+  });
+
+  await withFakeExcel(host, async () => {
+    host.sheet("Py").set("A1", "source");
+
+    // A merged destination: Excel would keep only F1, so nothing is written.
+    result_json = "[[\"m1\",\"m2\"],[\"m3\",\"m4\"]]";
+    const merged = await tool.execute("tc-merged", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!F1" });
+    assert.equal(merged.details?.blocked, true);
+    assert.equal(merged.isError, true);
+    assert.match(firstText(merged), /Py!F1:G1 is merged; only its top-left cell holds a value, so G1 would be dropped/u);
+    assert.match(firstText(merged), /Stdout:[\s\S]*hello stdout[\s\S]*Stderr:[\s\S]*warn/u);
+    assert.equal(host.sheet("Py").value("F1"), "");
+    assert.equal(host.sheet("Py").value("F2"), "");
+
+    // A ragged result with a text code Excel converts.
+    result_json = "[[\"00123\",2,3],[4]]";
+    const ragged = await tool.execute("tc-ragged", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!R1" });
+    const text = firstText(ragged);
+    assert.equal(ragged.details?.blocked, false);
+    assert.equal(ragged.details?.outputAddress, "Py!R1:T2");
+    assert.equal(ragged.details?.paddedRowCount, 1);
+    assert.equal(ragged.details?.convertedCount, 1);
+    assert.match(text, /1 of 2 row\(s\) had fewer than 3 values \(result rows 2\)/u);
+    assert.match(text, /Py!R1: sent "00123", stored 123/u);
+    assert.match(text, /Stdout:[\s\S]*hello stdout/u);
+
+    // Overwriting a formula with a constant is called out.
+    host.sheet("Py").set("Z1", "=A1");
+    result_json = "[[\"fixed\"]]";
+    const overwrite = await tool.execute("tc-lost-formula", {
+      range: "Py!A1", code: "result = ...", output_start_cell: "Py!Z1", allow_overwrite: true,
+    });
+    assert.equal(overwrite.details?.formulasReplacedCount, 1);
+    assert.match(firstText(overwrite), /1 formula\(s\) on sheet "Py" replaced by values: Z1\. Z1 was `=A1`/u);
+  });
+});
+
+void test("python_transform_range refuses input too large for a running bridge and says how many rows fit", async () => {
+  const rows = Array.from({ length: 5000 }, () => ["x".repeat(98)]);
+  const range = "Sheet1!A1:A5000";
+  // Each row serializes to 102 characters plus a comma; input_json may hold 200,000 characters.
+  const overhead = JSON.stringify({ range, values: [] }).length;
+  const expectedFit = Math.floor((200_000 - overhead + 1) / 103);
+
+  let bridgeCalls = 0;
+  let pyodideCalls = 0;
+  const makeTool = (reachable: boolean) => createPythonTransformRangeTool({
+    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A5000", values: rows }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    probeBridge: () => Promise.resolve(reachable),
+    callBridge: () => {
+      bridgeCalls += 1;
+      return Promise.reject(new Error("should not be sent"));
+    },
+    isPyodideAvailable: () => true,
+    callPyodide: () => {
+      pyodideCalls += 1;
+      return Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: "[[5000]]" });
+    },
+    writeOutputValues: () => Promise.resolve({
+      blocked: false, outputAddress: "Sheet1!C1", rowsWritten: 1, colsWritten: 1, formulaErrorCount: 0,
+    }),
+  });
+
+  const refused = await makeTool(true).execute("tc-big", { range, code: "result = [[len(input_data['values'])]]", output_start_cell: "C1" });
+  assert.equal(refused.isError, true);
+  assert.match(firstText(refused), /Input too large for the Python bridge/u);
+  assert.match(firstText(refused), new RegExp(`About ${expectedFit.toLocaleString("en-US")} rows fit per call`, "u"));
+  assert.match(firstText(refused), new RegExp(`Sheet1!A1:A${expectedFit}\\b`, "u"));
+  assert.equal(bridgeCalls, 0);
+  assert.equal(pyodideCalls, 0);
+
+  // No bridge answering at the default URL: Pyodide has no such limit and runs it.
+  const viaPyodide = await makeTool(false).execute("tc-big-pyodide", { range, code: "result = [[1]]", output_start_cell: "C1" });
+  assert.equal(viaPyodide.details?.blocked, false);
+  assert.equal(bridgeCalls, 0);
+  assert.equal(pyodideCalls, 1);
+});
+
+void test("python_transform_range explains the bridge output limit with a row estimate", async () => {
+  const tool = createPythonTransformRangeTool({
+    readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A2", values: [[1], [2]] }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    callBridge: () => Promise.reject(new Error("Python bridge request failed (413): Process output exceeded 262144 bytes.")),
+    isPyodideAvailable: () => true,
+    callPyodide: () => Promise.reject(new Error("should not fall back")),
+  });
+
+  const result = await tool.execute("tc-big-out", { range: "Sheet1!A1:A2", code: "result = [[i] for i in range(50000)]" });
+  // The input "[[1],[2]]" is 9 bytes for 2 rows, about 5 bytes a row: 262,144 / 5 rows.
+  assert.match(firstText(result), /fit about 52,428 per call/u);
+  assert.equal(result.details?.blocked, false);
 });

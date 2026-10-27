@@ -35,6 +35,16 @@ const MAX_TIMEOUT_MS = 120_000;
 export const PYTHON_BRIDGE_TOKEN_SETTING_KEY = "python.bridge.token";
 export const PYODIDE_BACKEND_LABEL = "Pyodide (in-browser)";
 
+/**
+ * Limits enforced by scripts/python-bridge-server.mjs (MAX_JSON_BODY_BYTES,
+ * MAX_INPUT_JSON_LENGTH, MAX_OUTPUT_BYTES). Keep in sync.
+ */
+export const PYTHON_BRIDGE_LIMITS = {
+  requestBodyBytes: 512 * 1024,
+  inputJsonChars: 200_000,
+  outputBytes: 256 * 1024,
+} as const;
+
 /** fetch() rejected before the bridge answered, so no code ran there. */
 export class PythonBridgeUnreachableError extends Error {
   constructor(url: string, cause: unknown) {
