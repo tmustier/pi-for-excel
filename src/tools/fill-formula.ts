@@ -199,7 +199,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           },
         });
         return errorResult(`⏹ **Stopped before filling** — nothing changed in ${fullAddr}.`, {
-          kind: "fill_formula", blocked: false, address: fullAddr, stopped: true,
+          kind: "fill_formula", blocked: false, address: fullAddr, stopped: true, writtenCount: 0,
         });
       }
 
@@ -243,7 +243,10 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
             text: `⏹ **Stopped after filling ${fullAddr}** — the change stands. ` +
               "It was not verified because Stop was pressed; read the range before relying on it.",
           }],
-          details: { kind: "fill_formula", blocked: false, address: fullAddr, verification: "failed", stopped: true },
+          details: {
+            kind: "fill_formula", blocked: false, address: fullAddr, verification: "failed", stopped: true,
+            writtenCount: block.rowCount * block.columnCount,
+          },
         }
         : verification
         ? formatFilled(inspection, block, verification, params.formula, fullAddr)

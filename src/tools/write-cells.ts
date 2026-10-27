@@ -386,7 +386,7 @@ async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolRe
       cause.kind === "stopped"
         ? `⏹ **Stopped before writing** — nothing changed in ${fullAddr}.`
         : `Error writing cells — nothing was written to ${fullAddr}. ${reason}`,
-      { kind: "write_cells", blocked: false, address: fullAddr, ...errorCode, ...stopped },
+      { kind: "write_cells", blocked: false, address: fullAddr, ...errorCode, ...stopped, ...(cause.kind === "stopped" ? { writtenCount: 0 } : {}) },
     );
   }
 
@@ -425,6 +425,7 @@ async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolRe
     address: fullAddr,
     ...errorCode,
     ...stopped,
+    ...(cause.kind === "stopped" ? { writtenCount: writtenRows * block.columnCount } : {}),
   });
   const before = inspection.before;
   const changedCount = touchedRows * block.columnCount;
@@ -600,7 +601,10 @@ function formatWritten(
         text: `⏹ **Stopped after writing ${fullAddr}** ${size} — the change stands. ` +
           "It was not verified because Stop was pressed; read the range before relying on it.",
       }],
-      details: { kind: "write_cells", blocked: false, address: fullAddr, verification: "failed", stopped: true },
+      details: {
+        kind: "write_cells", blocked: false, address: fullAddr, verification: "failed", stopped: true,
+        writtenCount: block.rowCount * block.columnCount,
+      },
     };
   }
 
