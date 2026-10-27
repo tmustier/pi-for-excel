@@ -905,3 +905,28 @@ void test("workspace scratch cleanup fails open when delete throws", async () =>
   assert.ok(workspacePaths.includes("notes/keep.md"));
   assert.ok(workspacePaths.includes("scratch/stale.txt"));
 });
+
+void test("audited reads and lists do not emit a workspace change", async () => {
+  const backend = new MemoryBackend();
+  const workspace = new FilesWorkspace({ initialBackend: backend, initialWorkspaceBackend: backend });
+  await workspace.writeTextFile("notes.txt", "hello");
+
+  const events: string[] = [];
+  const target = new EventTarget();
+  const previousDocument = Reflect.get(globalThis, "document");
+  Reflect.set(globalThis, "document", target);
+  target.addEventListener("pi:files-workspace-changed", (event) => {
+    events.push(String(Reflect.get(Reflect.get(event, "detail") ?? {}, "reason")));
+  });
+  try {
+    const audit = { actor: "user" as const, source: "files-dialog" };
+    await workspace.readFile("notes.txt", { mode: "text", audit });
+    await workspace.listFiles({ audit });
+    assert.deepEqual(events, [], "a read must not look like a change, or the Files dialog re-reads in a loop");
+
+    await workspace.writeTextFile("notes.txt", "changed", undefined, { audit });
+    assert.deepEqual(events, ["write"]);
+  } finally {
+    Reflect.set(globalThis, "document", previousDocument);
+  }
+});
