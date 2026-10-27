@@ -626,9 +626,11 @@ async function renderMcpServerCard(
   card.body.appendChild(createConfigRow(t("extensions-hub-connections.token"), createConfigValue(tokenValue)));
 
   const grants = await getMcpToolGrants(settings, server);
-  card.body.appendChild(createConfigRow(t("mcp.grants.title"), createConfigValue(
-    grants.length > 0 ? t("mcp.grants.autoOnly") : t("mcp.grants.none"),
-  )));
+  card.body.appendChild(createSectionHeader({ label: t("mcp.grants.title") }));
+  const grantHint = document.createElement("p");
+  grantHint.className = "pi-overlay-hint";
+  grantHint.textContent = t(grants.length > 0 ? "mcp.grants.autoOnly" : "mcp.grants.none");
+  card.body.appendChild(grantHint);
   for (const tool of grants) {
     const revoke = createButton(t("mcp.grants.revoke", { tool }), {
       compact: true,
