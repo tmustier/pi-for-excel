@@ -166,3 +166,41 @@ void test("clicking anywhere on an inactive tab's title switches to it", async (
     assert.equal(await page.locator(".pi-session-tab").count(), 2);
   });
 });
+
+void test("the active last tab stays fully visible when a turn widens it", async () => {
+  await withTaskpane(async (page) => {
+    await page.setViewportSize({ width: 349, height: 580 });
+    for (let i = 1; i < 12; i++) {
+      await page.getByRole("button", { name: "New tab" }).click();
+    }
+    await page.locator(".pi-session-tab.is-active").filter({ hasText: "Chat 12" }).waitFor();
+    await page.evaluate(async () => {
+      const { PiSidebar } = await import("/src/ui/pi-sidebar.ts") as typeof import("../../src/ui/pi-sidebar.ts");
+      const sidebar = document.querySelector("pi-sidebar");
+      if (!(sidebar instanceof PiSidebar) || !sidebar.agent) throw new Error("sidebar missing");
+      sidebar.agent.getApiKey = () => Promise.resolve("test-key");
+      sidebar.agent.streamFunction = (_model, _context, options) => new Promise<never>((_resolve, reject) => {
+        options?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+      });
+    });
+    const welcome = page.locator("#pi-welcome-login-overlay");
+    if (await welcome.count()) await welcome.dispatchEvent("click");
+    const composer = page.locator("pi-input textarea");
+    await composer.fill("Keep working");
+    await composer.press("Enter");
+    await page.locator(".pi-session-tab.is-active .pi-session-tab__busy").waitFor();
+    await page.waitForTimeout(200);
+    const close = await page.locator(".pi-session-tab.is-active .pi-session-tab__close").boundingBox();
+    const strip = await page.locator(".pi-session-tabs__scroller").boundingBox();
+    assert.ok(close && strip);
+    assert.ok(close.x >= strip.x && close.x + close.width <= strip.x + strip.width + 1,
+      "the busy tab's close button must stay inside the visible strip");
+    const scroller = page.locator(".pi-session-tabs__scroller");
+    const previousScroll = await scroller.evaluate((element) => element.scrollLeft);
+    await page.getByRole("button", { name: "Scroll tabs left" }).click();
+    await page.waitForTimeout(400);
+    assert.ok(await scroller.evaluate((element) => element.scrollLeft) < previousScroll - 100,
+      "the active tab must not pull the strip back after a manual scroll");
+    await page.locator(".pi-input-btn--abort").click();
+  });
+});
