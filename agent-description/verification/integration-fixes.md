@@ -1,6 +1,6 @@
 # Verification: integration-fixes against the agent experience
 
-**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. AUTO-09, STRUCT-01, TIME-01 and TIME-02 were then run on `e48d83c`, and EDIT-05 was routed to the Mac verification thread. The two builds do not differ in the code those rows exercise. The force-pushed head **`8099cd6`** was then checked for the rows its fixes touch: OJS-03, N-1, N-2, N-4, N-5, B-16, SIZE-01, analyst task 5 and STRUCT-01, plus N-3 and the new #794, #789 and #793 commits (see "Rechecked on 8099cd6").
+**Build under test.** `integration-fixes` @ `a2b3f2d` (PRs #786–#799 merged onto main `fe7013f`), then the force-pushed rebuild @ `e48d83c`. After the rebuild, only the changes listed in INTEGRATION.md were retested: the #794 fill, the format_cells backup, the compaction toast and the selection note. Everything else was observed on `a2b3f2d`. AUTO-09, STRUCT-01, TIME-01 and TIME-02 were then run on `e48d83c`, and EDIT-05 was routed to the Mac verification thread. The two builds do not differ in the code those rows exercise. The force-pushed head **`8099cd6`** was then checked for the rows its fixes touch: OJS-03, N-1, N-2, N-4, N-5, B-16, SIZE-01, analyst task 5 and STRUCT-01, plus N-3 and the new #794, #789 and #793 commits (see "Rechecked on 8099cd6"). Finally **`cea7588`** was checked for the timeout handling only (#791 e1c3f29 `runMutation`, #797 47e8799): see "Rechecked on cea7588".
 
 **Setup.** The tests ran on Excel on the web in an orb (`node scripts/orb/excel-web-session.mjs --check`), with the dev server serving the branch checkout. The workbooks were anonymous guest workbooks: `orb-afa50678b930-20261027013600.xlsx`, then `…20261027022640.xlsx`. The fixture follows [README.md](README.md#how-to-run-a-pass): Dates, Merged, Protected, Tbl (table Sales, filtered to North), Spill, Valid, My Sheet, Calc, Co, and Big (200,001 × 5).
 
@@ -25,7 +25,7 @@ Regressions found on `a2b3f2d`:
 - The `fill_formula` timeout above about 4,500 cells.
 - The refused format_cells backup.
 
-Both are fixed and verified on `e48d83c`. Of the six low-severity bugs found on `a2b3f2d`, five are fixed on `8099cd6`; N-2 is only partly fixed (see the last section).
+Both are fixed and verified on `e48d83c`. Of the six low-severity bugs found on `a2b3f2d`, five are fixed on `8099cd6`; N-2 was only partly fixed there and is fixed on `cea7588` (see the last section).
 
 Counts are as of `8099cd6`: B-16, OJS-03 and SIZE-01 moved from fail to pass, and task 5 from partial to succeeded.
 
@@ -246,6 +246,7 @@ Also partial on a2b3f2d and e48d83c, from the SIZE-01 turns: a wrong Qty sum (8,
 - Repro: `Excel.run` never settles; call `write_cells Calc!H7`. The result says "nothing was written to Calc!H7. Excel did not answer (…), so whether the change was applied is unknown."
 - Code: `range-write.ts:900` plus `src/tools/mutation/excel-failure.ts:175`.
 - **8099cd6: partly fixed** (#791 99d8242). Same repro: after 60.0 s, `isError` with `excel_timeout`, "Error writing cells — nothing was written to Calc!H7. Excel did not answer (Excel did not answer within 60 s. The outcome is unknown: the request may or may not have been applied. Read the affected range back before retrying a change. If this happens again, ask the user to reload the Excel page.) before the change was sent. Retry once Excel responds." The conclusion is now right (H7 was empty on read-back). But the quoted timeout message still says the outcome is unknown and may have been applied, because `src/tools/mutation/excel-failure.ts:188` interpolates the raw message from `src/excel/helpers.ts:97`. Sent to the #791 thread.
+- **cea7588: fixed** (#791 e1c3f29). Same repro: "Error writing cells — nothing was written to TO!F1. Excel did not answer before the change was sent, so nothing was written. Retry once Excel responds; if it keeps happening, ask the user to reload the Excel page." No "outcome is unknown" quote. The held batch was released 10 s after the result, and the sheet was still empty 75 s after the call.
 
 **N-3. Python wording leftovers.** Owner: #797.
 - `python_run`'s description promises "numpy, pandas, etc. work automatically", but Pyodide returns "pandas … is not installed". Code: `src/tools/python-run.ts:512`; the system prompt's Python section says the same.
@@ -285,3 +286,19 @@ Also partial on a2b3f2d and e48d83c, from the SIZE-01 turns: a wrong Qty sum (8,
 - **#793 @ aff33d6, tabs:** with 13 tabs in the 349 px pane, titles read in full ("Chat 10", "Chat 11", "Chat 12"), the strip scrolls, and inactive tabs' × buttons have opacity 0 while the active tab's has opacity 1. After a reload the active tab was fully in view. Once, before a reload, the strip stopped 24 px short of its end (scrollLeft 531 of 555), so the active tab's × was clipped behind the › arrow. A new tab and a later reload both showed it in full, and it did not recur. Pass, with that one unreproduced glitch.
 - **#789 @ a66868d, a partial answer kept when retries run out (SEND-13):** not exercised live. It needs a provider failure after streaming has started, which can't be caused on demand against the shared login.
 - **Spot checks of touched tools:** `fill_formula Calc!R2:R6` wrote and verified 5 formulas with a backup. A refused `format_cells Protected!A1` returned `isError`, named the protection and stored no backup (R-2 still fixed).
+
+### Rechecked on cea7588 (timeouts)
+
+Method: `Excel.run` in the taskpane was wrapped so that one chosen `context.sync()` of one run is held for 70 s before it is sent, then sent for real to Excel on the web. That is longer than the 60 s `excelRun` timeout, so the tool reports first and the held batch lands afterwards, as a slow host would. The sheet was read 15–20 s after the held batch landed. Every case is a probe on a fresh sheet `TO`, deleted afterwards.
+
+| Check | Result | Note |
+| --- | --- | --- |
+| N-2, write_cells timeout before anything is sent | pass | Sync 1 (the target read) held. Result: "nothing was written … Excel did not answer before the change was sent". Sheet empty at +75 s. |
+| write_cells timeout mid-write | pass | 24,000×4 write (≈4.6 M chars, 3 chunks; 3.2 s unheld). Sync 3 (chunk 2) held. Result, `isError`: "rows 1–10538 … written and stands; rows 10539–20847 may or may not have been written; the remaining 3153 row(s) were not written", no backup (over the limit), "Read TO!A1:D20847 before retrying". Sheet at +80 s: exactly A1:D20847, last row r20847. Chunk 3 never reached Excel. |
+| fill_formula timeout before the fill | pass | `TO!H1:H20000 = ROW()*3`, sync 2 (inspection) held: "nothing was written … before the change was sent". Sheet empty at +75 s; the fill was never sent. |
+| fill_formula timeout on the fill | pass | Sync 3 (the paste) held: "⚠️ Outcome unknown — the fill … may or may not have been applied … Read TO!H1:H20000 before retrying." The held paste then landed (H1:H20000 filled), which the wording allows. Its quoted timeout text said "Excel has not answered 2 requests in a row", counting the previous probe's timeout because the cleanup in between bypassed `excelRun`; not a product issue. |
+| python_transform_range timeout before the write | pass | Python output 24,000×4, write-run sync 1 held: "Error: Nothing was written to TO!J1:M24000. Excel did not answer before the change was sent …". Sheet empty at +75 s. |
+| python_transform_range timeout mid-write (real web host, Python on Pyodide) | pass | Write-run sync 3 held: same partial wording as write_cells, `details.rowsWritten: 20847`, `verification: "failed"`. Sheet at +76 s: exactly J1:M20847. Before 47e8799 the abandoned chunks kept landing. |
+| execute_office_js timeout | pass | Code writes P1, sync; P2, sync; P3, sync in try with a catch that writes P5 and syncs. Sync 1 held: `isError`, plus "Pi cannot stop Office.js code once it runs. It blocked this code's later Excel calls, so nothing after the unanswered step reached Excel, but that step may still be applied …". Sheet at +75 s: only P1 ("step1", the held step). P2, P3 and the catch-path P5 never reached Excel. Unheld, the same code wrote P1:P3. Code that calls `Excel.run` itself is refused before running ("Do not call Excel.run() in code"), so it cannot open a run outside `runMutation`. |
+
+Not rechecked on cea7588: #792 c8593dc, #794 81a17f6 (restores) and the stopped-write card, which the integration thread smoke-tested.
