@@ -11,6 +11,7 @@
  */
 
 import { t } from "../language/index.js";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { UserMessage } from "@earendil-works/pi-ai";
 
 export interface CompactionSummaryMessage {
@@ -18,6 +19,11 @@ export interface CompactionSummaryMessage {
   summary: string;
   tokensBefore: number;
   timestamp: number;
+  /**
+   * Large results of answered requests kept after this summary. The model
+   * sees them as compacted previews; the tool cards keep the full output.
+   */
+  compactedToolCallIds?: string[];
 }
 
 declare module "@earendil-works/pi-agent-core" {
@@ -35,13 +41,26 @@ export function createCompactionSummaryMessage(args: {
   summary: string;
   tokensBefore: number;
   timestamp: number;
+  compactedToolCallIds?: string[];
 }): CompactionSummaryMessage {
   return {
     role: "compactionSummary",
     summary: args.summary,
     tokensBefore: args.tokensBefore,
     timestamp: args.timestamp,
+    ...(args.compactedToolCallIds && args.compactedToolCallIds.length > 0
+      ? { compactedToolCallIds: args.compactedToolCallIds }
+      : {}),
   };
+}
+
+/** Tool calls the latest compaction summary marked for compacting. */
+export function getCompactedToolCallIds(messages: readonly AgentMessage[]): ReadonlySet<string> {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role === "compactionSummary") return new Set(message.compactedToolCallIds ?? []);
+  }
+  return new Set();
 }
 
 /**

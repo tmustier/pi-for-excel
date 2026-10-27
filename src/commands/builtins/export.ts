@@ -21,6 +21,7 @@ import type { ActiveAgentProvider } from "./model.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";
 import { createCompactionSummaryMessage } from "../../messages/compaction.js";
+import { compactToolResult } from "../../messages/tool-result-shaping.js";
 import {
   createArchivedMessagesMessage,
   splitArchivedMessages,
@@ -178,6 +179,9 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact identifiers (sheet names, cell addresses, tool names, error messages).`;
 
+/** Appended to both prompts: requests are labelled with whether they were answered. */
+const ANSWERED_REQUESTS_RULE = `Each user request is labelled "answered" or "not answered yet". An answered request is finished: put it under Done with its outcome, and never under In Progress or Next Steps; do not suggest repeating its tool calls. A reply given after the summarized messages is shown right after them. Only requests not answered yet can be In Progress.`;
+
 const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
 Update the existing structured summary with new information. RULES:
@@ -304,7 +308,12 @@ function getPreviousCompaction(messages: AgentMessage[]): { boundaryStart: numbe
   return { boundaryStart: 0 };
 }
 
-function findCutIndex(messages: AgentMessage[], boundaryStart: number, keepRecentTokens: number): number {
+function findCutIndex(
+  messages: AgentMessage[],
+  boundaryStart: number,
+  keepRecentTokens: number,
+  estimate: (message: AgentMessage) => number = estimateTokens,
+): number {
   let accumulated = 0;
 
   for (let i = messages.length - 1; i >= boundaryStart; i--) {
@@ -313,7 +322,7 @@ function findCutIndex(messages: AgentMessage[], boundaryStart: number, keepRecen
       continue;
     }
 
-    accumulated += estimateTokens(message);
+    accumulated += estimate(message);
     if (accumulated >= keepRecentTokens) {
       let cut = i;
       // Never start kept context with a tool result.
@@ -327,7 +336,14 @@ function findCutIndex(messages: AgentMessage[], boundaryStart: number, keepRecen
   return boundaryStart;
 }
 
-function serializeConversation(messages: AgentMessage[], limits: SerializeLimits): string {
+/** Kept results above this size are compacted to a preview when their request was answered. */
+const KEPT_TOOL_RESULT_MAX_CHARS = 8_000;
+
+function serializeConversation(
+  messages: AgentMessage[],
+  limits: SerializeLimits,
+  answered: ReadonlyMap<AgentMessage, boolean> = new Map(),
+): string {
   const parts: string[] = [];
 
   for (const msg of messages) {
@@ -342,7 +358,8 @@ function serializeConversation(messages: AgentMessage[], limits: SerializeLimits
     if (msg.role === "user" || msg.role === "user-with-attachments") {
       const raw = typeof msg.content === "string" ? msg.content : extractTextBlocks(msg.content);
       const text = truncateMiddle(raw, limits.maxUserChars);
-      if (text.trim().length > 0) parts.push(`[User]: ${text}`);
+      const label = answered.has(msg) ? (answered.get(msg) ? "User request, answered" : "User request, not answered yet") : "User";
+      if (text.trim().length > 0) parts.push(`[${label}]: ${text}`);
       continue;
     }
 
@@ -407,9 +424,10 @@ function buildSummarizationPrompt(args: {
   customInstructions?: string;
 }): string {
   const base = args.previousSummary ? UPDATE_SUMMARIZATION_PROMPT : SUMMARIZATION_PROMPT;
+  const withRule = `${base}\n\n${ANSWERED_REQUESTS_RULE}`;
   const withFocus = args.customInstructions
-    ? `${base}\n\nAdditional focus: ${args.customInstructions}`
-    : base;
+    ? `${withRule}\n\nAdditional focus: ${args.customInstructions}`
+    : withRule;
 
   let prompt = `<conversation>\n${args.conversationText}\n</conversation>\n\n`;
 
@@ -594,17 +612,64 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
   const userCompactionFocus = args.trim() || undefined;
   let memoryNudgeShown = false;
 
+  const prompts = messagesWithoutArchived.flatMap((message, start) =>
+    message.role === "user" || message.role === "user-with-attachments" ? [{ start, prompt: message }] : []);
+  const turns = prompts.map(({ start, prompt }, n) => {
+    const end = prompts[n + 1]?.start ?? messagesWithoutArchived.length;
+    let reply: { index: number; text: string } | null = null;
+    for (let i = end - 1; i > start; i -= 1) {
+      const message = messagesWithoutArchived[i];
+      if (message?.role !== "assistant") continue;
+      const text = message.content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join("\n").trim();
+      if (message.stopReason === "stop" && text.length > 0) reply = { index: i, text };
+      break;
+    }
+    return { start, end, prompt, reply };
+  });
+  const compactable = new Set<string>();
+  for (const turn of turns) {
+    if (!turn.reply) continue;
+    for (let i = Math.max(turn.start, boundaryStart); i < turn.end; i += 1) {
+      const message = messagesWithoutArchived[i];
+      if (message?.role !== "toolResult") continue;
+      const chars = message.content.reduce((total, block) => total + (block.type === "text" ? block.text.length : 4_800), 0);
+      if (chars > KEPT_TOOL_RESULT_MAX_CHARS) compactable.add(message.toolCallId);
+    }
+  }
+
   const runOnce = async (limits: SerializeLimits, keepRecentOverride?: number): Promise<{
     summary: string;
     keptMessages: AgentMessage[];
+    compactedToolCallIds: string[];
     messagesToArchive: AgentMessage[];
     summarizedCount: number;
     summarizedTokens: number;
   }> => {
     const keepRecent = keepRecentOverride ?? keepRecentTokens;
-    const cutIndex = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
+    // Large results of answered requests are kept as previews, so they no
+    // longer fill the kept tail on their own.
+    const estimateKept = (message: AgentMessage) => estimateTokens(
+      message.role === "toolResult" && compactable.has(message.toolCallId) ? compactToolResult(message) : message,
+    );
+    // When the previews leave nothing to summarize, cut as before: compacting
+    // the kept results still frees their space.
+    const shrunkCut = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent, estimateKept);
+    const cutIndex = shrunkCut > boundaryStart ? shrunkCut : findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
     const messagesToSummarize = messagesWithoutArchived.slice(boundaryStart, cutIndex);
     const keptMessages = messagesWithoutArchived.slice(cutIndex);
+    const compactedToolCallIds = keptMessages.flatMap((message) => (
+      message.role === "toolResult" && compactable.has(message.toolCallId) ? [message.toolCallId] : []
+    ));
+
+    // Tell the summarizer which requests were answered, including by a reply
+    // that is kept after the summary.
+    const answered = new Map<AgentMessage, boolean>();
+    const laterReplies: string[] = [];
+    for (const turn of turns) {
+      if (turn.start < boundaryStart || turn.start >= cutIndex) continue;
+      answered.set(turn.prompt, turn.reply !== null);
+      if (turn.reply && turn.reply.index >= cutIndex) laterReplies.push(turn.reply.text);
+    }
 
     if (messagesToSummarize.length === 0) {
       throw new Error("Nothing to compact");
@@ -620,7 +685,10 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
       memoryNudgeShown = true;
     }
 
-    const conversationText = serializeConversation(messagesToSummarize, limits);
+    const conversationText = [
+      serializeConversation(messagesToSummarize, limits, answered),
+      ...laterReplies.map((text) => `[Assistant, final reply to the request above, given after these messages]: ${truncateMiddle(text, limits.maxAssistantChars)}`),
+    ].join("\n\n");
     const memoryFocus = buildCompactionMemoryFocusInstruction(memoryCues);
     const customInstructions = mergeCompactionAdditionalFocus(
       userCompactionFocus,
@@ -675,6 +743,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     return {
       summary,
       keptMessages,
+      compactedToolCallIds,
       messagesToArchive: messagesToSummarize,
       summarizedCount: countChatMessages(messagesToSummarize),
       summarizedTokens: messagesToSummarize.reduce(
@@ -700,6 +769,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     let out: {
       summary: string;
       keptMessages: AgentMessage[];
+      compactedToolCallIds: string[];
       messagesToArchive: AgentMessage[];
       summarizedCount: number;
       summarizedTokens: number;
@@ -727,6 +797,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
       summary: out.summary,
       tokensBefore: out.summarizedTokens,
       timestamp: now,
+      compactedToolCallIds: out.compactedToolCallIds,
     });
 
     if (signal?.aborted) throw new CompactionStoppedError();
