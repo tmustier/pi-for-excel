@@ -13,6 +13,7 @@ import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateT
 import { MemoryBackend, NativeDirectoryBackend, OpfsBackend, type WorkspaceBackend } from "./backend.js";
 import { getBuiltinWorkspaceDoc, isBuiltinWorkspacePath, listBuiltinWorkspaceDocs } from "./builtin-docs.js";
 import { resolveSafeBlobUrlMimeType } from "./blob-url-safety.js";
+import { saveBlobAsFile } from "../utils/download.js";
 import { inferMimeType, isTextMimeType } from "./mime.js";
 import { getWorkspaceBaseName, normalizeWorkspacePath } from "./path.js";
 import {
@@ -131,31 +132,6 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
   const out = new ArrayBuffer(bytes.byteLength);
   new Uint8Array(out).set(bytes);
   return out;
-}
-
-function closeWindowSafely(windowHandle: Window | null): void {
-  if (!windowHandle || windowHandle.closed) {
-    return;
-  }
-
-  try {
-    windowHandle.close();
-  } catch {
-    // ignore close errors
-  }
-}
-
-function tryOpenDownloadWindow(url: string, pendingWindow: Window | null): boolean {
-  if (pendingWindow && !pendingWindow.closed) {
-    try {
-      pendingWindow.location.replace(url);
-      return true;
-    } catch {
-      closeWindowSafely(pendingWindow);
-    }
-  }
-
-  return window.open(url, "_blank") !== null;
 }
 
 function isMissingWorkspaceFileError(error: unknown): boolean {
@@ -1479,67 +1455,26 @@ export class FilesWorkspace {
       throw new Error("Downloads are not available in this environment.");
     }
 
-    const pendingWindow = window.open("", "_blank");
-    return {
-      download: (path) => this.downloadFile(path, { pendingWindow }),
-      cancel: () => closeWindowSafely(pendingWindow),
-    };
-  }
+    const normalizedPath = normalizeWorkspacePath(path);
+    const readResult = await this.readRawFile({
+      path: normalizedPath,
+      ...requestedLocationArgs(options.locationKind),
+    });
+    const result = readResult.result;
 
-  async downloadFile(
-    path: string,
-    options: { locationKind?: WorkspaceFileLocationKind; pendingWindow?: Window | null } = {},
-  ): Promise<void> {
-    if (typeof document === "undefined") {
-      throw new Error("Downloads are not available in this environment.");
-    }
+    const bytes = result.base64
+      ? base64ToBytes(result.base64)
+      : encodeTextUtf8(result.text ?? "");
 
-    const pendingWindow = options.pendingWindow !== undefined ? options.pendingWindow : window.open("", "_blank");
+    const mimeType = result.mimeType && isTextMimeType(result.mimeType)
+      ? result.mimeType
+      : inferMimeType(result.name, result.mimeType);
 
-    try {
-      const normalizedPath = normalizeWorkspacePath(path);
-      const readResult = await this.readRawFile({
-        path: normalizedPath,
-        ...requestedLocationArgs(options.locationKind),
-      });
-      const result = readResult.result;
+    // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
+    // active-content execution at the app origin when opened via blob URL.
+    const safeMimeType = resolveSafeBlobUrlMimeType(mimeType);
 
-      const bytes = result.base64
-        ? base64ToBytes(result.base64)
-        : encodeTextUtf8(result.text ?? "");
-
-      const mimeType = result.mimeType && isTextMimeType(result.mimeType)
-        ? result.mimeType
-        : inferMimeType(result.name, result.mimeType);
-
-      // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
-      // active-content execution at the app origin when opened via blob URL.
-      const safeMimeType = resolveSafeBlobUrlMimeType(mimeType);
-
-      const blob = new Blob([toArrayBuffer(bytes)], { type: safeMimeType });
-      const url = URL.createObjectURL(blob);
-
-      // Open a blank tab synchronously before async file IO (above) to keep
-      // user activation in Office WKWebView. Then navigate it to the blob URL.
-      // Fall back to <a download> when popups are blocked.
-      const openedInWindow = tryOpenDownloadWindow(url, pendingWindow);
-      if (!openedInWindow) {
-        const anchor = document.createElement("a");
-        anchor.href = url;
-        anchor.download = result.name;
-        anchor.rel = "noopener";
-        anchor.style.display = "none";
-        document.body.appendChild(anchor);
-        anchor.click();
-        anchor.remove();
-      }
-
-      // Delay revocation so the opened window can finish loading the blob.
-      setTimeout(() => URL.revokeObjectURL(url), 60_000);
-    } catch (error) {
-      closeWindowSafely(pendingWindow);
-      throw error;
-    }
+    saveBlobAsFile(new Blob([toArrayBuffer(bytes)], { type: safeMimeType }), result.name);
   }
 
   async getContextSummary(currentWorkbookId: string | null): Promise<WorkspaceContextSummary> {
