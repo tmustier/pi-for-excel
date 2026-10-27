@@ -19,7 +19,7 @@ function terminalAppName(): string {
   return t("platform.terminal.other");
 }
 import { isCorsError, isModuleLoadError } from "../auth/cors-error.js";
-import { isProxyBlockedByBrowser } from "../taskpane/proxy-status.js";
+import { checkProxyOnce, isProxyBlockedByBrowser } from "../taskpane/proxy-status.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
@@ -871,6 +871,16 @@ export function buildProviderRow(
           if (!import.meta.env.DEV && OAUTH_IDS_NEEDING_PROXY.has(id)) {
             const reachable = await isProxyReachable();
             if (!reachable) {
+              // Where the browser blocks localhost (Excel on the web), the gate's
+              // "run the helper, then Retry" can never succeed: say why instead.
+              await checkProxyOnce(getAppStorage().settings);
+              if (isProxyBlockedByBrowser()) {
+                errorEl.textContent = t("proxy.blocked_by_browser");
+                errorEl.hidden = false;
+                oauthBtn.textContent = t("provider.login_with", { label });
+                oauthBtn.style.opacity = "1";
+                return;
+              }
               const userRetried = await showProxyGateDialog();
               if (!userRetried) {
                 // User cancelled — reset button and bail.
