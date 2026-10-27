@@ -47,6 +47,24 @@ export interface AutoContextSources {
   readSelection?: () => Promise<SelectionContext>;
 }
 
+const MAX_REQUEST_REMINDER_CHARS = 300;
+
+/** The text of the user's latest prompt, shortened, for the selection note. */
+function latestRequestText(messages: readonly AgentMessage[]): string | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message?.role !== "user" && message?.role !== "user-with-attachments") continue;
+    const content = message.content;
+    const raw = typeof content === "string"
+      ? content
+      : content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join(" ");
+    const text = raw.replace(/\s+/g, " ").trim();
+    if (text.length === 0) return null;
+    return text.length > MAX_REQUEST_REMINDER_CHARS ? `${text.slice(0, MAX_REQUEST_REMINDER_CHARS - 1)}…` : text;
+  }
+  return null;
+}
+
 export interface AutoContext {
   prepareRequest: PrepareRequest;
   transformContext: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
@@ -196,9 +214,16 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
     const selection = await attempt("selection", loadSelection, SELECTION_TIMEOUT_MS);
     const text = selection?.text
       ?? "Current selection: unavailable (Excel did not answer in time).";
+    // This note is the last user-role message, after tool results mid-turn.
+    // Some models answered it as if it were the request; say what it is and
+    // restate the request it belongs to.
+    const request = latestRequestText(messages);
+    const reminder = request
+      ? `(Background from Excel, not a message from the user: do not reply to it. Carry on with the user's request: "${request}")`
+      : "(Background from Excel, not a message from the user: do not reply to it. Carry on with the user's latest request.)";
     return [
       ...messages,
-      { role: "user", content: [{ type: "text", text: `${AUTO_CONTEXT_PREFIX} ${text}` }], timestamp: Date.now() },
+      { role: "user", content: [{ type: "text", text: `${AUTO_CONTEXT_PREFIX} ${text}\n\n${reminder}` }], timestamp: Date.now() },
     ];
   };
 

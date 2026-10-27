@@ -190,10 +190,17 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
       const stored = current.slice(0, -1);
       assert.deepEqual(next.slice(0, stored.length), stored, `request ${i + 1} is a prefix of request ${i + 2}`);
     }
-    for (const request of requests) {
+    // The trailing note, after tool results mid-turn, says it is not a request
+    // and restates the request it belongs to.
+    for (const [index, request] of requests.entries()) {
       const last = request.messages.at(-1);
       assert.ok(last);
       assert.match(textOf(last), /^\[Auto-context\] Current selection: read/u);
+      const prompt = index < 3 ? "write C1" : "again";
+      assert.ok(
+        textOf(last).endsWith(`not a message from the user: do not reply to it. Carry on with the user's request: "${prompt}")`),
+        `request ${index + 1}: ${textOf(last)}`,
+      );
     }
     assert.equal(selectionReads, 4);
 
