@@ -753,8 +753,49 @@ interface ToolDescriptionContext {
 
 type ToolDescriptionHandler = (context: ToolDescriptionContext) => ToolDesc;
 
+/**
+ * Header for a write the user stopped (`details.stopped`). How far it got:
+ * write_cells / fill_formula report `writtenCount` (0 = nothing changed);
+ * python_transform_range reports `rowsWritten × colsWritten`, and no
+ * `rowsWritten` when Stop came before the destination was known. A stopped
+ * write_cells / fill_formula without `writtenCount` (older results) cannot
+ * say how much landed, so the header asks the user to check the range.
+ */
+function describeStoppedWrite(details: ToolDetails): ToolDesc | null {
+  let written: number | undefined;
+  let address: string | undefined;
+  switch (details?.kind) {
+    case "write_cells":
+    case "fill_formula":
+      if (details.stopped !== true) return null;
+      written = details.writtenCount;
+      address = details.address;
+      break;
+    case "python_transform_range":
+      if (details.stopped !== true) return null;
+      written = details.rowsWritten === undefined ? 0 : details.rowsWritten * (details.colsWritten ?? 1);
+      address = details.outputAddress;
+      break;
+    default:
+      return null;
+  }
+
+  const action = t("tool-card.stopped.action");
+  if (written === 0) return { action, detail: t("tool-card.stopped.nothing") };
+  if (written === undefined) {
+    return address
+      ? toolDescWithAddress(action, t("tool-card.stopped.unknown", { address }), address)
+      : { action, detail: t("tool-card.stopped.nothing") };
+  }
+  return address
+    ? toolDescWithAddress(action, t("tool-card.stopped.after", { count: written, address }), address)
+    : { action, detail: t("tool-card.stopped.afterCount", { count: written }) };
+}
+
 function describeWriteCells(context: ToolDescriptionContext): ToolDesc {
   const { details, resultText, startCell } = context;
+  const stopped = describeStoppedWrite(details);
+  if (stopped) return stopped;
   const receipt = badge("write_cells", resultText, details);
   if (details?.kind === "write_cells" && details.address) {
     return toolDescWithAddress(
@@ -772,6 +813,8 @@ function describeWriteCells(context: ToolDescriptionContext): ToolDesc {
 
 function describeFillFormula(context: ToolDescriptionContext): ToolDesc {
   const { details, range, resultText } = context;
+  const stopped = describeStoppedWrite(details);
+  if (stopped) return stopped;
   const receipt = badge("fill_formula", resultText, details);
   if (details?.kind === "fill_formula" && details.address) {
     return toolDescWithAddress(
@@ -789,6 +832,8 @@ function describeFillFormula(context: ToolDescriptionContext): ToolDesc {
 
 function describePythonTransform(context: ToolDescriptionContext): ToolDesc {
   const { details, params, range, resultText } = context;
+  const stopped = describeStoppedWrite(details);
+  if (stopped) return stopped;
   const receipt = badge("python_transform_range", resultText, details);
   if (details?.kind === "python_transform_range") {
     const address = details.outputAddress ?? details.inputAddress;

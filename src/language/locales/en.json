@@ -1228,5 +1228,10 @@
   "tool-card.image": "Image:",
   "tool-card.imageAlt": "Tool result image",
   "render-csv-table.copy": "Copy CSV",
-  "render-csv-table.empty": "(empty)"
+  "render-csv-table.empty": "(empty)",
+  "tool-card.stopped.action": "Stopped",
+  "tool-card.stopped.nothing": "— nothing written",
+  "tool-card.stopped.after": "{address} — {count} written",
+  "tool-card.stopped.afterCount": "— {count} written",
+  "tool-card.stopped.unknown": "{address} — check what was written"
 }
