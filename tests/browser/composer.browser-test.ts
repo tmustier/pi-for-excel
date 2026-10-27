@@ -181,6 +181,37 @@ void test("each tab keeps its own draft, and a starter hint adds to it", async (
   });
 });
 
+void test("undo in a tab's composer never replays typing from another tab", async () => {
+  await withTaskpane(async (page) => {
+    const input = page.locator("pi-input textarea");
+    // The browser's own undo command, which Ctrl/Cmd+Z runs in the composer.
+    const undo = () => page.evaluate(() => { document.execCommand("undo"); });
+    await input.click();
+    await page.keyboard.type("my draft");
+    await page.locator(".pi-session-tabs__new").click();
+    await page.locator(".pi-session-tab").nth(1).waitFor({ state: "visible" });
+    await page.locator(".pi-session-tab").nth(0).locator(".pi-session-tab__main").click();
+    await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("pi-input textarea")?.value === "my draft");
+    await input.click();
+    await page.keyboard.press("End");
+    await page.keyboard.type("abc");
+    await input.selectText();
+    await page.keyboard.press("Backspace");
+
+    await page.locator(".pi-session-tab").nth(1).locator(".pi-session-tab__main").click();
+    await page.waitForFunction(() => document.querySelector<HTMLTextAreaElement>("pi-input textarea")?.value === "");
+    await input.click();
+    await undo();
+    await undo();
+    assert.equal(await input.inputValue(), "");
+
+    // Undo still works for this tab's own typing.
+    await page.keyboard.type("tab two");
+    await undo();
+    assert.equal(await input.inputValue(), "");
+  });
+});
+
 void test("the composer trims a prompt and does not submit whitespace", async () => {
   await withTaskpane(async (page) => {
     const input = page.locator("pi-input textarea");

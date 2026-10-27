@@ -226,17 +226,21 @@ function selectIndex(index: number): void {
  * Wire the command menu to a textarea.
  * Call once after the textarea is available.
  */
-export function wireCommandMenu(textarea: HTMLTextAreaElement): void {
-  const getAnchor = (): HTMLElement =>
-    textarea.closest<HTMLElement>(".pi-input-card")
-    ?? textarea.closest<HTMLElement>(".bg-card")
-    ?? textarea;
-
-  textarea.addEventListener("input", () => {
+/**
+ * Listens on the composer element, not its textarea: the composer renders a
+ * fresh textarea for each tab (see `PiInput.loadDraft`).
+ */
+export function wireCommandMenu(composer: HTMLElement): void {
+  composer.addEventListener("input", (event) => {
+    const textarea = event.target;
+    if (!(textarea instanceof HTMLTextAreaElement)) return;
+    const anchor = textarea.closest<HTMLElement>(".pi-input-card")
+      ?? textarea.closest<HTMLElement>(".bg-card")
+      ?? textarea;
     const value = textarea.value;
     if (value.startsWith("/") && !value.includes("\n")) {
       const filter = value.slice(1); // strip the `/`
-      showCommandMenu(filter, getAnchor());
+      showCommandMenu(filter, anchor);
       return;
     }
 
@@ -244,7 +248,7 @@ export function wireCommandMenu(textarea: HTMLTextAreaElement): void {
   });
 
   // Clicking elsewhere, switching tabs or opening an overlay closes the menu.
-  textarea.addEventListener("blur", () => {
-    hideCommandMenu();
+  composer.addEventListener("focusout", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) hideCommandMenu();
   });
 }

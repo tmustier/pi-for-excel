@@ -62,6 +62,8 @@ export function bindRuntimeSidebar(opts: {
     if (activeRuntime) {
       sidebar.agent = activeRuntime.agent;
       sidebar.syncFromAgent();
+      // A fresh textarea per tab switch, so undo never crosses tabs.
+      sidebar.getInput()?.loadDraft(activeRuntime.tab.draft);
       showTabState(activeRuntime);
       unsubscribeTab = activeRuntime.tab.subscribe(() => showTabState(activeRuntime));
     } else {
