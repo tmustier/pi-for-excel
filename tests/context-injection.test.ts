@@ -191,15 +191,18 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
       const stored = current.slice(0, -1);
       assert.deepEqual(next.slice(0, stored.length), stored, `request ${i + 1} is a prefix of request ${i + 2}`);
     }
-    // The trailing note, after tool results mid-turn, says it is not a request
-    // and restates the request it belongs to.
+    // The trailing note says it is background; mid-turn it says it is not a new
+    // request, and it never restates the request (that looped a mutation).
     for (const [index, request] of requests.entries()) {
       const last = request.messages.at(-1);
       assert.ok(last);
       assert.match(textOf(last), /^\[Auto-context\] Current selection: read/u);
-      const prompt = index < 3 ? "write C1" : "again";
+      assert.doesNotMatch(textOf(last), /write C1|again/u, `request ${index + 1} restates the request`);
+      const midTurn = index === 1 || index === 2; // calls 2 and 3 follow tool results
       assert.ok(
-        textOf(last).endsWith(`not a message from the user: do not reply to it. Carry on with the user's request: "${prompt}")`),
+        textOf(last).endsWith(midTurn
+          ? "not a new request. Continue from the tool results above; do not repeat steps that already succeeded.)"
+          : "(Background from Excel, not a message from the user.)"),
         `request ${index + 1}: ${textOf(last)}`,
       );
     }
@@ -485,6 +488,51 @@ void test("a backup restore, another tab's write and an extension's write are re
     assert.match(b, /By Pi in another chat tab:\n- Data: F3, 9:9\n/u);
     assert.match(b, /Restored from a backup by the user[^\n]*\n- Data: B2:D4, G7\n/u);
     assert.equal(b.match(/G7/gu)?.length, 1, "a cell is listed once, under whoever changed it last");
+  } finally {
+    uninstall();
+  }
+});
+
+void test("Pi's own structure change is not sent back as a new workbook note mid-turn; the next turn gets it", async () => {
+  const workbook = new FakeWorkbook();
+  const uninstall = workbook.install();
+  try {
+    const tracker = new ChangeTracker();
+    await tracker.start();
+    let blueprint = "1. **Data** (10 rows)";
+    const autoContext = createAutoContext({
+      changeTracker: tracker,
+      getAgent: () => undefined,
+      runtimeId: "tab-a",
+      getWorkbookId: () => Promise.resolve("wb-1"),
+      getBlueprint: () => Promise.resolve(blueprint),
+      getFilesSummary: () => Promise.resolve(null),
+    });
+    const model = fauxProvider().getModel();
+    const notesFor = async (messages: AgentMessage[]) => {
+      const update = await autoContext.prepareRequest({ model, thinkingLevel: "off", context: { messages } });
+      return (update?.context?.messages ?? []).filter((message) => message.role === "autoContext" && !messages.includes(message));
+    };
+
+    const prompt: AgentMessage = { role: "user", content: "Insert one row at row 12 of Data.", timestamp: 1 };
+    const first = await notesFor([prompt]);
+    assert.equal(first.length, 1);
+    const history: AgentMessage[] = [prompt, ...first];
+
+    // Pi's insert succeeds and changes the structure.
+    blueprint = "1. **Data** (11 rows)";
+    autoContext.noteOwnStructureChange();
+    history.push(
+      fauxAssistantMessage(fauxToolCall("modify_structure", {}, { id: "ins-1" }), { stopReason: "toolUse" }),
+      { role: "toolResult", toolCallId: "ins-1", toolName: "modify_structure", content: [{ type: "text", text: "Inserted row 12" }], isError: false, timestamp: 2 },
+    );
+    assert.deepEqual(await notesFor(history), [], "no fresh structure note after Pi's own insert");
+
+    // The next user prompt gets the new structure.
+    history.push(fauxAssistantMessage("Done."), { role: "user", content: "Thanks", timestamp: 3 });
+    const next = await notesFor(history);
+    assert.equal(next.length, 1);
+    assert.match(next[0]?.role === "autoContext" ? next[0].text : "", /structure changed[\s\S]*11 rows/u);
   } finally {
     uninstall();
   }

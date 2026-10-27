@@ -92,6 +92,7 @@ Implications:
 
 Rules:
 - A source that fails or times out is logged (`[auto-context]`) and, for the selection, reported to the agent as unavailable. Never silently dropped.
+- A structure change caused by the runtime's own mutation does not add a workbook note mid-turn (the tool result already says what changed); the next turn's first request carries it. The trailing selection note says it is background and, mid-turn, "not a new request … do not repeat steps that already succeeded"; it never restates the user's request. Both together had let a model repeat a successful `insert_rows` 54 times in one turn.
 - Auto-context Excel reads use `excelRun(..., { waitForCellEdit: false })`: they must not hold up a model request while the user edits a cell.
 - Edit tracking: one workbook-level `worksheets.onChanged` listener per taskpane; each runtime (chat tab) reads the shared log from its own cursor and is told about every edit it did not make itself. Every write Pi makes is recorded as a write window: tool calls through the coordinator wrapper (with their runtime) and user restores from `/revert` or the Backups dialog. Writes are serialized by the workbook lock, so:
   - `triggerSource: "ThisLocalAddin"` edits are matched to the latest write window covering their time (range overlap breaks ties): the runtime's own writes are left out; restores are listed as "Restored from a backup by the user", other tabs' writes as "By Pi in another chat tab", unmatched add-in edits (extensions) as "By Pi outside this chat".
