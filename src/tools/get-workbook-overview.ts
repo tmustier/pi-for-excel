@@ -83,6 +83,28 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   };
 }
 
+/** Columns of the header row read; wider sheets list the first ones only. */
+const MAX_HEADER_COLUMNS = 200;
+
+/**
+ * Labels in the first row of the used range, which is the header row even
+ * when the data starts below row 1 or right of column A. `rowNote` names the
+ * row when it is not row 1, e.g. " (row 5)".
+ */
+async function loadHeaderRow(
+  context: Excel.RequestContext,
+  sheet: Excel.Worksheet,
+  used: Excel.Range,
+): Promise<{ labels: string[]; rowNote: string }> {
+  if (used.isNullObject) return { labels: [], rowNote: "" };
+  const row = sheet.getRangeByIndexes(used.rowIndex, used.columnIndex, 1, Math.min(used.columnCount, MAX_HEADER_COLUMNS));
+  row.load("values");
+  await context.sync();
+  const values = Value.Parse(cellValueGridSchema, row.values)[0] ?? [];
+  const labels = values.filter((v) => v !== null && v !== undefined && v !== "").map((v) => String(v));
+  return { labels, rowNote: used.rowIndex === 0 ? "" : ` (row ${used.rowIndex + 1})` };
+}
+
 /**
  * Calculation mode and sheet protection for the workbook overview tool. Kept
  * out of buildOverview() because that text is the cached blueprint, which only
@@ -134,11 +156,7 @@ export async function buildOverview(): Promise<string> {
 
     for (const sheet of sheets.items) {
       const used = sheet.getUsedRangeOrNullObject();
-      used.load("rowCount,columnCount,address");
-
-      // Get header row (first populated row)
-      const headerRange = sheet.getRange("1:1").getUsedRangeOrNullObject();
-      headerRange.load("values");
+      used.load("rowCount,columnCount,rowIndex,columnIndex,address");
 
       // Get tables on this sheet
       const tables = sheet.tables;
@@ -167,19 +185,17 @@ export async function buildOverview(): Promise<string> {
 
       const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
 
-      const headers = headerRange.isNullObject
-        ? []
-        : (headerRange.values[0] ?? []).filter((v) => v !== null && v !== undefined && v !== "");
+      const header = await loadHeaderRow(context, sheet, used);
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
       );
 
-      if (headers.length > 0) {
-        const display = headers.length > 8
-          ? headers.slice(0, 8).join(", ") + `, … (+${headers.length - 8} more)`
-          : headers.join(", ");
-        lines.push(`   Headers: ${display}`);
+      if (header.labels.length > 0) {
+        const display = header.labels.length > 8
+          ? header.labels.slice(0, 8).join(", ") + `, … (+${header.labels.length - 8} more)`
+          : header.labels.join(", ");
+        lines.push(`   Headers${header.rowNote}: ${display}`);
       }
 
       // List tables
@@ -241,10 +257,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const freeze = sheet.freezePanes.getLocationOrNullObject();
     freeze.load("address");
 
-    // Header row
-    const headerRange = sheet.getRange("1:1").getUsedRangeOrNullObject();
-    headerRange.load("values");
-
     // Tables
     const tables = sheet.tables;
     tables.load("items/name,items/columns/count,items/rows/count");
@@ -282,13 +294,9 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     lines.push(`Dimensions: ${dims}`);
 
     // ── Headers ──
-    const headers = headerRange.isNullObject
-      ? []
-      : (headerRange.values[0] ?? []).filter(
-          (v) => v !== null && v !== undefined && v !== "",
-        );
-    if (headers.length > 0) {
-      lines.push(`Headers: ${headers.join(", ")}`);
+    const header = await loadHeaderRow(context, sheet, used);
+    if (header.labels.length > 0) {
+      lines.push(`Headers${header.rowNote}: ${header.labels.join(", ")}`);
     }
 
     // ── Tables ──
