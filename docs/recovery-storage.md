@@ -56,7 +56,13 @@ read the old monolith, and temporarily needs room for old plus compressed data.
 
 Old panes close on versionchange and show the existing reload-required message.
 Older/cached builds cannot open v3 (`VersionError`): database downgrades are not
-supported. Backups are captured before mutations but persisted **after** them;
+supported. On Mac, an older bundle displays the raw "Initialization failed:
+An attempt was made to open a database using a lower version than the existing
+version" error, not the newer pane's reload-required notice. **Developers should
+test on an isolated origin**: upgrading their normal origin also locks every
+older branch out of chats/settings/sign-ins there. Clearing WebKit data removes
+the version lock by deleting all that data; it is not a safe rollback strategy.
+Backups are captured before mutations but persisted **after** them;
 this redesign does not turn quota/closed-pane failures into pre-write guarantees.
 An unavailable backup is reported honestly in the tool result and toast. A
 failed inverse save cannot undo an already completed restore.
@@ -126,3 +132,40 @@ Durable recovery still requires downloading a full workbook backup.
 Unmeasured: actual disk-full commit behaviour, peak heap at large payloads,
 Windows desktop WebView2 quota, and real long-term host eviction. No exact
 physical-size/eviction guarantee is claimed.
+
+## Implementation acceptance
+
+- Deterministic suites: 1,001 overall, 731 context, 69 recovery, 97 security,
+  45 models. Check and production build pass. Native Chromium browser suite:
+  118 tests, including two panes migrating a v2 archive concurrently, preserving
+  `afterFormulas`, then appending without losses, paging 71 entries as 50 + 21,
+  and clearing every page. Injected migration failure rolls back the copy,
+  marker and source deletion; ordinary settings remain writable.
+- Excel on the web: a real GPT-6.1 Sol turn called `read_range` and `write_cells`
+  on a scratch 2×2 range. Independent Office.js readback confirmed the changed
+  values; the stored gzip Blob was 385 bytes. `/revert` restored all four
+  original values, including non-ASCII text. Original and inverse backups
+  decoded after a taskpane reload. A separate later edit (909) triggered
+  "Overwrite later edits?"; choosing "Keep my edits" preserved 909.
+- Excel for Mac / WKWebView, isolated `https://localhost:3142` and separate
+  add-in ID, production build of initial implementation `5c61b21d`: four real
+  legacy backups from two workbooks migrated with all IDs/times/identities
+  intact. Direct reads of WebKit's SQLite and Blob files independently confirmed
+  four gzip payloads and 3,068 accounted bytes; the source key was gone. Real
+  GPT-6 Luna writes, restore/inverse backups, restore of a migrated payload,
+  and Excel relaunch persistence passed.
+- Mac Save As to a new path moved six metadata rows, leaving the other
+  workbook untouched. Save As over an existing destination retained its backup
+  and merged all seven. Blob inodes, sizes and mtimes were unchanged, as was
+  accounting. Deleting one backup freed its file immediately and subtracted
+  exactly 771 bytes; Clear all left zero metadata/payload/files/accounted bytes.
+  Thomas's normal `:3141` origin was never opened by this test build.
+- Mac confirmed the older-bundle forward lock described above. Mac did not
+  force failed migrations, quota exhaustion, old-pane upgrade handoff, external
+  rename/move, or large payloads in this implementation. Failure/concurrency
+  coverage comes from deterministic/native Chromium tests, not that Mac run.
+
+An already-open Backups panel is a loaded page, not a live subscription. Use
+Refresh or close/reopen after changes made outside it; rerunning `/history`
+while the panel is open does not refresh it. This PR does not add cross-pane UI
+subscriptions.

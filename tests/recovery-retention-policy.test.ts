@@ -71,6 +71,9 @@ void test("corrupt or oversized legacy data is retained, not silently trimmed on
     const tiny = new RecoveryStore(settings.backend, 1);
     await assert.rejects(tiny.migrate(), /original data is unchanged/);
     assert.deepEqual(await settings.get(RECOVERY_SETTING_KEY), legacy);
+    const fallback = await tiny.page("book-a");
+    assert.equal(fallback.entries.length, legacy.snapshots[0]?.id === "legacy" ? 1 : 0);
+    assert.ok(fallback.entries.every((entry) => !("beforeValues" in entry)), "fallback pages also expose metadata only");
   }
 });
 

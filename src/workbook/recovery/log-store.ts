@@ -82,19 +82,22 @@ function withSize(entry: RecoveryMetadata, payloadBytes: number): RecoveryMetada
   }
 }
 
-async function encode(snapshot: WorkbookRecoverySnapshot): Promise<{ entry: RecoveryMetadata; blob: Blob }> {
+function snapshotMetadata(snapshot: WorkbookRecoverySnapshot): RecoveryMetadata {
   const { id, at, workbookId, workbookLabel, toolName, toolCallId, address, changedCount, cellCount,
     snapshotKind, restoredFromSnapshotId, turnId } = snapshot;
-  const raw = new Blob([JSON.stringify(createPersistedWorkbookRecoveryPayload([snapshot]))]);
-  const blob = await new Response(raw.stream().pipeThrough(new CompressionStream("gzip"))).blob();
-  const entry = withSize({ id, at, workbookId: workbookId ?? "", toolName, toolCallId, address,
+  return { id, at, workbookId: workbookId ?? "", toolName, toolCallId, address,
     changedCount, cellCount, sizeBytes: 0,
     ...(workbookLabel === undefined ? {} : { workbookLabel }),
     ...(snapshotKind === undefined ? {} : { snapshotKind }),
     ...(restoredFromSnapshotId === undefined ? {} : { restoredFromSnapshotId }),
     ...(turnId === undefined ? {} : { turnId }),
-  }, blob.size);
-  return { entry, blob };
+  };
+}
+
+async function encode(snapshot: WorkbookRecoverySnapshot): Promise<{ entry: RecoveryMetadata; blob: Blob }> {
+  const raw = new Blob([JSON.stringify(createPersistedWorkbookRecoveryPayload([snapshot]))]);
+  const blob = await new Response(raw.stream().pipeThrough(new CompressionStream("gzip"))).blob();
+  return { entry: withSize(snapshotMetadata(snapshot), blob.size), blob };
 }
 
 /** A transaction-local cursor; callbacks may queue IDB work, never compression/host work. */
@@ -209,7 +212,7 @@ export class RecoveryStore {
           ? entry.at > options.cursor.at || (entry.at === options.cursor.at && entry.id > options.cursor.id)
           : entry.at < options.cursor.at || (entry.at === options.cursor.at && entry.id < options.cursor.id)))
         .slice(0, limit + 1)
-        .map((entry) => ({ ...entry, workbookId: entry.workbookId ?? "", sizeBytes: 0 }));
+        .map(snapshotMetadata);
       return this.finishPage(entries, limit);
     }
     return this.backend.indexedTransaction([META], "readonly", async (tx) => {
