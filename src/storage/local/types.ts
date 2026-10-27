@@ -181,7 +181,7 @@ export interface IndexConfig {
   /** Index name */
   name: string;
   /** Key path to index on */
-  keyPath: string;
+  keyPath: string | string[];
   /** Unique constraint (optional) */
   unique?: boolean;
 }

@@ -28,7 +28,8 @@
     "oxc/no-accumulating-spread": "error",
     "anti-slop/no-reduce-accumulator-copy": "error",
     "anti-slop/no-module-mocking": "error",
-    "anti-slop/no-widen-then-assert": "error"
+    "anti-slop/no-widen-then-assert": "error",
+    "pi-for-excel/no-never-assertion-in-tests": "error"
   },
   "overrides": [
     {

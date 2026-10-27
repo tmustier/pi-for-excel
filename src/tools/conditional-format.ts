@@ -7,6 +7,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { getRange, qualifiedAddress } from "../excel/helpers.js";
@@ -27,7 +28,7 @@ const schema = Type.Object({
     description: '"add" to create a rule, "clear" to remove all rules in the range.',
   }),
   range: Type.String({
-    description: 'Target range, e.g. "A1:D10" or "Sheet2!B2:B50".',
+    description: 'Sheet-qualified target range, e.g. "Sheet2!B2:B50". Sheet name required.',
   }),
   type: Type.Optional(
     Type.Union([Type.Literal("formula"), Type.Literal("cell_value")], {
@@ -89,7 +90,7 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-export function createConditionalFormatTool(): AgentTool<typeof schema, ConditionalFormatDetails> {
+export function createConditionalFormatTool(attribution: RecoveryAttribution = {}): AgentTool<typeof schema, ConditionalFormatDetails> {
   return {
     name: "conditional_format",
     label: "Conditional Format",
@@ -102,7 +103,7 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
     ): Promise<AgentToolResult<ConditionalFormatDetails>> => {
       try {
         if (params.action === "clear") {
-          return await clearFormats(toolCallId, params);
+          return await clearFormats(toolCallId, params, attribution);
         }
 
         if (!params.type) {
@@ -135,7 +136,7 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
           };
         }
 
-        return await addFormat(toolCallId, params);
+        return await addFormat(toolCallId, params, attribution);
       } catch (e) {
         const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
         const message = failure.reason;
@@ -168,6 +169,7 @@ export function createConditionalFormatTool(): AgentTool<typeof schema, Conditio
 async function clearFormats(
   toolCallId: string,
   params: Params,
+  attribution: RecoveryAttribution,
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
   const checkpointState = await captureConditionalFormatState(params.range);
 
@@ -225,6 +227,7 @@ async function clearFormats(
         }
 
         return getWorkbookRecoveryLog().appendConditionalFormat({
+          ...recoveryTurn(attribution, toolCallId),
           toolName: "conditional_format",
           toolCallId,
           address: fullAddr,
@@ -244,6 +247,7 @@ async function clearFormats(
 async function addFormat(
   toolCallId: string,
   params: Params,
+  attribution: RecoveryAttribution,
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
   validateAddParams(params);
 
@@ -345,6 +349,7 @@ async function addFormat(
         }
 
         return getWorkbookRecoveryLog().appendConditionalFormat({
+          ...recoveryTurn(attribution, toolCallId),
           toolName: "conditional_format",
           toolCallId,
           address: fullAddr,
@@ -407,4 +412,3 @@ function applyFormat(format: Excel.ConditionalRangeFormat, params: Params): void
     format.font.underline = params.underline ? "Single" : "None";
   }
 }
-

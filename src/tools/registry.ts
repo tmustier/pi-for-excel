@@ -33,6 +33,8 @@ import {
 } from "./skills.js";
 import { composeCoreToolsForHost } from "./host-selection.js";
 import type { CoreToolName } from "./names.js";
+import type { RecoveryAttribution } from "./recovery-metadata.js";
+import type { GuidanceChangeDependencies } from "./guidance-change.js";
 
 export { CORE_TOOL_NAMES } from "./names.js";
 export type { CoreToolName } from "./names.js";
@@ -44,6 +46,8 @@ export type AnyCoreTool = AgentTool<TSchema, unknown>;
 export interface CreateCoreToolsOptions {
   hostKind?: SpreadsheetHostKind;
   skills?: SkillsToolDependencies;
+  recovery?: RecoveryAttribution;
+  guidance?: GuidanceChangeDependencies;
 }
 
 type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
@@ -51,21 +55,21 @@ type CoreToolFactory = (options: CreateCoreToolsOptions) => AnyCoreTool;
 const CORE_TOOL_FACTORIES = {
   get_workbook_overview: () => createGetWorkbookOverviewTool(),
   read_range: () => createReadRangeTool(),
-  write_cells: () => createWriteCellsTool(),
-  fill_formula: () => createFillFormulaTool(),
+  write_cells: (options) => createWriteCellsTool({}, options.recovery),
+  fill_formula: (options) => createFillFormulaTool(options.recovery),
   search_workbook: () => createSearchWorkbookTool(),
-  modify_structure: () => createModifyStructureTool(),
-  format_cells: () => createFormatCellsTool(),
-  conditional_format: () => createConditionalFormatTool(),
-  charts: () => createChartsTool(),
+  modify_structure: (options) => createModifyStructureTool(options.recovery),
+  format_cells: (options) => createFormatCellsTool(options.recovery),
+  conditional_format: (options) => createConditionalFormatTool(options.recovery),
+  charts: (options) => createChartsTool({}, options.recovery),
   trace_dependencies: () => createTraceDependenciesTool(),
   explain_formula: () => createExplainFormulaTool(),
   view_settings: () => createViewSettingsTool(),
-  comments: () => createCommentsTool(),
-  instructions: () => createInstructionsTool(),
-  conventions: () => createConventionsTool(),
-  workbook_history: () => createWorkbookHistoryTool(),
-  skills: (options) => createSkillsTool(options.skills),
+  comments: (options) => createCommentsTool({}, options.recovery),
+  instructions: (options) => createInstructionsTool(options.guidance),
+  conventions: (options) => createConventionsTool(options.guidance),
+  workbook_history: (options) => createWorkbookHistoryTool({}, options.recovery),
+  skills: (options) => createSkillsTool({ ...options.skills, ...options.guidance }),
 } satisfies Record<CoreToolName, CoreToolFactory>;
 
 export { isCoreToolUnsupportedOnWps } from "./host-selection.js";

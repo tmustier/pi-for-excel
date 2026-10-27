@@ -7,7 +7,6 @@ import { captureValueDataRange } from "../src/workbook/recovery/structure-state.
 import { type RecoveryModifyStructureState } from "../src/workbook/recovery-states.ts";
 import {
   createInMemorySettingsStore,
-  findSnapshotById,
 } from "./fixtures/recovery-log.ts";
 
 void test("captureValueDataRange short-circuits oversized captures before loading cell grids", async () => {
@@ -272,7 +271,7 @@ void test("restore round-trips extended modify-structure kinds", async () => {
     let appliedState: RecoveryModifyStructureState | null = null;
 
     const log = new WorkbookRecoveryLog({
-      getSettingsStore: () => Promise.resolve(settingsStore),
+      getStore: () => Promise.resolve(settingsStore.recovery),
       getWorkbookContext: () => Promise.resolve(workbookContext),
       now: () => 1700000001960 + index,
       createId,
@@ -308,9 +307,8 @@ void test("restore round-trips extended modify-structure kinds", async () => {
     assert.equal(appliedAddress, scenario.address, `Expected apply address for ${scenario.name}.`);
     assert.deepEqual(appliedState, scenario.targetState, `Expected target state for ${scenario.name}.`);
 
-    const snapshots = await log.listForCurrentWorkbook(10);
     const inverse = restored.inverseSnapshotId
-      ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+      ? await log.read(restored.inverseSnapshotId)
       : null;
 
     assert.ok(inverse, `Expected inverse snapshot for ${scenario.name}.`);

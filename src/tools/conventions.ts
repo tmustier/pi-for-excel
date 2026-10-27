@@ -16,6 +16,8 @@ import {
   setStoredConventions,
 } from "../conventions/store.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { t } from "../language/index.js";
+import { approveGuidanceChange, showGuidanceUndo, type GuidanceChangeDependencies } from "./guidance-change.js";
 import type {
   FormatBuilderParams,
   StoredColorConventions,
@@ -289,7 +291,7 @@ function validateSetParams(params: Params): string[] {
   return errors;
 }
 
-export function createConventionsTool(): AgentTool<typeof schema, undefined> {
+export function createConventionsTool(dependencies: GuidanceChangeDependencies = {}): AgentTool<typeof schema, undefined> {
   return {
     name: "conventions",
     label: "Conventions",
@@ -300,6 +302,7 @@ export function createConventionsTool(): AgentTool<typeof schema, undefined> {
     execute: async (
       _toolCallId: string,
       params: Params,
+      signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<undefined>> => {
       try {
         const settings = getAppStorage().settings;
@@ -313,8 +316,17 @@ export function createConventionsTool(): AgentTool<typeof schema, undefined> {
         }
 
         if (params.action === "reset") {
+          const current = await getStoredConventions(settings);
+          await approveGuidanceChange(dependencies, "conventions", t("guidance.conventions.preview", { text: formatConventionsMarkdown({}) }), signal);
+          if (JSON.stringify(await getStoredConventions(settings)) !== JSON.stringify(current)) throw new Error("Conventions changed while waiting; read them again before retrying.");
+          signal?.throwIfAborted();
           await setStoredConventions(settings, {});
           emitConventionsUpdatedEvent();
+          showGuidanceUndo(t("guidance.conventions.updated"), async () => {
+            if (JSON.stringify(await getStoredConventions(settings)) !== "{}") throw new Error("Conventions changed since this update.");
+            await setStoredConventions(settings, current);
+            emitConventionsUpdatedEvent();
+          });
           return {
             content: [{
               type: "text",
@@ -351,8 +363,16 @@ export function createConventionsTool(): AgentTool<typeof schema, undefined> {
           merged = removeCustomPresets(merged, removeList);
         }
 
+        await approveGuidanceChange(dependencies, "conventions", t("guidance.conventions.preview", { text: formatConventionsMarkdown(merged) }), signal);
+        if (JSON.stringify(await getStoredConventions(settings)) !== JSON.stringify(current)) throw new Error("Conventions changed while waiting; read them again before retrying.");
+        signal?.throwIfAborted();
         await setStoredConventions(settings, merged);
         emitConventionsUpdatedEvent();
+        showGuidanceUndo(t("guidance.conventions.updated"), async () => {
+          if (JSON.stringify(await getStoredConventions(settings)) !== JSON.stringify(merged)) throw new Error("Conventions changed since this update.");
+          await setStoredConventions(settings, current);
+          emitConventionsUpdatedEvent();
+        });
 
         return {
           content: [{

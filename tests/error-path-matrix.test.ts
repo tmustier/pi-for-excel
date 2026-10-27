@@ -176,6 +176,7 @@ void test("error-path matrix: mcp tool call handles mid-call network disconnect"
   } as const;
 
   const tool = createMcpTool({
+    requestToolApproval: () => Promise.resolve(true),
     getRuntimeConfig: () => Promise.resolve({
       servers: [server],
       proxyBaseUrl: undefined,

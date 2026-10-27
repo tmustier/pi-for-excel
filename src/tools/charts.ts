@@ -3,6 +3,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -128,7 +129,7 @@ const schema = Type.Object({
   sheet: Type.Optional(
     Type.String({
       description:
-        "Worksheet name. For list, limits output to one sheet. For create/update, defaults to the active sheet or the source range sheet.",
+        "Worksheet name. For list, limits output to one sheet. Required for mutations, except create can use a sheet-qualified source range. Never defaults mutations to the active sheet.",
     }),
   ),
   name: Type.Optional(
@@ -775,11 +776,14 @@ function buildRecoveryStep(
 
 export function createChartsTool(
   dependencies: Partial<ChartsToolDependencies> = {},
+  attribution: RecoveryAttribution = {},
 ): AgentTool<typeof schema, ChartsDetails> {
   const resolvedDependencies: ChartsToolDependencies = {
     executeAction: dependencies.executeAction ?? defaultDependencies.executeAction,
     captureChartPresent: dependencies.captureChartPresent ?? defaultDependencies.captureChartPresent,
-    appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
+    appendRecoverySnapshot: (args) => (dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot)({
+      ...args, ...recoveryTurn(attribution, args.toolCallId),
+    }),
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
   };
 

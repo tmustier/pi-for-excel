@@ -10,7 +10,7 @@ import { startMcpServer } from "./fixtures/mcp-streamable-server.mjs";
 const TEST_TIMEOUT_MS = 3_000;
 const settings = { get: async () => undefined, set: async () => {}, delete: async () => {} };
 const config = (url) => ({ id: "shared-id", name: "fixture", url, enabled: true });
-const gateway = (server) => createMcpTool({ getRuntimeConfig: async () => ({ servers: [server] }) });
+const gateway = (server) => createMcpTool({ requestToolApproval: async () => true, getRuntimeConfig: async () => ({ servers: [server] }) });
 const call = (tool, text = "搜索🦊") => tool.execute("test-call", { tool: "echo", args: JSON.stringify({ text }) });
 const connect = (tool) => tool.execute("test-connect", { connect: "fixture" });
 function assertOk(result) {
@@ -106,7 +106,7 @@ for (const changed of ["url", "token", "proxy"]) {
     const server = await fixture(t);
     const mutableServer = config(server.url);
     const runtime = { servers: [mutableServer] };
-    const tool = createMcpTool({ getRuntimeConfig: async () => runtime });
+    const tool = createMcpTool({ requestToolApproval: async () => true, getRuntimeConfig: async () => runtime });
     assertOk(await call(tool, "before"));
     if (changed === "url") mutableServer.url += "-new";
     if (changed === "token") mutableServer.token = "fixture-token";
@@ -127,7 +127,7 @@ void test("an older handshake cannot replace a newer configuration's cache or se
   } });
   t.after(() => release.resolve());
   let current = config(server.url);
-  const tool = createMcpTool({ getRuntimeConfig: async () => ({ servers: [current] }) });
+  const tool = createMcpTool({ requestToolApproval: async () => true, getRuntimeConfig: async () => ({ servers: [current] }) });
   const old = connect(tool);
   await started.promise;
   current = { ...current, url: `${server.url}-new` };

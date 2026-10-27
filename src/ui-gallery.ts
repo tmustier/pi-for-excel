@@ -21,6 +21,7 @@ import { createBanner } from "./ui/banner.js";
 import { createCopyableCommand } from "./ui/command-copy.js";
 import { mountTranscriptHarness } from "./ui-gallery-transcript.js";
 import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
+import type { TurnChangesMessage } from "./messages/turn-changes.js";
 
 const galleryRoot = document.getElementById("gallery-root");
 if (!galleryRoot) throw new Error("Missing #gallery-root");
@@ -643,5 +644,24 @@ for (const [label, action] of [
   button.addEventListener("click", action);
   transcriptControls.appendChild(button);
 }
+
+const turnChangesSection = section("turn-changes", "Turn changes");
+const turnChangesList = document.createElement("message-list");
+turnChangesList.messages = (["finished", "stopped", "failed"] as const).map((outcome, index): TurnChangesMessage => ({
+  role: "turnChanges", turnId: `gallery-turn-${index}`, timestamp: index, outcome,
+  changes: [
+    { address: "Sheet1!B2:B40", changedCount: 39, backupIds: [`gallery-backup-${index}`] },
+    { address: "Summary!A1", changedCount: 1, backupIds: outcome === "failed" ? [] : [`gallery-summary-${index}`] },
+  ],
+}));
+turnChangesSection.append(turnChangesList);
+
+const turnCoverageSection = section("turn-coverage", "Turn undo coverage");
+const turnCoverageList = document.createElement("message-list");
+turnCoverageList.messages = [false, true].map((mixed): TurnChangesMessage => ({
+  role: "turnChanges", turnId: `gallery-coverage-${mixed}`, timestamp: 0, outcome: "finished", ranOfficeJs: true,
+  changes: mixed ? [{ address: "Sheet1!D7", changedCount: 1, backupIds: ["core-backup"] }] : [],
+}));
+turnCoverageSection.append(turnCoverageList);
 
 console.log("[ui-gallery] Rendered all sections");

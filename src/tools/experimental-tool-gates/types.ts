@@ -74,6 +74,7 @@ export interface OfficeJsExecuteApprovalRequest {
    * mode and the approval message includes an explicit warning.
    */
   riskIdentifiers?: string[];
+  destructive?: boolean;
   /** Aborts when the turn is stopped; the request should then be withdrawn. */
   signal?: AbortSignal;
 }

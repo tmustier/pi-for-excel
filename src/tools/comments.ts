@@ -6,6 +6,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -58,7 +59,7 @@ const schema = Type.Object({
   ),
   range: Type.String({
     description:
-      'Target cell or range in A1 notation, e.g. "A1", "B2:D10", "Sheet2!A1". ' +
+      'Target cell or range in A1 notation, e.g. "Sheet2!A1". Sheet name required for mutations. ' +
       "Range supported for read; other actions require a single cell.",
   }),
   content: Type.Optional(
@@ -123,12 +124,15 @@ const defaultDependencies: CommentsToolDependencies = {
 
 export function createCommentsTool(
   dependencies: Partial<CommentsToolDependencies> = {},
+  attribution: RecoveryAttribution = {},
 ): AgentTool<typeof schema, CommentsDetails> {
   const resolvedDependencies: CommentsToolDependencies = {
     dispatchAction: dependencies.dispatchAction ?? defaultDependencies.dispatchAction,
     appendAuditEntry: dependencies.appendAuditEntry ?? defaultDependencies.appendAuditEntry,
     captureCommentThread: dependencies.captureCommentThread ?? defaultDependencies.captureCommentThread,
-    appendRecoverySnapshot: dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot,
+    appendRecoverySnapshot: (args) => (dependencies.appendRecoverySnapshot ?? defaultDependencies.appendRecoverySnapshot)({
+      ...args, ...recoveryTurn(attribution, args.toolCallId),
+    }),
   };
 
   return {
@@ -466,4 +470,3 @@ async function executeSetResolved(ref: string, resolved: boolean): Promise<Comme
     summary: `${verb.toLowerCase()} comment thread at ${fullAddr}`,
   };
 }
-

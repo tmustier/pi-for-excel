@@ -6,6 +6,7 @@
  */
 
 import { runMutation } from "./mutation/run-mutation.js";
+import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FormatCellsDetails } from "./tool-details.js";
@@ -56,7 +57,7 @@ const POINTS_PER_CHAR_ARIAL_10 = 7.2;
 
 const schema = Type.Object({
   range: Type.String({
-    description: 'Range to format, e.g. "A1:D1", "Sheet2!B3:B20". Supports comma/semicolon-separated ranges on the same sheet (e.g. "A1:B2, D1:D2").',
+    description: 'Sheet-qualified range to format, e.g. "Sheet2!B3:B20". Supports comma/semicolon-separated ranges on the same named sheet (e.g. "Sheet2!A1:B2, D1:D2"). Sheet name required.',
   }),
   style: Type.Optional(
     Type.Union([Type.String(), Type.Array(Type.String())], {
@@ -475,7 +476,7 @@ const mutationFinalizeDependencies: MutationFinalizeDependencies = {
   appendAuditEntry: (entry) => getWorkbookChangeAuditLog().append(entry),
 };
 
-export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDetails> {
+export function createFormatCellsTool(attribution: RecoveryAttribution = {}): AgentTool<typeof schema, FormatCellsDetails> {
   return {
     name: "format_cells",
     label: "Format Cells",
@@ -597,6 +598,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
             }
 
             return getWorkbookRecoveryLog().appendFormatCells({
+              ...recoveryTurn(attribution, toolCallId),
               toolName: "format_cells",
               toolCallId,
               address: fullAddr,
@@ -633,6 +635,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
         if (capturedState && await formattingChangedSince(params.range, capturedState)) {
           try {
             const snapshot = await getWorkbookRecoveryLog().appendFormatCells({
+              ...recoveryTurn(attribution, toolCallId),
               toolName: "format_cells",
               toolCallId,
               address: params.range,

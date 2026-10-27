@@ -2,6 +2,9 @@
 
 ## Run every deterministic suite
 
+Run `npm run verify` before a PR: it runs each `check` sub-step, full `npm test`, Chromium tests and build, continuing after failures with excerpts and log paths. `npm run check` and the pre-commit hook remain unchanged.
+Use `npm run verify -- --last` to reread the previous report without rerunning. Identical tracked and non-ignored untracked content reuses a pass; use `--force` after changing ignored dependencies or the environment. See `--help` for timeout guidance.
+
 `npm test` discovers `tests/**/*.test.ts` and `tests/**/*.test.mjs`. CI runs this command. Adding a test must not require editing a file list.
 
 Keep fixtures under `tests/fixtures/` without a `.test` suffix. Do not import another test file to run its tests. Targeted commands such as `test:context` remain conveniences; the canonical full gate is `npm test`.

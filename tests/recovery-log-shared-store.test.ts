@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
-import { RETENTION_LIMIT_SETTING_KEY } from "../src/workbook/recovery/constants.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
 import { createInMemorySettingsStore, type InMemorySettingsStore } from "./fixtures/recovery-log.ts";
 
@@ -13,7 +12,7 @@ function workbook(id: string): () => Promise<WorkbookContext> {
 function createLog(store: InMemorySettingsStore, workbookId: string, clock: { now: number }, prefix: string): WorkbookRecoveryLog {
   let counter = 0;
   return new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(store),
+    getStore: () => Promise.resolve(store.recovery),
     getWorkbookContext: workbook(workbookId),
     now: () => {
       clock.now += 1;
@@ -56,9 +55,9 @@ void test("two taskpanes sharing one store keep each other's backups", async () 
   assert.equal((await paneB.listForCurrentWorkbook(50)).length, 4);
 });
 
-void test("\"Keep at most\" applies per workbook and keeps the newest", async () => {
+void test("the obsolete count setting no longer expires backups", async () => {
   const store = createInMemorySettingsStore();
-  await store.set(RETENTION_LIMIT_SETTING_KEY, 5);
+  await store.set("workbook.recovery.retentionLimit.v1", 5);
   const clock = { now: 1_700_000_000_000 };
   const bookA = createLog(store, "url_sha256:a", clock, "a");
   const bookB = createLog(store, "url_sha256:b", clock, "b");
@@ -67,23 +66,14 @@ void test("\"Keep at most\" applies per workbook and keeps the newest", async ()
   for (let index = 1; index <= 3; index += 1) await appendWrite(bookB, `Sheet1!B${index}`);
 
   const keptA = (await bookA.listForCurrentWorkbook(50)).map((entry) => entry.address);
-  assert.deepEqual(keptA, ["Sheet1!A8", "Sheet1!A7", "Sheet1!A6", "Sheet1!A5", "Sheet1!A4"]);
-  // Another workbook's backups do not count against this one's limit.
+  assert.deepEqual(keptA, ["Sheet1!A8", "Sheet1!A7", "Sheet1!A6", "Sheet1!A5", "Sheet1!A4", "Sheet1!A3", "Sheet1!A2", "Sheet1!A1"]);
   assert.equal((await bookB.listForCurrentWorkbook(50)).length, 3);
-
-  // Lowering the limit is not needed to trim: raising it keeps what is there.
-  await store.set(RETENTION_LIMIT_SETTING_KEY, 20);
-  await bookA.applyRetentionLimit();
-  assert.equal((await bookA.listForCurrentWorkbook(50)).length, 5);
 });
 
 void test("a backup that cannot be saved is reported, not silently dropped", async () => {
   const store = createInMemorySettingsStore();
-  const failing: InMemorySettingsStore = {
-    ...store,
-    update: () => Promise.reject(new DOMException("Quota exceeded", "QuotaExceededError")),
-  };
-  const log = createLog(failing, "url_sha256:book", { now: 1 }, "x");
+  store.recovery.append = () => Promise.reject(new DOMException("Quota exceeded", "QuotaExceededError"));
+  const log = createLog(store, "url_sha256:book", { now: 1 }, "x");
 
   await assert.rejects(appendWrite(log, "Sheet1!A1"), /Backup could not be saved: Quota exceeded/);
 });
@@ -92,7 +82,7 @@ void test("restore preview finds cells edited since Pi's change", async () => {
   const store = createInMemorySettingsStore();
   let current: unknown[][] = [[1, "=B2*2"], [3, 4]];
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(store),
+    getStore: () => Promise.resolve(store.recovery),
     getWorkbookContext: workbook("url_sha256:book"),
     now: () => 1_700_000_000_000,
     createId: () => "snap",

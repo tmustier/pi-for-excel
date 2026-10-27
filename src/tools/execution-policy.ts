@@ -125,7 +125,7 @@ export function getToolExecutionMode(toolName: string, params: unknown): ToolExe
  *   (`execute_office_js` / `execute_wps_js`, see
  *   `experimental-tool-gates/wrappers.ts`), so a call is never asked twice.
  */
-export type ToolApprovalRequirement = "none" | "confirm_mode" | "always";
+export type ToolApprovalRequirement = "none" | "confirm_mode" | "always" | "irreversible";
 
 const TOOLS_WITH_OWN_APPROVAL_GATE = new Set<string>([
   "execute_office_js",
@@ -133,6 +133,7 @@ const TOOLS_WITH_OWN_APPROVAL_GATE = new Set<string>([
 ]);
 
 export function getToolApprovalRequirement(toolName: string, params: unknown): ToolApprovalRequirement {
+  if (toolName === "charts" && getActionParam(params) === "delete") return "irreversible";
   if (toolName === "workbook_history") {
     const action = getActionParam(params);
     if (action === "delete" || action === "clear") return "always";

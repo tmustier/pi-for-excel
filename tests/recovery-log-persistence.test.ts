@@ -24,7 +24,7 @@ void test("recovery log appends and reloads workbook-scoped snapshots", async ()
   };
 
   const logA = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     now: () => 1700000000000,
     createId,
@@ -48,7 +48,7 @@ void test("recovery log appends and reloads workbook-scoped snapshots", async ()
   assert.equal(entriesA[0]?.workbookId, "url_sha256:workbook-a");
 
   const logB = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
   });
@@ -61,7 +61,7 @@ void test("append is skipped when workbook identity is unavailable", async () =>
   const settingsStore = createInMemorySettingsStore();
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
       workbookId: null,
       workbookName: null,
@@ -99,7 +99,7 @@ void test("delete is scoped to the active workbook", async () => {
   };
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     createId,
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
@@ -160,7 +160,7 @@ void test("clearForCurrentWorkbook removes only matching workbook checkpoints", 
   };
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     createId,
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
@@ -217,7 +217,7 @@ void test("clearForCurrentWorkbook is a no-op when workbook identity is unavaila
   });
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
       workbookId: null,
       workbookName: null,
@@ -234,7 +234,7 @@ void test("append skips oversized checkpoints", async () => {
   const settingsStore = createInMemorySettingsStore();
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve({
       workbookId: "url_sha256:big-workbook",
       workbookName: "Big.xlsx",
@@ -268,7 +268,7 @@ void test("appendModifyStructure stores cell counts from preserved data ranges",
   const settingsStore = createInMemorySettingsStore();
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve({
       workbookId: "url_sha256:structure-data-count",
       workbookName: "Structure.xlsx",
@@ -305,7 +305,7 @@ void test("appendModifyStructure skips oversized preserved data ranges", async (
   const settingsStore = createInMemorySettingsStore();
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve({
       workbookId: "url_sha256:structure-data-big",
       workbookName: "StructureBig.xlsx",

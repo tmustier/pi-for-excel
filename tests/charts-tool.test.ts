@@ -20,7 +20,6 @@ import type {
 } from "../src/workbook/recovery-states.ts";
 import {
   createInMemorySettingsStore,
-  findSnapshotById,
   withoutUndefined,
 } from "./fixtures/recovery-log.ts";
 
@@ -444,7 +443,7 @@ void test("chart update can be restored through workbook_history and records aud
   };
   let id = 0;
   const recovery = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settings),
+    getStore: () => Promise.resolve(settings.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1_700_000_000_000 + id,
     createId: () => `chart-snapshot-${id += 1}`,
@@ -544,7 +543,7 @@ void test("workbook recovery log persists and restores chart checkpoints", async
   let appliedState: RecoveryChartState | null = null;
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000000100,
     createId,
@@ -574,9 +573,8 @@ void test("workbook recovery log persists and restores chart checkpoints", async
   assert.equal(appliedAddress, "Sheet1!Sales");
   assert.deepEqual(withoutUndefined(appliedState), withoutUndefined(restoredState));
 
-  const snapshots = await log.listForCurrentWorkbook(10);
   const inverse = restored.inverseSnapshotId
-    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    ? await log.read(restored.inverseSnapshotId)
     : null;
 
   assert.ok(inverse);
@@ -604,7 +602,7 @@ void test("chart_absent restore can skip inverse snapshot when recreation would 
   };
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000000200 + ids.length,
     createId: () => {
@@ -751,4 +749,3 @@ void test("chart_absent restore with a missing id deletes nothing", async () => 
   assert.equal(survivor.deleted, false, "a different chart holding the name must not be deleted");
   assert.equal(sheet.charts.items.length, 1);
 });
-

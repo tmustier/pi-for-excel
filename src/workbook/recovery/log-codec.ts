@@ -29,7 +29,7 @@ export interface ParsePersistedSnapshotsOptions {
   maxEntries: number;
 }
 
-const WorkbookRecoveryToolNameSchema = StringEnum([
+export const WorkbookRecoveryToolNameSchema = StringEnum([
   "write_cells",
   "fill_formula",
   "python_transform_range",
@@ -52,6 +52,7 @@ const persistedSnapshotBase = {
   workbookId: Type.Optional(Type.String()),
   workbookLabel: Type.Optional(Type.String()),
   restoredFromSnapshotId: Type.Optional(Type.String()),
+  turnId: Type.Optional(Type.String()),
 };
 
 /**
@@ -160,6 +161,7 @@ function toSnapshot(persisted: PersistedWorkbookRecoverySnapshot): WorkbookRecov
   }
   if (persisted.workbookId !== undefined) snapshot.workbookId = persisted.workbookId;
   if (persisted.workbookLabel !== undefined) snapshot.workbookLabel = persisted.workbookLabel;
+  if (persisted.turnId !== undefined) snapshot.turnId = persisted.turnId;
   if (persisted.restoredFromSnapshotId !== undefined) {
     snapshot.restoredFromSnapshotId = persisted.restoredFromSnapshotId;
   }

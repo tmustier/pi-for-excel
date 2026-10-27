@@ -4,6 +4,7 @@
 
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
+import { Value } from "typebox/value";
 
 import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
@@ -16,6 +17,7 @@ import {
   type ToolContextImpact,
 } from "./execution-policy.js";
 import { isUnsupportedHostTool } from "./unsupported-host-tool.js";
+import { mutationTargetSchema, requireExplicitMutationTarget } from "./mutation/target.js";
 
 export interface WorkbookCoordinatorContextProvider {
   getWorkbookId: () => Promise<string | null>;
@@ -52,13 +54,14 @@ export interface WorkbookMutationObserver {
 export interface ToolApprovalRequest {
   executionMode: ExecutionMode;
   /** Why this call asks: Confirm mode, or an action that always asks (see execution-policy). */
-  reason: "confirm_mode" | "always";
+  reason: "confirm_mode" | "always" | "irreversible";
   toolName: string;
   params: unknown;
   /** Aborts when the turn is stopped; the request should then be withdrawn. */
   signal?: AbortSignal;
   /** Existing content the change replaces, when the tool could tell. */
   overwrites?: OverwrittenCells;
+  unbackableCellCount?: number;
 }
 
 /**
@@ -68,6 +71,8 @@ export interface ToolApprovalRequest {
  * happen. It runs as a workbook read; the tool checks again when it runs.
  */
 export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
+  /** Destructive tools inspect backup coverage even in Auto mode. */
+  alwaysCheckBeforeApproval?: boolean;
   checkBeforeApproval?: (
     toolCallId: string,
     params: Static<TParameters>,
@@ -88,6 +93,7 @@ export interface OverwrittenCells {
 export type ApprovalPrecheckResult<TDetails> =
   | { refused: AgentToolResult<TDetails> }
   | { overwrites: OverwrittenCells }
+  | { unbackableCellCount: number }
   | null;
 
 export interface WorkbookExecutionPolicy {
@@ -222,6 +228,9 @@ function wrapTool<TParameters extends TSchema, TDetails>(
     signal: AbortSignal | undefined,
     onUpdate: AgentToolUpdateCallback<TDetails> | undefined,
   ): Promise<AgentToolResult<TDetails>> {
+    if (mode === "mutate" && Value.Check(mutationTargetSchema, params)) {
+      requireExplicitMutationTarget(tool.name, params);
+    }
     const contextWorkbookId = await contextProvider.getWorkbookId();
     const coordinatorWorkbookId = contextWorkbookId ?? "workbook:unknown";
     const sessionId = contextProvider.getSessionId();
@@ -235,11 +244,11 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
     // Ask before waiting for the lock, so a pending approval never holds
     // up other tabs' writes.
-    const requirement = getToolApprovalRequirement(tool.name, params);
+    let requirement = getToolApprovalRequirement(tool.name, params);
     const executionMode = requirement === "none"
       ? "yolo"
       : await executionPolicy.getExecutionMode?.() ?? "yolo";
-    if (requirement === "always" || (requirement === "confirm_mode" && executionMode === "safe")) {
+    if (tool.alwaysCheckBeforeApproval || requirement === "always" || requirement === "irreversible" || (requirement === "confirm_mode" && executionMode === "safe")) {
       const { checkBeforeApproval } = tool;
       const checked = checkBeforeApproval
         ? await coordinator.runRead(
@@ -248,23 +257,24 @@ function wrapTool<TParameters extends TSchema, TDetails>(
         )
         : null;
       if (checked && "refused" in checked) return checked.refused;
-
-      if (!executionPolicy.requestToolApproval) {
-        throw new Error("This action requires explicit user approval, but confirmation UI is unavailable.");
-      }
-      const approved = await executionPolicy.requestToolApproval({
-        executionMode,
-        reason: requirement,
-        toolName: tool.name,
-        params,
-        ...(signal ? { signal } : {}),
-        ...(checked ? { overwrites: checked.overwrites } : {}),
-      });
-      throwIfAborted(signal);
-      if (!approved) {
-        throw new Error(requirement === "always"
-          ? "The user declined this action in the approval dialog."
-          : "The user declined this workbook change in the approval dialog (Confirm mode).");
+      if (checked && "unbackableCellCount" in checked) requirement = "irreversible";
+      if (requirement === "always" || requirement === "irreversible" || (requirement === "confirm_mode" && executionMode === "safe")) {
+        if (!executionPolicy.requestToolApproval) {
+          throw new Error("This action requires explicit user approval, but confirmation UI is unavailable.");
+        }
+        const approved = await executionPolicy.requestToolApproval({
+          executionMode,
+          reason: requirement,
+          toolName: tool.name,
+          params,
+          ...(signal ? { signal } : {}),
+          ...(checked && "overwrites" in checked ? { overwrites: checked.overwrites } : {}),
+          ...(checked && "unbackableCellCount" in checked ? { unbackableCellCount: checked.unbackableCellCount } : {}),
+        });
+        throwIfAborted(signal);
+        if (!approved) throw new Error(requirement === "confirm_mode"
+          ? "The user declined this workbook change in the approval dialog (Confirm mode)."
+          : "The user declined this action in the approval dialog.");
       }
     }
 

@@ -8,10 +8,10 @@
  */
 
 import { t } from "../language/index.js";
+import { PROXY_HELPER_COMMAND } from "../auth/proxy-validation.js";
 import { createBanner, hideBanner, mountBanner } from "./banner.js";
 import { createCopyableCommand } from "./command-copy.js";
 
-const PROXY_COMMAND = "npx pi-for-excel-proxy";
 const INSTALL_GUIDE_URL = "https://pi.dev/excel#connect";
 const BANNER_ID = "proxy";
 
@@ -61,7 +61,7 @@ export function createProxyBannerController(opts: {
         guide.rel = "noopener noreferrer";
         guide.textContent = t("proxy-banner.guideLink");
 
-        details.append(intro, createCopyableCommand(PROXY_COMMAND), hint, guide);
+        details.append(intro, createCopyableCommand(PROXY_HELPER_COMMAND), hint, guide);
       }
       const handle = createBanner({
         id: BANNER_ID,

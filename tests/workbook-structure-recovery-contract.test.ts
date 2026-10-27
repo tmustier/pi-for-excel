@@ -28,7 +28,7 @@ function firstText(result: { content: Array<{ type: string; text?: string }> }):
 
 function createHistory(settings: InMemorySettingsStore): ReturnType<typeof createWorkbookHistoryTool> {
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settings),
+    getStore: () => Promise.resolve(settings.recovery),
     getWorkbookContext: () => Promise.resolve(workbook),
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
   });

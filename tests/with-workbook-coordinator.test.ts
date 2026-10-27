@@ -300,7 +300,7 @@ void test("content-impact mutation tools do not trigger structure invalidation",
       toolName: "python_transform_range",
       params: { range: "Sheet1!A1:B3", code: "result = input_data['values']" },
     },
-    { toolName: "view_settings", params: { action: "hide_gridlines" } },
+    { toolName: "view_settings", params: { action: "hide_gridlines", sheet: "Sheet1" } },
     { toolName: "view_settings", params: { action: "activate", sheet: "Sheet1" } },
     { toolName: "workbook_history", params: { action: "restore", snapshot_id: "checkpoint-1" } },
   ];
@@ -636,4 +636,53 @@ void test("Confirm mode does not ask about a write the tool would refuse anyway"
   // An allowed overwrite asks, and the approval names what it replaces.
   await wrapped.execute("tc-overwrite", { occupied: true, allow: true });
   assert.deepEqual(asked, [undefined, { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] }]);
+});
+
+void test("mutations reject ambiguous targets before asking or writing; reads keep the fallback", async () => {
+  const cases = [
+    ["write_cells", { start_cell: "B2" }, { start_cell: "'My Sheet'!B2" }],
+    ["fill_formula", { range: "B2:C3" }, { range: "'My Sheet'!B2:C3" }],
+    ["format_cells", { range: "B2:C3" }, { range: "'My Sheet'!B2:C3,D5" }],
+    ["conditional_format", { range: "B2:C3" }, { range: "'My Sheet'!B2:C3" }],
+    ["comments", { action: "delete", range: "B2" }, { action: "delete", range: "'My Sheet'!B2" }],
+    ["python_transform_range", { range: "'My Sheet'!B2", output_start_cell: "D1" }, { range: "'My Sheet'!B2", output_start_cell: "Other!D1" }],
+    ["modify_structure", { action: "delete_rows" }, { action: "delete_rows", sheet: "My Sheet" }],
+    ["charts", { action: "update", name: "Chart 1" }, { action: "update", name: "Chart 1", sheet: "My Sheet" }],
+  ] as const;
+  for (const [name, ambiguous, explicit] of cases) {
+    const coordinator = new FakeCoordinator();
+    const [tool] = withWorkbookCoordinator([makeTool(name)], coordinator, createContextProvider("book"));
+    assert.ok(tool);
+    await assert.rejects(() => tool.execute("ambiguous", ambiguous), /Name the.*sheet/u);
+    assert.equal(coordinator.writeCalls.length, 0);
+    await tool.execute("explicit", explicit);
+    assert.equal(coordinator.writeCalls.length, 1);
+  }
+  const coordinator = new FakeCoordinator();
+  const [read] = withWorkbookCoordinator([makeTool("read_range")], coordinator, createContextProvider("book"));
+  assert.ok(read);
+  await read.execute("read", { range: "B2" });
+  assert.equal(coordinator.readCalls.length, 1);
+});
+
+void test("Auto still asks for unbackable deletes, before taking the write lock", async () => {
+  for (const name of ["charts", "modify_structure"]) {
+    const coordinator = new FakeCoordinator();
+    const tool = {
+      ...makeTool(name),
+      alwaysCheckBeforeApproval: true,
+      checkBeforeApproval: () => Promise.resolve({ unbackableCellCount: 20_001 }),
+    };
+    const [wrapped] = withWorkbookCoordinator([tool], coordinator, createContextProvider("book"), undefined, {
+      getExecutionMode: () => Promise.resolve("yolo"),
+      requestToolApproval: (request) => {
+        assert.equal(request.reason, "irreversible");
+        assert.equal(coordinator.writeCalls.length, 0);
+        return Promise.resolve(false);
+      },
+    });
+    assert.ok(wrapped);
+    await assert.rejects(() => wrapped.execute("delete", { action: "delete", sheet: "Data" }), /declined/u);
+    assert.equal(coordinator.writeCalls.length, 0);
+  }
 });

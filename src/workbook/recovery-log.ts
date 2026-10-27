@@ -16,16 +16,14 @@ import {
   type RecoveryWorkbookScope,
 } from "./recovery-scope.js";
 import {
-  createPersistedWorkbookRecoveryPayload,
-  parsePersistedSnapshots,
-} from "./recovery/log-codec.js";
-import {
   restoreWorkbookRecoverySnapshot,
 } from "./recovery/log-restore.js";
 import {
-  defaultGetSettingsStore,
-  readRetentionLimit,
-  RECOVERY_SETTING_KEY,
+  defaultGetRecoveryStore,
+  type RecoveryStore,
+  type RecoveryMetadata,
+  type RecoveryPage,
+  type RecoveryPageOptions,
 } from "./recovery/log-store.js";
 import {
   applyChartState,
@@ -58,10 +56,8 @@ import { getErrorMessage } from "../utils/errors.js";
 import { estimateModifyStructureCellCount } from "./recovery/structure-state.js";
 import {
   MAX_RECOVERY_CELLS,
-  MAX_RECOVERY_ENTRIES,
-  MAX_STORED_RECOVERY_ENTRIES,
+  RECOVERY_PAGE_SIZE,
 } from "./recovery/constants.js";
-import type { SettingsUpdater } from "../storage/local/settings-store.js";
 
 export { MAX_RECOVERY_CELLS };
 
@@ -86,6 +82,7 @@ export type WorkbookRecoverySnapshotKind =
 
 export interface WorkbookRecoverySnapshot {
   id: string;
+  turnId?: string;
   at: number;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
@@ -108,6 +105,7 @@ export interface WorkbookRecoverySnapshot {
 }
 
 export interface AppendWorkbookRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -120,6 +118,7 @@ export interface AppendWorkbookRecoverySnapshotArgs {
 }
 
 export interface AppendFormatCellsRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -129,6 +128,7 @@ export interface AppendFormatCellsRecoverySnapshotArgs {
 }
 
 export interface AppendModifyStructureRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -138,6 +138,7 @@ export interface AppendModifyStructureRecoverySnapshotArgs {
 }
 
 export interface AppendConditionalFormatRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -148,6 +149,7 @@ export interface AppendConditionalFormatRecoverySnapshotArgs {
 }
 
 export interface AppendCommentThreadRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -157,6 +159,7 @@ export interface AppendCommentThreadRecoverySnapshotArgs {
 }
 
 export interface AppendChartRecoverySnapshotArgs {
+  turnId?: string;
   toolName: WorkbookRecoveryToolName;
   toolCallId: string;
   address: string;
@@ -180,8 +183,7 @@ interface WorkbookRangeState {
 }
 
 interface WorkbookRecoveryLogDependencies {
-  settings: SettingsUpdater | null;
-  getSettingsStore: () => Promise<SettingsUpdater | null>;
+  getStore: () => Promise<RecoveryStore | null>;
   getWorkbookContext: () => Promise<WorkbookContext>;
   getDocumentInstance: () => DocumentInstanceIdentity | null;
   now: () => number;
@@ -367,7 +369,7 @@ function clampLimit(limit: number): number {
 
   const rounded = Math.floor(limit);
   if (rounded <= 0) return 0;
-  if (rounded > MAX_RECOVERY_ENTRIES) return MAX_RECOVERY_ENTRIES;
+  if (rounded > RECOVERY_PAGE_SIZE) return RECOVERY_PAGE_SIZE;
   return rounded;
 }
 
@@ -375,41 +377,13 @@ function matchesWorkbook(snapshot: WorkbookRecoverySnapshot, workbookId: string)
   return snapshot.workbookId === workbookId;
 }
 
-/**
- * Keeps the newest `perWorkbookLimit` backups of each workbook, then the
- * newest `MAX_STORED_RECOVERY_ENTRIES` overall. Saving the workbook does not
- * expire backups: on autosave hosts (Excel on the web, AutoSave) a save
- * happens every few seconds, which would leave nothing to revert.
- */
-function applyRetention(
-  snapshots: WorkbookRecoverySnapshot[],
-  perWorkbookLimit: number,
-): WorkbookRecoverySnapshot[] {
-  const keptPerWorkbook = new Map<string, number>();
-  return [...snapshots]
-    .sort((a, b) => b.at - a.at)
-    .filter((snapshot) => {
-      const key = snapshot.workbookId ?? "";
-      const kept = keptPerWorkbook.get(key) ?? 0;
-      if (kept >= perWorkbookLimit) return false;
-      keptPerWorkbook.set(key, kept + 1);
-      return true;
-    })
-    .slice(0, MAX_STORED_RECOVERY_ENTRIES);
-}
-
 export class WorkbookRecoveryLog {
   private readonly dependencies: WorkbookRecoveryLogDependencies;
   private readonly scope: RecoveryScopeResolver;
 
   constructor(dependencies: Partial<WorkbookRecoveryLogDependencies> = {}) {
-    const getSettingsStore = dependencies.settings !== undefined
-      ? () => Promise.resolve(dependencies.settings ?? null)
-      : dependencies.getSettingsStore ?? defaultGetSettingsStore;
-
     this.dependencies = {
-      settings: dependencies.settings ?? null,
-      getSettingsStore,
+      getStore: dependencies.getStore ?? defaultGetRecoveryStore,
       getWorkbookContext: dependencies.getWorkbookContext ?? getWorkbookContext,
       getDocumentInstance: dependencies.getDocumentInstance ?? defaultGetDocumentInstance,
       now: dependencies.now ?? defaultNow,
@@ -431,44 +405,6 @@ export class WorkbookRecoveryLog {
       getWorkbookContext: this.dependencies.getWorkbookContext,
       getDocumentInstance: this.dependencies.getDocumentInstance,
     });
-  }
-
-  /**
-   * The stored list, read fresh: other taskpanes on this computer append to
-   * and delete from the same list, so nothing is cached between calls.
-   */
-  private async readSnapshots(): Promise<WorkbookRecoverySnapshot[]> {
-    const settings = await this.dependencies.getSettingsStore();
-    const payload = settings ? await settings.get(RECOVERY_SETTING_KEY) : null;
-    return parsePersistedSnapshots(payload, { maxEntries: MAX_STORED_RECOVERY_ENTRIES });
-  }
-
-  /**
-   * Applies `change` to the list as stored at write time, atomically, so a
-   * concurrent write from another taskpane is never overwritten. Returns
-   * `null` when there is no storage. Rejects when the write does not commit.
-   */
-  private async updateSnapshots<T>(
-    change: (snapshots: WorkbookRecoverySnapshot[]) => { snapshots: WorkbookRecoverySnapshot[]; result: T },
-  ): Promise<T | null> {
-    const settings = await this.dependencies.getSettingsStore();
-    if (!settings) return null;
-
-    const outcome: { result: T | null } = { result: null };
-    await settings.update(
-      RECOVERY_SETTING_KEY,
-      (raw) => parsePersistedSnapshots(raw, { maxEntries: MAX_STORED_RECOVERY_ENTRIES }),
-      (current) => {
-        const next = change(current);
-        outcome.result = next.result;
-        return createPersistedWorkbookRecoveryPayload(next.snapshots);
-      },
-    );
-    return outcome.result;
-  }
-
-  private async readRetentionLimit(): Promise<number> {
-    return readRetentionLimit(await this.dependencies.getSettingsStore());
   }
 
   /**
@@ -495,12 +431,11 @@ export class WorkbookRecoveryLog {
   private async appendSnapshot(
     snapshot: WorkbookRecoverySnapshot,
   ): Promise<WorkbookRecoverySnapshot | null> {
-    const limit = await this.readRetentionLimit();
     try {
-      return await this.updateSnapshots((snapshots) => ({
-        snapshots: applyRetention([snapshot, ...snapshots], limit),
-        result: snapshot,
-      }));
+      const store = await this.dependencies.getStore();
+      if (!store) return null;
+      await store.append(snapshot);
+      return snapshot;
     } catch (error) {
       throw new Error(`Backup could not be saved: ${getErrorMessage(error)}`);
     }
@@ -534,6 +469,7 @@ export class WorkbookRecoveryLog {
       cellCount: stats.cellCount,
       beforeValues: values,
       beforeFormulas: formulas,
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       ...(args.afterFormulas ? { afterFormulas: cloneGrid(args.afterFormulas) } : {}),
       snapshotKind: "range_values",
       workbookId: scope.workbookId,
@@ -569,6 +505,7 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "format_cells_state",
       formatRangeState,
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
@@ -603,6 +540,7 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "modify_structure_state",
       modifyStructureState,
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
@@ -636,6 +574,7 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "conditional_format_rules",
       conditionalFormatRules: rules,
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
@@ -665,6 +604,7 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "comment_thread",
       commentThreadState: cloneRecoveryCommentThreadState(args.commentThreadState),
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
@@ -694,6 +634,7 @@ export class WorkbookRecoveryLog {
       beforeFormulas: [],
       snapshotKind: "chart_state",
       chartState: cloneRecoveryChartState(args.chartState),
+      ...(args.turnId === undefined ? {} : { turnId: args.turnId }),
       workbookId: scope.workbookId,
       workbookLabel: scope.workbookLabel,
       ...(args.restoredFromSnapshotId !== undefined ? { restoredFromSnapshotId: args.restoredFromSnapshotId } : {}),
@@ -734,54 +675,50 @@ export class WorkbookRecoveryLog {
     return this.appendChartWithContext(args);
   }
 
-  async list(opts: { limit?: number; workbookId?: string | null } = {}): Promise<WorkbookRecoverySnapshot[]> {
-    const snapshots = await this.readSnapshots();
-
-    const limit = clampLimit(opts.limit ?? 20);
-    const workbookId = opts.workbookId;
-
-    if (workbookId === undefined) {
-      return snapshots.slice(0, limit);
-    }
-
-    if (!workbookId) {
-      return [];
-    }
-
-    const filtered = snapshots.filter((snapshot) => matchesWorkbook(snapshot, workbookId));
-    return filtered.slice(0, limit);
+  async initialize(): Promise<void> {
+    await (await this.dependencies.getStore())?.migrate();
   }
 
-  async listForCurrentWorkbook(limit = 20): Promise<WorkbookRecoverySnapshot[]> {
+  async list(opts: { limit?: number; workbookId?: string | null } = {}): Promise<RecoveryMetadata[]> {
+    const limit = clampLimit(opts.limit ?? 20);
+    if (!limit || opts.workbookId === null) return [];
+    const store = await this.dependencies.getStore();
+    return store ? (await store.page(opts.workbookId, { limit })).entries : [];
+  }
+
+  async listForCurrentWorkbook(limit = 20): Promise<RecoveryMetadata[]> {
     const scope = await this.scope.resolveForRead();
     if (!scope) return [];
 
     return this.list({ limit, workbookId: scope.workbookId });
   }
 
+  async pageForCurrentWorkbook(options: RecoveryPageOptions = {}): Promise<RecoveryPage> {
+    const scope = await this.scope.resolveForRead();
+    const store = scope ? await this.dependencies.getStore() : null;
+    return scope && store ? store.page(scope.workbookId, options) : { entries: [] };
+  }
+
+  /** Loads only this backup; never applies it or reads another workbook's sheet. */
+  async read(snapshotId: string): Promise<WorkbookRecoverySnapshot | null> {
+    const scope = await this.scope.resolveForRead();
+    if (!scope) throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
+    const snapshot = await (await this.dependencies.getStore())?.read(snapshotId, scope.workbookId);
+    if (snapshot && !matchesWorkbook(snapshot, scope.workbookId)) throw new Error("Snapshot belongs to a different workbook.");
+    return snapshot ?? null;
+  }
+
   async delete(snapshotId: string): Promise<boolean> {
     const scope = await this.scope.resolveForRead();
     if (!scope) return false;
-    const workbookId = scope.workbookId;
-
-    const deleted = await this.updateSnapshots((snapshots) => {
-      const kept = snapshots.filter(
-        (snapshot) => !(snapshot.id === snapshotId && matchesWorkbook(snapshot, workbookId)),
-      );
-      return { snapshots: kept, result: kept.length < snapshots.length };
-    });
-    return deleted ?? false;
+    return (await this.dependencies.getStore())?.delete(snapshotId, scope.workbookId) ?? false;
   }
 
   async clearForCurrentWorkbook(): Promise<number> {
     const scope = await this.scope.resolveForRead();
     if (!scope) return 0;
 
-    const removed = await this.updateSnapshots((snapshots) => {
-      const kept = snapshots.filter((snapshot) => !matchesWorkbook(snapshot, scope.workbookId));
-      return { snapshots: kept, result: snapshots.length - kept.length };
-    });
-    return removed ?? 0;
+    return (await this.dependencies.getStore())?.clear(scope.workbookId) ?? 0;
   }
 
   /**
@@ -790,27 +727,14 @@ export class WorkbookRecoveryLog {
    * a path identity, they follow it there instead of being stranded.
    */
   async rescopeWorkbook(args: { fromWorkbookId: string; toWorkbookId: string; workbookLabel: string }): Promise<number> {
-    const limit = await this.readRetentionLimit();
-    const moved = await this.updateSnapshots((snapshots) => {
-      let count = 0;
-      const next = snapshots.map((snapshot) => {
-        if (!matchesWorkbook(snapshot, args.fromWorkbookId)) return snapshot;
-        count += 1;
-        return { ...snapshot, workbookId: args.toWorkbookId, workbookLabel: args.workbookLabel };
-      });
-      return { snapshots: count > 0 ? applyRetention(next, limit) : snapshots, result: count };
-    });
-    return moved ?? 0;
+    return (await this.dependencies.getStore())?.move(args.fromWorkbookId, args.toWorkbookId, args.workbookLabel) ?? 0;
   }
 
-  /** Applies the "Keep at most" limit now, for example right after the user lowers it. */
-  async applyRetentionLimit(): Promise<void> {
-    const limit = await this.readRetentionLimit();
-    await this.updateSnapshots((snapshots) => ({ snapshots: applyRetention(snapshots, limit), result: null }));
-  }
-
-  async restore(snapshotId: string): Promise<RestoreWorkbookRecoverySnapshotResult> {
-    const snapshot = (await this.readSnapshots()).find((item) => item.id === snapshotId);
+  async restore(
+    snapshotId: string,
+    attribution: { turnId?: string; toolCallId?: string } = {},
+  ): Promise<RestoreWorkbookRecoverySnapshotResult> {
+    const snapshot = await this.read(snapshotId);
     if (!snapshot) {
       throw new Error("Snapshot not found.");
     }
@@ -827,7 +751,7 @@ export class WorkbookRecoveryLog {
       append: (args: TArgs, scope: RecoveryWorkbookScope) => Promise<WorkbookRecoverySnapshot | null>,
     ) => async (args: TArgs, appendScope: RecoveryWorkbookScope): Promise<WorkbookRecoverySnapshot | null> => {
       try {
-        return await append(args, appendScope);
+        return await append({ ...args, ...attribution }, appendScope);
       } catch (error) {
         inverse.error = getErrorMessage(error);
         return null;
@@ -861,10 +785,7 @@ export class WorkbookRecoveryLog {
       // does nothing, and left in place it would stay "latest" and hide every
       // older backup from /revert.
       try {
-        await this.updateSnapshots((snapshots) => ({
-          snapshots: snapshots.filter((item) => item.id !== snapshot.id),
-          result: null,
-        }));
+        await this.delete(snapshot.id);
       } catch (error) {
         console.warn("[pi] Used backup could not be removed.", error);
       }
@@ -876,11 +797,11 @@ export class WorkbookRecoveryLog {
   /**
    * Reads, without changing anything, what a restore of `snapshotId` would
    * overwrite: cells edited since Pi's change. Backups now last until the
-   * "Keep at most" limit removes them, often days, so the user may have
+   * storage ceiling removes them, often days, so the user may have
    * worked in the range since.
    */
   async previewRestore(snapshotId: string): Promise<WorkbookRecoveryRestorePreview> {
-    const snapshot = (await this.readSnapshots()).find((item) => item.id === snapshotId);
+    const snapshot = await this.read(snapshotId);
     if (!snapshot) {
       throw new Error("Snapshot not found.");
     }

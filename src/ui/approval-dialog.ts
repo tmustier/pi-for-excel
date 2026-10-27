@@ -22,6 +22,7 @@ import {
 } from "./overlay-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "./overlay-ids.js";
 import { t } from "../language/index.js";
+import { announce } from "./announcer.js";
 
 export interface ApprovalRequest {
   title: string;
@@ -40,6 +41,10 @@ export interface ApprovalRequest {
   confirmLabel: string;
   confirmTone?: "primary" | "danger";
   signal?: AbortSignal;
+  /** Reversible Confirm-mode changes only; scoped to this run's signal. */
+  allowForTurn?: boolean;
+  /** An additional explicit grant, e.g. trusting one MCP tool. */
+  secondaryApproval?: { label: string; onApprove: () => void | Promise<void> };
   /**
    * Stops the turn that asked. With it, the dialog offers "Stop Pi": the
    * taskpane (and its Stop button) is inert behind the dialog, so this is
@@ -55,6 +60,7 @@ interface QueuedApproval {
 }
 
 const queue: QueuedApproval[] = [];
+const allowedTurns = new WeakSet<AbortSignal>();
 let current: { entry: QueuedApproval; dialog: OverlayDialogController; setWaiting: (count: number) => void } | null = null;
 
 function settle(entry: QueuedApproval, approved: boolean): void {
@@ -87,6 +93,11 @@ function showNext(): void {
   if (!entry) return;
 
   const { request } = entry;
+  if (request.allowForTurn && request.signal && allowedTurns.has(request.signal) && !request.signal.aborted) {
+    settle(entry, true);
+    showNext();
+    return;
+  }
   const dialog = createOverlayDialog({
     overlayId: TOOL_APPROVAL_OVERLAY_ID,
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--s pi-approval-card",
@@ -164,6 +175,39 @@ function showNext(): void {
   });
   cancelButton.addEventListener("click", () => answer(false));
   confirmButton.addEventListener("click", () => answer(true));
+  if (request.allowForTurn && request.signal) {
+    const signal = request.signal;
+    const turnButton = createOverlayButton({ text: t("approval.allowForTurn") });
+    turnButton.addEventListener("click", () => {
+      if (signal.aborted) return;
+      allowedTurns.add(signal);
+      answer(true);
+    });
+    actions.append(turnButton);
+  }
+  if (request.secondaryApproval) {
+    const secondary = request.secondaryApproval;
+    const secondaryButton = createOverlayButton({ text: secondary.label });
+    secondaryButton.addEventListener("click", () => {
+      if (request.signal?.aborted || secondaryButton.disabled) return;
+      secondaryButton.disabled = true;
+      confirmButton.disabled = true;
+      void Promise.resolve().then(() => {
+        if (!answered && !request.signal?.aborted) return secondary.onApprove();
+      }).then(() => {
+        if (!answered && !request.signal?.aborted) answer(true);
+      }, () => {
+        if (answered || request.signal?.aborted) return;
+        const error = document.createElement("p");
+        error.textContent = t("approval.preparationFailed");
+        error.setAttribute("role", "alert");
+        body.append(error);
+        secondaryButton.disabled = false;
+        confirmButton.disabled = false;
+      });
+    });
+    actions.append(secondaryButton);
+  }
   if (request.onStop) {
     const stopButton = createOverlayButton({ text: t("approval.stop"), className: "pi-approval__stop" });
     stopButton.addEventListener("click", () => {
@@ -213,6 +257,7 @@ function showNext(): void {
   dialog.card.tabIndex = -1;
   dialog.card.dataset.autofocus = "";
   dialog.card.focus();
+  dialog.addCleanup(announce(t("announce.approval", { title: request.title })));
 }
 
 /**
@@ -224,6 +269,7 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
     return Promise.reject(new Error(t("confirm.unavailable")));
   }
   if (request.signal?.aborted) return Promise.resolve(false);
+  if (request.allowForTurn && request.signal && allowedTurns.has(request.signal)) return Promise.resolve(true);
 
   return new Promise<boolean>((resolve) => {
     const entry: QueuedApproval = { request, resolve, onAbort: null };

@@ -73,3 +73,29 @@ void test("execute_office_js allows Excel code and risk-name look-alikes in Auto
     assert.match(block.text, new RegExp(`Executed Office\\.js: ${example.name}`, "u"));
   }
 });
+
+void test("Auto asks before destructive host JS, including bracket and encoded calls", async () => {
+  for (const code of [
+    "context.workbook.worksheets.getItem('Data').delete();",
+    "context.workbook.worksheets.getItem('Data').getRange('A1').clear();",
+    "range['clear']();",
+    "range['cl\\u0065ar']();",
+  ]) {
+    let ran = false;
+    let asked = false;
+    const [tool] = await applyExperimentalToolGates([
+      createExecuteOfficeJsTool({ runCode: () => { ran = true; return Promise.resolve(null); } }),
+    ], {
+      getExecutionMode: () => Promise.resolve("yolo"),
+      requestOfficeJsExecuteApproval: (request) => {
+        asked = true;
+        assert.equal(request.destructive, true);
+        return Promise.resolve(false);
+      },
+    });
+    assert.ok(tool);
+    await assert.rejects(() => tool.execute("destructive", { explanation: "Clear cells", code }), /cancelled/u);
+    assert.equal(asked, true);
+    assert.equal(ran, false);
+  }
+});

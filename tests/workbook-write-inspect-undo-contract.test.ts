@@ -301,7 +301,7 @@ void test("committed write succeeds and creates recovery when the initial audit 
   });
   let id = 0;
   const recovery = new WorkbookRecoveryLog({
-    settings: recoverySettings,
+    getStore: () => Promise.resolve(recoverySettings.recovery),
     getWorkbookContext: workbookContext,
     createId: () => `snapshot-${id += 1}`,
     now: () => 1_700_000_000_000 + id,
@@ -356,7 +356,7 @@ void test("committed write succeeds and creates recovery when the initial audit 
 void test("committed write reports recovery unavailable instead of replacing unread checkpoints", async () => {
   const store = new RangeStore();
   const recoverySettings = createRecoveringInMemorySettingsStore();
-  recoverySettings.seed(RECOVERY_SETTING_KEY, {
+  await recoverySettings.seed(RECOVERY_SETTING_KEY, {
     version: 1,
     snapshots: [{
       id: "existing-checkpoint",
@@ -378,7 +378,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
   });
   let id = 0;
   const recovery = new WorkbookRecoveryLog({
-    settings: recoverySettings,
+    getStore: () => Promise.resolve(recoverySettings.recovery),
     getWorkbookContext: workbookContext,
     createId: () => `new-checkpoint-${id += 1}`,
     now: () => 1_700_000_000_000 + id,
@@ -411,7 +411,7 @@ void test("committed write reports recovery unavailable instead of replacing unr
   });
 
   const reloaded = new WorkbookRecoveryLog({
-    settings: recoverySettings,
+    getStore: () => Promise.resolve(recoverySettings.recovery),
     getWorkbookContext: workbookContext,
   });
   const persistedIds = (await reloaded.list()).map((snapshot) => snapshot.id);
@@ -431,7 +431,7 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
   });
   let id = 0;
   const recovery = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settings),
+    getStore: () => Promise.resolve(settings.recovery),
     getWorkbookContext: workbookContext,
     createId: () => `snapshot-${id += 1}`,
     now: () => 1_700_000_000_000 + id,
@@ -465,7 +465,9 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
     assert.equal(initialWrite.details.changes?.changedCount, 4);
     assert.equal(initialWrite.details.recovery?.status, "checkpoint_created");
     // The model sees the backup id, so it can restore this exact change later.
-    assert.ok(firstText(initialWrite).includes(`Backup saved: \`${initialWrite.details.recovery?.snapshotId}\``));
+    const backupId = initialWrite.details.recovery?.snapshotId;
+    assert.ok(backupId);
+    assert.ok(firstText(initialWrite).includes(`Backup saved: \`${backupId}\``));
 
     const listed = await history.execute("history-list", { action: "list" });
     assert.equal(listed.details.count, 1);

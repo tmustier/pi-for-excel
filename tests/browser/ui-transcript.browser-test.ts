@@ -279,3 +279,66 @@ void test("a stopped write says how far it got instead of claiming success", asy
     await opened.finish();
   }
 });
+
+void test("turn receipts render every ending and dispatch typed Review and Undo actions", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    const receipts = page.locator('[data-gallery="turn-changes"] .pi-turn-changes');
+    await receipts.first().waitFor();
+    assert.deepEqual(await receipts.evaluateAll((items) => items.map((item) => item.getAttribute("data-outcome"))), ["finished", "stopped", "failed"]);
+    assert.match(await receipts.first().innerText(), /Changed Sheet1!B2:B40, Summary!A1 · Total: 40/);
+    assert.match(await receipts.last().innerText(), /Some changes have no backup/);
+    for (const label of ["Review", "Undo this turn"]) {
+      const action = page.evaluate(() => new Promise((resolve) => {
+        document.addEventListener("pi:turn-change-action", (event) => {
+          if (!(event instanceof CustomEvent)) return;
+          resolve(event.detail);
+        }, { once: true });
+      }));
+      await receipts.first().getByRole("button", { name: label, exact: true }).click();
+      assert.deepEqual(await action, {
+        action: label === "Review" ? "review" : "undo",
+        summary: { role: "turnChanges", turnId: "gallery-turn-0", timestamp: 0, outcome: "finished", changes: [
+          { address: "Sheet1!B2:B40", changedCount: 39, backupIds: ["gallery-backup-0"] },
+          { address: "Summary!A1", changedCount: 1, backupIds: ["gallery-summary-0"] },
+        ] },
+      });
+    }
+  } finally {
+    await opened.finish();
+  }
+});
+
+void test("Office.js-only and mixed turns explicitly disclose the limit of turn undo", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+    await page.evaluate(async () => {
+      const modulePath = "/src/messages/turn-changes.ts";
+      const { summarizeTurnChanges } = await import(modulePath);
+      const list = document.querySelector('[data-gallery="turn-changes"]')?.querySelector("message-list");
+      if (!list) throw new Error("Turn receipt gallery missing");
+      const shared = { timestamp: 1, outcome: "finished", ranOfficeJs: true, audit: [] };
+      list.messages = [
+        summarizeTurnChanges({ ...shared, turnId: "js-only", toolCallIds: new Set(["js"]), backups: [] }),
+        summarizeTurnChanges({ ...shared, turnId: "mixed", toolCallIds: new Set(["core", "js"]), backups: [
+          { id: "core-backup", at: 0, toolCallId: "core", address: "Sheet1!D7", changedCount: 1 },
+        ] }),
+      ];
+    });
+    const receipts = page.locator('[data-gallery="turn-changes"] .pi-turn-changes');
+    await page.waitForFunction(() => document.querySelectorAll('[data-gallery="turn-changes"] .pi-turn-changes').length === 2);
+    for (const receipt of await receipts.all()) {
+      assert.match(await receipt.innerText(), /Ran Office\.js code; not covered by Undo this turn\. Use \/backup/);
+    }
+    assert.equal(await receipts.first().getByRole("button", { name: "Undo this turn", exact: true }).count(), 0);
+    assert.doesNotMatch(await receipts.first().innerText(), /Changed.*Total: 0/);
+    await receipts.last().getByRole("button", { name: "Undo this turn", exact: true }).click();
+    assert.match(await receipts.last().innerText(), /Changed Sheet1!D7 · Total: 1/);
+    assert.match(await receipts.last().innerText(), /not covered by Undo this turn/);
+  } finally {
+    await opened.finish();
+  }
+});

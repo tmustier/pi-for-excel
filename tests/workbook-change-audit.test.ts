@@ -612,6 +612,7 @@ void test("workbook_history restore appends audit entries for success and missin
   const successTool = createWorkbookHistoryTool({
     getRecoveryLog: () => ({
       listForCurrentWorkbook: () => Promise.resolve([createRecoverySnapshot("snapshot-1")]),
+      pageForCurrentWorkbook: () => Promise.resolve({ entries: [] }),
       restore: (snapshotId: string) => Promise.resolve({
         restoredSnapshotId: snapshotId,
         inverseSnapshotId: "inverse-1",
@@ -640,6 +641,7 @@ void test("workbook_history restore appends audit entries for success and missin
   const missingTool = createWorkbookHistoryTool({
     getRecoveryLog: () => ({
       listForCurrentWorkbook: () => Promise.resolve([]),
+      pageForCurrentWorkbook: () => Promise.resolve({ entries: [] }),
       restore: () => Promise.resolve({
         restoredSnapshotId: "",
         inverseSnapshotId: null,

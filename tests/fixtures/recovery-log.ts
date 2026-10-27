@@ -1,81 +1,48 @@
+import "fake-indexeddb/auto";
+import { SettingsStore } from "../../src/storage/local/settings-store.ts";
+import { IndexedDBStorageBackend } from "../../src/storage/local/indexeddb-storage-backend.ts";
+import { getAppStorageConfig } from "../../src/storage/init-app-storage.ts";
+import { RecoveryStore } from "../../src/workbook/recovery/log-store.ts";
 import type { WorkbookRecoverySnapshot } from "../../src/workbook/recovery-log.ts";
 
 export const RECOVERY_SETTING_KEY = "workbook.recovery-snapshots.v1";
 
-export interface InMemorySettingsStore {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<void>;
-  update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void>;
-}
-
-function updateIn(values: Map<string, unknown>) {
-  return <T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> => {
-    const next = change(parse(values.get(key) ?? null));
-    if (next === undefined) values.delete(key);
-    else values.set(key, next);
-    return Promise.resolve();
-  };
-}
-
-export interface RecoveringInMemorySettingsStore extends InMemorySettingsStore {
-  seed(key: string, value: unknown): void;
-}
-
-export function createRecoveringInMemorySettingsStore(): RecoveringInMemorySettingsStore {
-  const values = new Map<string, unknown>();
-  let failRecoveryRead = true;
-
+export function createInMemorySettingsStore() {
+  const backend = new IndexedDBStorageBackend(getAppStorageConfig(`recovery-test-${crypto.randomUUID()}`));
+  const settings = new SettingsStore();
+  settings.setBackend(backend);
   return {
-    get: <T>(key: string): Promise<T | null> => {
-      if (key === RECOVERY_SETTING_KEY && failRecoveryRead) {
-        failRecoveryRead = false;
-        return Promise.reject(new Error("seeded recovery read failure"));
-      }
-      const value = values.get(key);
-      return Promise.resolve(value === undefined ? null : value as T);
-    },
-    set: (key: string, value: unknown): Promise<void> => {
-      values.set(key, value);
-      return Promise.resolve();
-    },
-    // A read-modify-write reads first, so it fails the same seeded way.
-    update: <T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> => {
-      if (key === RECOVERY_SETTING_KEY && failRecoveryRead) {
-        failRecoveryRead = false;
-        return Promise.reject(new Error("seeded recovery read failure"));
-      }
-      return updateIn(values)(key, parse, change);
-    },
-    seed: (key: string, value: unknown): void => {
-      values.set(key, value);
-    },
+    backend,
+    recovery: new RecoveryStore(backend),
+    get: <T>(key: string): Promise<T | null> => backend.get<T>("settings", key),
+    set: (key: string, value: unknown): Promise<void> => settings.set(key, value),
+    update: settings.update.bind(settings),
   };
 }
+export type InMemorySettingsStore = ReturnType<typeof createInMemorySettingsStore>;
 
-export function createInMemorySettingsStore(): InMemorySettingsStore {
-  const values = new Map<string, unknown>();
-
-  return {
-    get: <T>(key: string): Promise<T | null> => {
-      const value = values.get(key);
-      return Promise.resolve(value === undefined ? null : value as T);
-    },
-    set: (key: string, value: unknown): Promise<void> => {
-      values.set(key, value);
-      return Promise.resolve();
-    },
-    update: updateIn(values),
-  };
-}
-
-export function findSnapshotById(snapshots: WorkbookRecoverySnapshot[], id: string): WorkbookRecoverySnapshot | null {
-  for (const snapshot of snapshots) {
-    if (snapshot.id === id) {
-      return snapshot;
+export function createRecoveringInMemorySettingsStore() {
+  const store = createInMemorySettingsStore();
+  let failRead = true;
+  const original = store.recovery.migrate.bind(store.recovery);
+  store.recovery.migrate = () => {
+    if (failRead) {
+      failRead = false;
+      return Promise.reject(new Error("seeded recovery read failure"));
     }
-  }
+    return original();
+  };
+  return { ...store, seed: (key: string, value: unknown) => store.set(key, value) };
+}
 
-  return null;
+export function findSnapshotById<T extends { id: string }>(snapshots: T[], id: string): T | null {
+  return snapshots.find((snapshot) => snapshot.id === id) ?? null;
+}
+
+export async function persistedSnapshots(settings: InMemorySettingsStore): Promise<WorkbookRecoverySnapshot[]> {
+  const entries = (await settings.recovery.page()).entries;
+  const snapshots = await Promise.all(entries.map((entry) => settings.recovery.read(entry.id)));
+  return snapshots.filter((snapshot): snapshot is WorkbookRecoverySnapshot => snapshot !== null);
 }
 
 export function withoutUndefined(value: unknown): unknown {

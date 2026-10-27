@@ -23,7 +23,7 @@ function setup(initial: WorkbookContext, document: DocumentInstanceIdentity | nu
   const getWorkbookContext = () => Promise.resolve(context);
   const getDocumentInstance = () => document;
   const createLog = () => new WorkbookRecoveryLog({
-    settings,
+    getStore: () => Promise.resolve(settings.recovery),
     getWorkbookContext,
     getDocumentInstance,
     createId: () => `backup-${nextId += 1}`,

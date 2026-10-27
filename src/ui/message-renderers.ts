@@ -14,6 +14,7 @@ import { t } from "../language/index.js";
 import { formatCompactionSummaryExtent, type CompactionSummaryMessage } from "../messages/compaction.js";
 import type { ArchivedMessagesMessage } from "../messages/archived-history.js";
 import type { InterruptedResponse } from "../messages/interrupted-response.js";
+import type { TurnChangesMessage } from "../messages/turn-changes.js";
 
 // Ensure <markdown-block> and <message-list> are registered.
 import "./messages/markdown-block.js";
@@ -27,6 +28,26 @@ registerMessageRenderer("interruptedResponse", {
       <assistant-message .message=${{ ...partial.message, stopReason: "stop" }} .hideToolCalls=${true}></assistant-message>
       <span class="pi-assistant-aborted">${t("messages.interrupted")}</span>
     `;
+  },
+});
+
+registerMessageRenderer("turnChanges", {
+  render(message: TurnChangesMessage) {
+    const addresses = [...new Set(message.changes.map((change) => change.address))].join(", ");
+    const hasBackups = message.changes.some((change) => change.backupIds.some((id) => !message.undoneBackupIds?.includes(id)));
+    const partial = message.changes.some((change) => change.backupIds.length === 0);
+    const action = (name: "review" | "undo"): void => {
+      document.dispatchEvent(new CustomEvent("pi:turn-change-action", { detail: { action: name, summary: message } }));
+    };
+    return html`<div class="pi-turn-changes" data-outcome=${message.outcome} role="status">
+      ${message.changes.length > 0 ? html`<span>${t("turnChanges.summary", { ranges: addresses, count: message.changes.reduce((count, change) => count + change.changedCount, 0) })}</span>
+      <span class="pi-turn-changes__actions">
+        <button type="button" @click=${() => action("review")}>${t("turnChanges.review")}</button>
+        <button type="button" ?disabled=${!hasBackups} @click=${() => action("undo")}>${t(message.undoneBackupIds?.length && !hasBackups ? "turnChanges.undone" : "turnChanges.undo")}</button>
+      </span>` : ""}
+      ${partial ? html`<span class="pi-turn-changes__warning">${t("turnChanges.partial")}</span>` : ""}
+      ${message.ranOfficeJs ? html`<span class="pi-turn-changes__warning">${t("turnChanges.officeJsUncovered")}</span>` : ""}
+    </div>`;
   },
 });
 

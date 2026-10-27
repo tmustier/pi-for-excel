@@ -115,3 +115,59 @@ void test("Stop Pi declines the queue and stops the turns", async () => {
     restore();
   }
 });
+
+void test("turn consent covers only eligible queued and future changes in that run", async () => {
+  const { restore } = installFakeDom();
+  const turn = new AbortController();
+  const otherTurn = new AbortController();
+  try {
+    const request = { title: "Write", confirmLabel: "Allow", signal: turn.signal, allowForTurn: true };
+    const first = requestApproval(request);
+    const queued = requestApproval(request);
+    const destructive = requestApproval({ ...request, title: "Delete chart", allowForTurn: false });
+    clickButton("Allow for the rest of this turn");
+    assert.equal(await first, true);
+    assert.equal(await queued, true);
+    await flushAsync();
+    assert.equal(onScreenTitle(), "Delete chart");
+    clickButton("Decline");
+    assert.equal(await destructive, false);
+    assert.equal(await requestApproval(request), true);
+    const next = requestApproval({ ...request, title: "New run", signal: otherTurn.signal });
+    assert.equal(onScreenTitle(), "New run");
+    otherTurn.abort();
+    assert.equal(await next, false);
+    turn.abort();
+    assert.equal(await requestApproval(request), false);
+  } finally {
+    turn.abort();
+    otherTurn.abort();
+    await flushAsync();
+    restore();
+  }
+});
+
+void test("secondary approval waits for preparation and cannot approve after Stop", async () => {
+  const { restore } = installFakeDom();
+  const turn = new AbortController();
+  try {
+    let finish = (): void => {};
+    const preparation = new Promise<void>((resolve) => { finish = resolve; });
+    const pending = requestApproval({
+      title: "Delete", confirmLabel: "Allow", signal: turn.signal,
+      secondaryApproval: { label: "Backup first", onApprove: () => preparation },
+    });
+    clickButton("Backup first");
+    await flushAsync();
+    assert.equal(onScreenTitle(), "Delete");
+    turn.abort();
+    assert.equal(await pending, false);
+    finish();
+    await flushAsync();
+    assert.equal(document.getElementById(TOOL_APPROVAL_OVERLAY_ID), null);
+  } finally {
+    turn.abort();
+    await flushAsync();
+    restore();
+  }
+});

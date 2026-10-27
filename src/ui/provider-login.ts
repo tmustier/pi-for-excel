@@ -26,6 +26,7 @@ import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-stora
 import {
   DEFAULT_PROXY_IS_REMOTE,
   DEFAULT_PROXY_URL,
+  PROXY_HELPER_COMMAND,
   PROXY_HELPER_DOCS_URL,
   probeProxyReachability,
   resolveConfiguredProxyUrl,
@@ -91,14 +92,14 @@ function showProxyGateDialog(): Promise<boolean> {
       "flex:1;padding:8px 10px;border-radius:6px;" +
       "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4);" +
       "font-size:13px;font-family:var(--pi-monospace, monospace);user-select:all;";
-    codeEl.textContent = "npx pi-for-excel-proxy";
+    codeEl.textContent = PROXY_HELPER_COMMAND;
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.textContent = t("provider.proxy_gate.copy");
     copyBtn.style.cssText = "padding:6px 12px;border-radius:6px;font-size:13px;cursor:pointer;";
     copyBtn.addEventListener("click", () => {
-      void navigator.clipboard.writeText("npx pi-for-excel-proxy").then(() => {
+      void navigator.clipboard.writeText(PROXY_HELPER_COMMAND).then(() => {
         copyBtn.textContent = t("provider.proxy_gate.copied");
         setTimeout(() => { copyBtn.textContent = t("provider.proxy_gate.copy"); }, 1500);
       });
@@ -996,7 +997,7 @@ export function buildProviderRow(
                 errorEl,
                 `${escapeHtml(t("provider.cors_error", { terminal: terminalAppName() }))} <code style="padding:2px 5px;border-radius:4px;` +
                   "background:var(--pi-code-bg, #1e1e1e);color:var(--pi-code-fg, #d4d4d4)\">" +
-                  `npx pi-for-excel-proxy</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
+                  `${escapeHtml(PROXY_HELPER_COMMAND)}</code>${escapeHtml(t("provider.cors_error.retry"))} ` +
                   `<a href="${escapeAttr(PROXY_HELPER_DOCS_URL)}" target="_blank" rel="noopener noreferrer">${escapeHtml(t("provider.proxy_gate.guide"))}</a>`,
                 "provider CORS helper error markup with escaped localized text",
               );

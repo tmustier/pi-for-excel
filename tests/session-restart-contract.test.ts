@@ -398,10 +398,11 @@ void test("database identity and persisted store/key formats stay stable", async
   assert.equal(config.dbName, APP_STORAGE_DATABASE_NAME);
   assert.equal(APP_STORAGE_DATABASE_NAME, "pi-for-excel");
   assert.equal(config.version, APP_STORAGE_DATABASE_VERSION);
-  assert.equal(APP_STORAGE_DATABASE_VERSION, 2);
+  assert.equal(APP_STORAGE_DATABASE_VERSION, 3);
   assert.deepEqual(
     config.stores.map((store) => store.name),
-    ["settings", "provider-keys", "sessions", "sessions-metadata", "custom-providers", "model-catalogs"],
+    ["settings", "provider-keys", "sessions", "sessions-metadata", "custom-providers", "model-catalogs",
+      "recovery-metadata", "recovery-payloads", "recovery-state"],
   );
   assert.deepEqual(config.stores.find((store) => store.name === "sessions"), {
     name: "sessions",

@@ -8,6 +8,10 @@ function isToolsMcpPayloadShape(value: unknown): value is Record<string, unknown
 
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
+import { Value } from "typebox/value";
+import { t } from "../language/index.js";
+import { getMcpToolGrants, setMcpToolGrant } from "./mcp-approvals.js";
+import type { ExecutionMode } from "../execution/mode.js";
 
 import { APP_NAME, APP_VERSION } from "../app/metadata.js";
 import { integrationsCommandHint } from "../integrations/naming.js";
@@ -63,6 +67,7 @@ interface McpToolDescriptor {
   name: string;
   description?: string;
   inputSchema?: unknown;
+  readOnly: boolean;
 }
 
 interface ServerToolList {
@@ -106,6 +111,16 @@ export interface McpRuntimeConfig {
 }
 
 export interface McpToolDependencies {
+  getExecutionMode?: () => Promise<ExecutionMode>;
+  requestToolApproval?: (request: {
+    title: string;
+    message: string;
+    confirmLabel: string;
+    signal?: AbortSignal;
+    secondaryApproval?: { label: string; onApprove: () => void | Promise<void> };
+  }) => Promise<boolean>;
+  getToolGrants?: (server: McpServerConfig) => Promise<string[]>;
+  grantTool?: (server: McpServerConfig, tool: string) => Promise<void>;
   getRuntimeConfig?: () => Promise<McpRuntimeConfig>;
   callJsonRpc?: (args: {
     server: McpServerConfig;
@@ -225,6 +240,7 @@ function parseToolListResult(server: McpServerConfig, value: unknown): McpToolDe
       serverName: server.name,
       serverUrl: server.url,
       name,
+      readOnly: Value.Check(Type.Object({ readOnlyHint: Type.Literal(true) }), item.annotations),
     };
     const description = normalizeOptionalString(item.description);
     if (description !== undefined) {
@@ -595,6 +611,30 @@ export function createMcpTool(
           if (!targetList) throw new Error(`MCP server not found: ${targetTool.serverId}`);
           const targetServer = targetList.server;
           const parsedArgs = parseCallArgs(params.args);
+          signal?.throwIfAborted();
+          const mode = await dependencies.getExecutionMode?.() ?? "safe";
+          const grants = mode === "safe" || targetTool.readOnly ? [] : dependencies.getToolGrants
+            ? await dependencies.getToolGrants(targetServer)
+            : await getMcpToolGrants((await import("../storage/local/app-storage.js")).getAppStorage().settings, targetServer);
+          if (mode === "safe" || (!targetTool.readOnly && !grants.includes(targetTool.name))) {
+            if (!dependencies.requestToolApproval) throw new Error("MCP tool approval is unavailable.");
+            const approved = await dependencies.requestToolApproval({
+              title: t("mcp.approval.title"),
+              message: t("mcp.approval.message", { server: targetServer.name, url: targetServer.url, tool: targetTool.name, args: formatJson(parsedArgs) }),
+              confirmLabel: t("mcp.approval.once"),
+              ...(signal ? { signal } : {}),
+              ...(mode === "yolo" ? { secondaryApproval: {
+                label: t("mcp.approval.always"),
+                onApprove: async () => {
+                  signal?.throwIfAborted();
+                  if (dependencies.grantTool) await dependencies.grantTool(targetServer, targetTool.name);
+                  else await setMcpToolGrant((await import("../storage/local/app-storage.js")).getAppStorage().settings, targetServer, targetTool.name, true);
+                },
+              } } : {}),
+            });
+            signal?.throwIfAborted();
+            if (!approved) throw new Error("MCP tool call cancelled by the user.");
+          }
           signal?.throwIfAborted();
           const callResult = await targetList.callJsonRpc({
             server: targetServer,
