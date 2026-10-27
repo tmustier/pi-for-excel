@@ -120,6 +120,7 @@ The repo enables both `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes
 
 Before opening a PR, report:
 
+- For visible behaviour changes, attach a screenshot or short video to the PR (`gh pr create/comment ... --attach`, GitHub CLI 2.99+; see [orb recording](./orb-excel-web.md#record-pr-evidence)).
 - Which standards surfaces were touched.
 - Which deterministic checks/tests were run.
 - Any lint/type/test warnings left intentionally.

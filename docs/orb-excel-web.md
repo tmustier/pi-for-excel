@@ -95,6 +95,32 @@ Agents drive the same window with `agent-browser --cdp 9223 ...`. The taskpane
 is a separate CDP target (`https://localhost:3141/src/taskpane.html?et=`), so
 `Office`/`Excel` can be evaluated there directly over CDP.
 
+## Record PR evidence
+
+Open Pi first with `node scripts/orb/excel-web-session.mjs --check`, then:
+
+```bash
+node scripts/orb/record-excel-web.mjs .amp/in/artifacts/excel-turn.mp4 -- node scripts/orb/excel-web-session.mjs --prompt "Put 1 and 2 in A1:A2 and their sum in A3, then tell me A3."
+gh pr comment <number> --body "Real Excel taskpane turn" --attach .amp/in/artifacts/excel-turn.mp4
+```
+
+The wrapper records the single open workbook tab (Excel **and** Pi) over CDP
+at `127.0.0.1:${PI_EXCEL_WEB_CDP_PORT:-9223}` until the command exits; any
+command works, including `agent-browser --cdp 9223 ...` or a manual driver.
+It preserves CDP frame timing, including idle time, and the command's exit
+status. Requires system `ffmpeg` (already present in the orb); existing outputs
+are not overwritten. Default: silent H.264 MP4, at most 1600×1000, 15 fps,
+2 Mb/s ceiling (~15 MB/minute), CRF 28/JPEG 70 — **agent-default (not a user rule): 2026-10-27**.
+Keep clips short, inspect for secrets and readability, independently read back
+the workbook, and keep videos out of Git. `gh pr create/comment --attach`
+requires GitHub CLI 2.99+ and upload-capable credentials. The orb's 2.99.0
+exposes the flag but rejects its GitHub App user token; 2.103.3 reaches the
+upload endpoint, which also refuses this credential despite ADMIN repo access.
+Use a supported credential or upload the MP4 through GitHub's PR editor.
+In Amp, agents can instead publish the recording with `public_artifact_url`
+and put its public link in the PR. External MP4s are links, not inline players;
+publish and embed an animated GIF alongside the MP4 for an inline preview.
+
 ## Gotchas
 
 - **Blank taskpane:** Chrome's Local Network Access checks block the public
