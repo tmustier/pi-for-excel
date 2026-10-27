@@ -166,14 +166,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-154](#p-154-turning-the-proxy-off-leaves-the-proxy-isnt-running-banner-up-until-reload) | Turning the proxy off leaves the "proxy isn't running" banner up until reload | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-155](#p-155-the-proxy-banners-copy-command-does-nothing-in-excel-on-the-web) | The proxy banner's Copy command does nothing in Excel on the web | low | proxy | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-156](#p-156-tab-from-an-open-dialog-in-excel-on-the-web-moves-focus-out-of-the-add-in) | Tab from an open dialog in Excel on the web moves focus out of the add-in | medium | dialogs | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open): aff33d6 |
-| [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Assigned to #789 (follow-up; not yet in the PR) |
-| [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-157](#p-157-ctrlz-in-one-tabs-composer-brings-back-text-typed-in-another-tab) | Ctrl+Z in one tab's composer brings back text typed in another tab | low | composer | fix | Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open) |
+| [P-158](#p-158-after-a-stopped-compaction-the-compacting-toast-stays-up-to-60-s) | After a stopped compaction the "Compacting…" toast stays up to 60 s | low | commands | fix | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-159](#p-159-backups-clear-all-confirms-with-a-stale-count) | Backups "Clear all" confirms with a stale count | low | backups | fix | Assigned to #794 (follow-up; not yet in the PR) |
 | [P-160](#p-160-the-tab-bars-scroll-arrows-snap-back) | The tab bar's scroll arrows snap back | low | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-161](#p-161-in-files-the-first-escape-drops-focus-to-the-page-body) | In Files, the first Escape drops focus to the page body | low | files | fix | Assigned to #793 (follow-up; not yet in the PR) |
-| [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | low | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
+| [P-162](#p-162-the-hover--draws-over-the-tab-title) | The hover × draws over the tab title | medium | tabs | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-163](#p-163-workbook-approvals-are-not-announced-to-screen-readers) | Workbook approvals are not announced to screen readers | low | accessibility | fix | Assigned to #793 (follow-up; not yet in the PR) |
 | [P-164](#p-164-a-model-picker-opened-while-busy-stays-read-only-after-the-turn-ends) | A model picker opened while busy stays read-only after the turn ends | low | models | fix | Assigned to #795 (follow-up; not yet in the PR) |
+| [P-165](#p-165-toasts-cover-the-command-menus-lower-rows) | Toasts cover the command menu's lower rows | low | menus | fix | Assigned to #793 (follow-up; not yet in the PR) |
 
 ## High
 
@@ -2075,8 +2076,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. Confusing, and could leak a draft into the wrong chat, but the user sees it before sending.
 - **Decision needed:** `fix`. Clear or isolate the undo history on tab switch.
 - **Raised by:** sessions-and-commands integration verification, 27 October 2026
-- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c.
-- **Owner:** Assigned to #789 (follow-up; not yet in the PR)
+- **Status:** Confirmed in Excel on the web on integration-fixes e48d83c. Fixed on integration-fixes 8099cd6.
+- **Owner:** Fix in PR [#789](https://github.com/tmustier/pi-for-excel/pull/789) (open)
 
 ### P-158: After a stopped compaction the "Compacting…" toast stays up to 60 s
 
@@ -2087,8 +2088,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Severity:** `low`. A stale status message.
 - **Decision needed:** `fix`. Give "Compaction stopped" the same toast id.
 - **Raised by:** sessions-and-commands integration verification, 27 October 2026
-- **Status:** Mostly fixed on integration-fixes e48d83c; this case remains.
-- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
+- **Status:** Mostly fixed on integration-fixes e48d83c; this case remains. Fixed on integration-fixes 8099cd6 ("Compaction stopped" now replaces the toast).
+- **Owner:** Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open)
 
 ### P-159: Backups "Clear all" confirms with a stale count
 
@@ -2129,12 +2130,12 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 ### P-162: The hover × draws over the tab title
 
 - **Where the user meets it:** Hover a tab in the tab bar.
-- **What happens / what was expected:** The close × overlaps the end of the title. Expected: the title is truncated before the ×.
+- **What happens / what was expected:** On an inactive tab the hover × is drawn over the right part of the title; clicking there closes the tab ("Closed Chat 12 · Undo") instead of switching to it. Expected: the title is truncated before the ×, and clicking the title switches.
 - **Reproduce:** As above, in Excel on the web.
 - **Why (from the code):** src/ui/tabs.css:255-273
-- **Severity:** `low`.
+- **Severity:** `medium`. A click meant to switch closes a chat (Undo recovers it). Regression from #793 aff33d6 (TABS-05).
 - **Decision needed:** `fix`. Reserve space for the × on hover.
-- **Raised by:** ui and cross-cutting integration verification, 27 October 2026
+- **Raised by:** ui and cross-cutting, and sessions-and-commands (TABS-05) integration verification, 27 October 2026
 - **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
 - **Owner:** Assigned to #793 (follow-up; not yet in the PR)
 
@@ -2161,3 +2162,15 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** ui and cross-cutting integration verification, 27 October 2026
 - **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
 - **Owner:** Assigned to #795 (follow-up; not yet in the PR)
+
+### P-165: Toasts cover the command menu's lower rows
+
+- **Where the user meets it:** Type `/` while toasts are showing.
+- **What happens / what was expected:** The toast stack sits above the dock and covers the menu's lower rows; clicking a covered row does nothing until the toasts expire. Expected: the open menu is above toasts, or toasts move out of its way.
+- **Reproduce:** Trigger two or three toasts, then open the command menu and click its bottom row.
+- **Why (from the code):** Toasts use z-toast (src/ui/theme/components/toasts.css:11-12), above the menu (src/ui/theme/components/menus.css:80).
+- **Severity:** `low`. Clears in a few seconds.
+- **Decision needed:** `fix`.
+- **Raised by:** MENU-15, sessions-and-commands integration verification, 27 October 2026
+- **Status:** Confirmed in Excel on the web on integration-fixes 8099cd6.
+- **Owner:** Assigned to #793 (follow-up; not yet in the PR)
