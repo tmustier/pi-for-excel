@@ -28,7 +28,7 @@ Related proposals are grouped. Each line gives the proposal, then the reviewer's
 
 - **CL-01:** after each turn, show "Changed X, Y · Review · Undo this turn". Recommended: yes.
 - **WT-01:** Auto asks before workbook changes that cannot be undone (structure deletes too large to back up, chart deletes, destructive Office.js). Recommended: yes.
-- **WT-03:** backups also expire by age. Recommended: yes; the age is the call.
+- **WT-03:** no age or count expiry. Follow-up (confirmed): each backup is a gzip Blob with indexed metadata; a fixed 512 MiB ceiling evicts oldest first only when crossed, with no per-workbook floor; a single oversized compressed backup is refused; backups move with the workbook on Save As, rename and move. Design: thread T-01a17d3c-b0da-73a2-8bbf-000546704dac.
 - **WT-05:** Confirm stops asking twice (dialog and chat) and gains "Allow for the rest of this turn". Recommended: yes.
 - **SE-03:** changes Pi makes to rules, conventions and skills show an Undo toast, and ask in Confirm mode. This reverses #790's "not gated".
 - **SE-08:** in Confirm mode, Files changes ask only where Auto would.
