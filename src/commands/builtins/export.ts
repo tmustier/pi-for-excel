@@ -822,7 +822,7 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     }), { id: COMPACT_TOAST_ID });
   } catch (e) {
     if (e instanceof CompactionStoppedError) {
-      showToast(t("export.toast.compact.stopped"));
+      showToast(t("export.toast.compact.stopped"), { id: COMPACT_TOAST_ID });
       return;
     }
     const msg = getErrorMessage(e);
