@@ -507,7 +507,8 @@ void test("extensions_manager asks before running new code or uninstalling, in A
 
   await gated.execute("c1", { action: "list" });
   await gated.execute("c2", { action: "set_enabled", extension_id: "ext.a", enabled: false });
-  assert.equal(requests.length, 0, "listing and disabling in Auto mode need no approval");
+  await gated.execute("c2b", { action: "reload", extension_id: "ext.a" });
+  assert.equal(requests.length, 0, "listing, disabling and reloading in Auto mode need no approval");
 
   await gated.execute("c3", {
     action: "install_code",
@@ -523,7 +524,36 @@ void test("extensions_manager asks before running new code or uninstalling, in A
   assert.match(install, /tools\.register, http\.fetch/);
   assert.match(install, /api\.registerTool\('x'/);
   assert.match(requests[1]?.message ?? "", /Quick KPI/);
-  assert.deepEqual(actions, ["list", "set_enabled", "install_code", "set_enabled", "uninstall"]);
+  assert.deepEqual(actions, ["list", "set_enabled", "reload", "install_code", "set_enabled", "uninstall"]);
+});
+
+void test("extensions_manager reload asks in Confirm mode, and a declined reload does not run", async () => {
+  const titles: string[] = [];
+  let answer = false;
+  const actions: string[] = [];
+  const tool: AgentTool = {
+    ...createTestTool("extensions_manager"),
+    execute: (_id, params) => {
+      actions.push((params as { action: string }).action);
+      return Promise.resolve({ content: [{ type: "text", text: "ok" }], details: undefined });
+    },
+  };
+  const [gated] = await applyExperimentalToolGates([tool], {
+    getExecutionMode: () => Promise.resolve("safe"),
+    listExtensions: () => [{ id: "ext.a", name: "Quick KPI", grantedCapabilities: [] }],
+    requestLocalChangeApproval: (request) => {
+      titles.push(request.title);
+      return Promise.resolve(answer);
+    },
+  });
+  assert.ok(gated);
+
+  await assert.rejects(gated.execute("c1", { action: "reload", extension_id: "ext.a" }), /Reloading extension "Quick KPI" cancelled/);
+  answer = true;
+  await gated.execute("c2", { action: "reload", extension_id: "ext.a" });
+
+  assert.deepEqual(titles, ["Reload an extension?", "Reload an extension?"]);
+  assert.deepEqual(actions, ["reload"]);
 });
 
 void test("stopping the turn withdraws a pending files consent request and the change does not run", async () => {

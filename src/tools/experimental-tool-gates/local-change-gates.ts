@@ -232,6 +232,14 @@ export function wrapExtensionsManagerToolWithChangeGate(
           confirmLabel: t("gate.extensions.disableConfirm"),
           destructive: false,
         }, `Disabling extension "${targetName}" cancelled by user.`, signal);
+      } else if (mode === "safe" && action === "reload") {
+        await requireApproval(dependencies, {
+          toolName: tool.name,
+          title: t("gate.extensions.reloadTitle"),
+          message: t("gate.extensions.reloadMessage", { name: targetName }),
+          confirmLabel: t("gate.extensions.reloadConfirm"),
+          destructive: false,
+        }, `Reloading extension "${targetName}" cancelled by user.`, signal);
       }
 
       throwIfAborted(signal);
