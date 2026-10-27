@@ -635,13 +635,17 @@ export async function initTaskpane(opts: {
     });
   };
 
-  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
-    const preview = await workbookRecoveryLog.previewRestore(snapshotId);
+  /** Every restore the user starts (/revert, the Backups page) runs here. */
+  const restoreAfterConfirmation = async (preview: WorkbookRecoveryRestorePreview): Promise<void> => {
     if (!await confirmRestoreOverLaterEdits(preview)) return;
     showRestoreResult(
-      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(snapshotId)),
+      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(preview.id)),
       preview.at,
     );
+  };
+
+  const restoreCheckpointById = async (snapshotId: string): Promise<void> => {
+    await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
   };
 
   const toRecoveryCheckpointSummary = (
@@ -1436,11 +1440,7 @@ export async function initTaskpane(opts: {
       showToast(t("init.noBackupsYet"));
       return;
     }
-    if (!await confirmRestoreOverLaterEdits(preview)) return;
-    showRestoreResult(
-      await runUserWorkbookOperation("workbook_history", () => workbookRecoveryLog.restore(preview.id)),
-      preview.at,
-    );
+    await restoreAfterConfirmation(preview);
   };
 
   const createManualFullBackup = async (): Promise<{
