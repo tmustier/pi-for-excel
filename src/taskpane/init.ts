@@ -122,9 +122,8 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
-import { closeOverlayById } from "../ui/overlay-dialog.js";
-import { showActionToast, showToast } from "../ui/toast.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
@@ -958,20 +957,16 @@ export async function initTaskpane(opts: {
     message: string;
     confirmLabel?: string;
     signal?: AbortSignal;
+    source?: string;
+    onStop?: () => void;
   }): Promise<boolean> => {
-    if (args.signal?.aborted) return Promise.resolve(false);
-    // Stopping the turn withdraws the pending request (closing it resolves false).
-    const withdraw = (): void => { closeOverlayById(TOOL_APPROVAL_OVERLAY_ID); };
-    args.signal?.addEventListener("abort", withdraw, { once: true });
-    return requestConfirmationDialog({
-      overlayId: TOOL_APPROVAL_OVERLAY_ID,
+    return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
-      ...(args.confirmLabel !== undefined ? { confirmLabel: args.confirmLabel } : {}),
-      cancelLabel: t("confirm.cancel"),
-      restoreFocusOnClose: true,
-    }).finally(() => {
-      args.signal?.removeEventListener("abort", withdraw);
+      confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
+      ...(args.signal ? { signal: args.signal } : {}),
+      ...(args.source ? { source: args.source } : {}),
+      ...(args.onStop ? { onStop: args.onStop } : {}),
     });
   };
 
@@ -1017,39 +1012,6 @@ export async function initTaskpane(opts: {
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         skillReadCache: runtimeSkillReadCache,
       }).filter(isRuntimeAgentTool);
-
-      const gatedCoreTools = await applyExperimentalToolGates(coreTools, {
-        getExecutionMode: () => Promise.resolve(getExecutionMode()),
-        requestOfficeJsExecuteApproval: (request) => {
-          const apiName = request.apiName ?? "Office.js";
-          return requestRuntimeToolApproval({
-            title: apiName === "WPS JSAPI"
-              ? t("init.confirm.wpsJsTitle")
-              : t("init.confirm.officeJsTitle"),
-            message: buildOfficeJsExecuteApprovalMessage(request),
-            confirmLabel: t("init.confirm.allowOnce"),
-          });
-        },
-        requestPythonBridgeApproval: (request) => {
-          return requestRuntimeToolApproval({
-            title: t("init.confirm.pythonTitle"),
-            message: buildPythonBridgeApprovalMessage(
-              request.toolName,
-              request.bridgeUrl,
-              request.params,
-            ),
-            confirmLabel: t("init.confirm.allowBridge"),
-          });
-        },
-        requestLocalChangeApproval: (request) => requestRuntimeToolApproval({
-          title: request.title,
-          message: request.message,
-          confirmLabel: request.confirmLabel,
-          ...(request.signal ? { signal: request.signal } : {}),
-        }),
-        assistantCreatedFiles: runtimeAssistantCreatedFiles,
-        listExtensions: () => extensionManager.list(),
-      });
 
       // Snapshot extension tools + revision together so schema-stable handler
       // reloads are compared against the same point-in-time payload.
@@ -1139,6 +1101,15 @@ export async function initTaskpane(opts: {
             ...approvalSource(),
           });
         },
+        requestLocalChangeApproval: (request) => requestRuntimeToolApproval({
+          title: request.title,
+          message: request.message,
+          confirmLabel: request.confirmLabel,
+          ...(request.signal ? { signal: request.signal } : {}),
+          ...approvalSource(),
+        }),
+        assistantCreatedFiles: runtimeAssistantCreatedFiles,
+        listExtensions: () => extensionManager.list(),
       });
 
 
