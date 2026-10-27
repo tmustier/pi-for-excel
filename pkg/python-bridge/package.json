@@ -1,6 +1,6 @@
 {
   "name": "pi-for-excel-python-bridge",
-  "version": "0.1.2-pre",
+  "version": "0.1.3-pre",
   "description": "One-command local HTTPS Python / LibreOffice bridge helper for Pi for Excel.",
   "type": "module",
   "bin": {
