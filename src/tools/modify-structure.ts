@@ -4,10 +4,11 @@
  * Single tool for all structural changes (sheets, rows, columns).
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { colToLetter, excelRun } from "../excel/helpers.js";
+import { colToLetter } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { MAX_RECOVERY_CELLS, getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
 import {
@@ -611,7 +612,7 @@ export function createModifyStructureTool(): AgentTool<typeof schema, ModifyStru
           }
         }
 
-        const result = await excelRun((context) => executeStructureMutation(context, params));
+        const result = await runMutation((context) => executeStructureMutation(context, params));
 
         const toolResult: AgentToolResult<ModifyStructureDetails> = {
           content: [{ type: "text", text: result.message }],

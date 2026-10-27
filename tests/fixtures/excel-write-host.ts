@@ -567,7 +567,8 @@ export async function withFakeExcel<T>(fake: FakeExcelHost, action: () => Promis
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    run: <TResult>(callback: (context: unknown) => Promise<TResult>): Promise<TResult> => callback(fake.context),
+    // A fresh context per run, as in Office.js: tools may patch `context.sync` for one run.
+    run: <TResult>(callback: (context: unknown) => Promise<TResult>): Promise<TResult> => callback(Object.create(fake.context)),
   });
   try {
     return await action();

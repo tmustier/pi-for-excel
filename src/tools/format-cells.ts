@@ -5,10 +5,11 @@
  * borders, alignment, column width.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FormatCellsDetails } from "./tool-details.js";
-import { excelRun, getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
 import { captureFormatCellsState, type RecoveryFormatSelection } from "../workbook/recovery-states.js";
@@ -539,7 +540,7 @@ export function createFormatCellsTool(): AgentTool<typeof schema, FormatCellsDet
           }
         }
 
-        const result = await excelRun((context) =>
+        const result = await runMutation((context) =>
           applyResolvedFormatting(context, params, normalizedBorders, styleResult));
 
         const fullAddr = result.isMultiRange

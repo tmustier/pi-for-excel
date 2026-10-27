@@ -11,10 +11,11 @@ function isToolsExecuteOfficeJsPayloadShape(value: unknown): value is Record<str
  * - each execution requires explicit user approval
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 
-import { excelRun } from "../excel/helpers.js";
+
 import { getErrorMessage } from "../utils/errors.js";
 import { describeExcelFailure, parseExcelError } from "./mutation/excel-failure.js";
 
@@ -118,7 +119,7 @@ async function loadOfficeJsRunner(code: string): Promise<ExecuteOfficeJsRunner> 
 async function defaultRunCode(code: string): Promise<unknown> {
   const runner = await loadOfficeJsRunner(code);
 
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     return runner(context);
   });
 }
@@ -204,9 +205,14 @@ export function createExecuteOfficeJsTool(
         // Office.js codes (AccessDenied, cell-edit mode, payload limits) get the same reasons as the
         // structured tools; errors thrown by the code itself keep their message.
         const message = parsed.code ? (await describeExcelFailure(parsed)).reason : getErrorMessage(error);
-        const ranEarlier = parsed.code
-          ? "\n\nSteps in the code before the failing call may already have changed the workbook; read back before retrying."
-          : "";
+        const ranEarlier = parsed.outcomeUnknown
+          // Excel.run cannot be cancelled; runMutation rejects the code's later syncs, nothing more.
+          ? "\n\nPi cannot stop Office.js code once it runs. It blocked this code's later Excel calls, so nothing after the " +
+            "unanswered step reached Excel, but that step may still be applied, and steps before it already ran. " +
+            "Work the code does outside Excel (timers, network) may still run. Read the affected ranges back before retrying."
+          : parsed.code
+            ? "\n\nSteps in the code before the failing call may already have changed the workbook; read back before retrying."
+            : "";
 
         return {
           content: [{

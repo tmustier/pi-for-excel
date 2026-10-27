@@ -4,10 +4,11 @@
  * Scope: on-screen worksheet view/navigation only (not print/page layout).
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, parseCell, qualifiedAddress } from "../excel/helpers.js";
+import { parseCell, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -228,7 +229,7 @@ export function createViewSettingsTool(
 }
 
 async function executeViewSettingsAction(params: Params): Promise<ViewSettingsActionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const sheet = params.sheet
       ? context.workbook.worksheets.getItem(params.sheet)
       : context.workbook.worksheets.getActiveWorksheet();
