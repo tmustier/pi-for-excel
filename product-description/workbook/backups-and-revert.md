@@ -12,6 +12,40 @@ For anything other than the latest change, the user opens the gear menu and choo
 
 On Excel desktop, when the user saves the workbook, all of these disappear within a few seconds. On Excel on the web saving never clears them, but reopening or reloading the taskpane does (confirmed in Excel on the web; see [the workbook](../foundations/the-workbook.md#backups)).
 
+## Review and undo a turn (CL-01)
+
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808), every
+finished, stopped or failed turn that changed the workbook adds a receipt
+under its reply: **Changed {ranges} · Total: {count} · Review · Undo this
+turn**. Stopped and failed receipts have stronger amber/red accents. The
+receipt is typed data, not parsed reply text: it keeps the turn id, addresses,
+changed counts and backup ids. Backups carry the same turn id. Receipts save
+with the conversation and are not sent to the model.
+
+**Review** opens the exact changes, counts and backup ids. **Undo this turn**
+restores the turn's available backups in reverse workbook-write order,
+including overlapping ranges and backups left by a partially failed tool.
+The collector follows all metadata cursor pages; a turn with more than 50
+backups is not silently truncated.
+
+Every restore uses the same later-edit check as `/revert`: **Overwrite later
+edits?** names the cells and offers **Keep my edits** or **Restore anyway**.
+Keeping edits stops the remaining undo sequence. Completed restores stay
+recorded, so retrying Undo continues rather than applying them twice. Restores
+save ordinary inverse backups; those can be restored from Backups or `/revert`.
+An inverse-backup storage failure is reported, not hidden.
+
+If some changes have no backup, the receipt says so; Undo covers only the
+available backups and is disabled when none remain. It does not promise to
+reconstruct chart deletes, arbitrary Office.js changes or evicted backups.
+Those destructive actions have their own [consent boundary](confirm-mode-and-approvals.md).
+
+Verified in real Excel on the web with GPT-6 Luna: two overlapping writes,
+later manual edit cancellation and overwrite, reverse undo to the original
+blank cells, inverse `/revert`, and a stopped write whose receipt remained
+after reload. Public recovery tests cover all three endings and a 57-backup
+turn with partial undo/resume.
+
 ## The interaction, event by event
 
 ```mermaid
