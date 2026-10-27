@@ -71,5 +71,5 @@ Related proposals are grouped. Each line gives the proposal, then the reviewer's
 - **SE-05:** rules stay in the browser, never in the workbook file. They follow the workbook on Save As, rename and move (held batch, #795).
 - **SE-01:** keep the local helper; label each provider row with what it needs and list no-setup options first. No hosted endpoint.
 - **CL-01:** implement with typed data (backups carry a turn id; the turn produces a change summary), not strings.
-- **WT-03:** no age expiry; the count limit stays the only rule.
+- **WT-03:** no age expiry. Follow-up: store each backup as its own record and limit backups by total size (about 256 MB, oldest first, each workbook keeps its newest few) instead of by count; investigated and measured before implementing.
 - **CL-03:** keep Alt+Enter follow-ups; Enter stays steer by default. Add a Send button next to Stop and make the hints consistent.
