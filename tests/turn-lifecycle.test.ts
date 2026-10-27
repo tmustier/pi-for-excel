@@ -274,7 +274,7 @@ void test("the error banner names the real failure", () => {
   assert.equal(describeTurnFailure({ ...base, messages: [fauxAssistantMessage("fine")] }), null);
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("Request cancelled: invalid tool schema") }),
-    "LLM error: Request cancelled: invalid tool schema",
+    "Couldn’t get a response: Request cancelled: invalid tool schema",
   );
   assert.match(
     describeTurnFailure({ ...base, messages: failed("400 model_not_supported").map((message) => ({ ...message, provider: "github-copilot" })) }) ?? "",
