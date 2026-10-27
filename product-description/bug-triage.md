@@ -164,7 +164,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-134](#p-134-code-fences-labelled-c-f-or-with---lose-their-code-card-and-copy-button) | Code fences labelled `c++`, `f#` or with `-` lose their code card and Copy button | low | rendering | fix | Fix in PR [#786](https://github.com/tmustier/pi-for-excel/pull/786) (open) |
 | [P-135](#p-135-dark-mode-never-turns-on-in-excel-on-the-web-and-ignores-office-theme-changes) | Dark mode never turns on in Excel on the web and ignores Office theme changes | low | rendering | product call | Fix in PR [#793](https://github.com/tmustier/pi-for-excel/pull/793) (open) |
 | [P-136](#p-136-save-and-cancel-on-the-rules-page-go-back-to-settings-instead-of-closing) | Save and Cancel on the Rules page go back to "Settings" instead of closing | low | rules | fix | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
-| [P-137](#p-137-this-file-stays-unidentified-after-the-workbook-is-first-saved-while-the-rules-page-is-open) | "This file" stays unidentified after the workbook is first saved while the Rules page is open | low | rules | fix | Assigned to #788 (follow-up; not yet in the PR) |
+| [P-137](#p-137-this-file-stays-unidentified-after-the-workbook-is-first-saved-while-the-rules-page-is-open) | "This file" stays unidentified after the workbook is first saved while the Rules page is open | low | rules | fix | Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open): the Rules page re-reads workbook identity on focus, visibility change, tab switch and before Save |
 | [P-138](#p-138-nothing-in-the-ui-shows-that-rules-are-active) | Nothing in the UI shows that rules are active | low | rules | product call | Fix in PR [#790](https://github.com/tmustier/pi-for-excel/pull/790) (open) |
 | [P-139](#p-139-a-double-click-on-a-resume-entry-can-start-two-resumes) | A double click on a resume entry can start two resumes | low | sessions | fix | Assigned to #795 (follow-up; not yet in the PR) |
 | [P-140](#p-140-the-audit-export-includes-entries-from-every-workbook-not-only-the-current-one) | The audit export includes entries from every workbook, not only the current one | low | sessions | product call | Assigned to #795 (follow-up; not yet in the PR) |
@@ -1837,7 +1837,7 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Decision needed:** `fix`. Re-read the workbook context on focus or before Save.
 - **Raised by:** RULES-25; [rules](guidance/rules.md#open-questions-and-verification)
 - **Status:** Confirmed in Excel for Mac, 26 October 2026 (RULES-25)
-- **Owner:** Assigned to #788 (follow-up; not yet in the PR)
+- **Owner:** Fix in PR [#788](https://github.com/tmustier/pi-for-excel/pull/788) (open): the Rules page re-reads workbook identity on focus, visibility change, tab switch and before Save
 
 ### P-138: Nothing in the UI shows that rules are active
 
