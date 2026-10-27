@@ -71,6 +71,6 @@ Second pass: 27 October 2026, on the `integration-fixes` branch (all open fix PR
 | [guidance-files-extensions](integration-fixes/guidance-files-extensions.md) | 156 | 152 | 1 | 3 |
 | [ui-and-cross-cutting](integration-fixes/ui-and-cross-cutting.md) | 118 | 113 | 1 | 4 |
 
-Desktop rows were run in Excel for Mac on e48d83c and 8099cd6. Still blocked: KEYS-19 (needs Windows), PERSIST-12 and HOST-09 (need a OneDrive sign-in in Excel), MULTI-10 (rerun with a separate login pending).
+Desktop rows were run in Excel for Mac on e48d83c and 8099cd6. PERSIST-12 and HOST-09 passed later on 585380c with a OneDrive workbook. Still blocked: KEYS-19 (needs Excel desktop for Windows), MULTI-10 (rerun with a separate login pending).
 
 A fail on a "(suspected bug)" row means the bug reproduced; those are filed in [bug-triage.md](../bug-triage.md). Fails that were document errors have been corrected in the documents and are noted in the row. No document is marked `verified`: that needs a human pass.
