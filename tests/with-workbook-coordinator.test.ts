@@ -461,7 +461,8 @@ void test("a write that finishes a few seconds after Stop reports its own result
 
   const result = await call;
   const first = result.content[0];
-  assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing Calc!K11:K20; backup fae5e5d3");
+  // #791's wrapper may append a note that the change stands; the tool's own report comes first.
+  assert.ok((first?.type === "text" ? first.text : "").startsWith("Stopped after writing Calc!K11:K20; backup fae5e5d3"));
 });
 
 void test("a tool that reports its own Stop result is not cut short by the wrapper", async (t) => {
