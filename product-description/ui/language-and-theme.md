@@ -1,6 +1,6 @@
 # Language and theme
 
-**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802), CC-10 (not merged). Theme behavior below describes that PR rather than main.
+**Behavior update:** CC-10 shipped in [PR #802](https://github.com/tmustier/pi-for-excel/pull/802). Theme behavior below describes the merged behavior.
 
 ## Summary
 
@@ -61,7 +61,7 @@ If saving fails, the toast "Failed to save language setting." appears in the new
 
 **Never translated, by design:** anything the model reads. The system prompt, tool names and descriptions, auto-context about the workbook, and compaction instructions stay English so the conversation's fixed prefix is identical in both languages and prompt caching keeps working. Command names (`/model`), key names, model names and provider names are also not translated. The model's answers are not translated; the model chooses its language from the conversation.
 
-**Not translated, but probably should be:** strings written directly in English in the code. Confirmed in the Chinese UI on Excel on the web: the Ctrl/Cmd+O toasts, and `/yolo status`, which mixes the two ("自动 mode — Pi applies workbook changes immediately."). Seen while drafting: the "Rename tab" prompt title, the Ctrl/Cmd+O toasts "Details hidden (⌃O)" and "Details shown (⌃O)", the `/yolo` toasts ("Usage: /yolo [on|off|toggle|status]", "Confirm mode — Pi asks before each workbook change."), the status bar's lock badge and its tooltips, several tool-card labels ("Copy CSV", "Input", "Result", "Data", "✓ Done"), the context-overflow and CORS banners and "API key required for {provider}.", the command menu's accessible name "Slash commands", and every string supplied by an extension (such as "/snake" and "Play Snake! 🐍"). The Chinese locale has the same set of entries as English; a missing translation would fall back to English.
+**Not translated, but probably should be:** strings written directly in English in the code. Historical observations while drafting included `/yolo status`, which mixes the two ("自动 mode — Pi applies workbook changes immediately."), the "Rename tab" prompt title, the `/yolo` toasts ("Usage: /yolo [on|off|toggle|status]", "Confirm mode — Pi asks before each workbook change."), the status bar's lock badge and its tooltips, several tool-card labels ("Copy CSV", "Input", "Result", "Data", "✓ Done"), the context-overflow and CORS banners and "API key required for {provider}.", the command menu's accessible name "Slash commands", and every string supplied by an extension (such as "/snake" and "Play Snake! 🐍"). The previously observed English Ctrl/Cmd+O toasts are now translated in PR #802. The Chinese locale has the same set of entries as English; a missing translation would fall back to English.
 
 ## The theme
 

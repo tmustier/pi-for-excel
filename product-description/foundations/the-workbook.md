@@ -105,10 +105,11 @@ A backup is a snapshot of what a mutation is about to change, saved by Pi so the
 
 - **What is captured.** Depends on the tool (see the table above): for cell writes, the values and formulas of the target range; for formatting, the format properties Pi can set; for conditional formats, the range's rules; for comments, the thread; for charts, the chart's properties; for structure, enough to undo the change, including deleted values and formulas. A backup never captures cell formatting when the mutation was a write, so reverting a write does not undo formatting that Excel's fill copied.
 - **When it is not taken.** No backup for `view_settings`, chart deletes, direct Office.js, or a mutation larger than 20,000 cells. No backup when the workbook has no identity and the host cannot store a document token (see [Unsaved and new workbooks](#unsaved-and-new-workbooks)). The tool card says " — no backup" and the result tells the model "ℹ️ Backup not created …".
-- **Where it lives.** In the add-in's browser storage on this computer, never in the workbook file. One list holds the backups of every workbook, each tagged with its workbook's identity; the user only ever sees the current workbook's.
-- **Retention.** "Keep at most" applies per workbook, from 5 to 120 (default 120), with a global cap of 240. The dialog lists the full retained set so counts and Clear all agree.
+- **Where it lives.** In local browser storage, never in the workbook file. Each backup is independent; listing, writing and deleting one do not load other backups' contents. The dialog and Pi's history tool page through lightweight summaries, showing only the current workbook. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+- **Retention.** There is no count/age limit or "Keep at most" setting. The shared automatic-history ceiling is 512 MiB across all workbooks; only crossing it removes oldest backups, without a per-workbook floor. A single oversized backup is refused before any eviction. History is shown in 50-row pages; search/action counts apply only to the loaded page. Clear all deletes the workbook's entire archive. See [backups and revert](../workbook/backups-and-revert.md#retention).
 - **Save and reload.** Neither deletes backups, on desktop or web. Only explicit deletion and retention remove them; the old save-boundary warning and clearing behavior are gone.
-- **Other taskpanes.** Storage mutations reload current entries under a shared storage lock, avoiding stale-list replacement. This is not a cross-taskpane workbook write lock.
+- **Other taskpanes.** Shared storage transactions serialize additions, deletion, identity moves and eviction, avoiding stale-list replacement. This is not a cross-taskpane workbook write lock. A loaded page needs Refresh/reopen to show later changes.
+- **Loss and failure.** Cache clearing or whole-origin storage eviction can erase backups together with chats, sign-ins and settings. The ceiling does not reserve disk space. A successful workbook change whose backup cannot be saved stays applied and is explicitly reported as not revertible from backups. Downloading a full workbook is the durable safety net.
 
 ## The execution mode
 
@@ -118,7 +119,7 @@ The execution mode decides whether Pi applies mutations immediately (**Auto**, t
 
 Pi recognizes a workbook by an identity derived from the file's location (a hash of its path or URL), never by storing the path itself. The identity links sessions, the tab layout, workbook rules, backups and manual backups to the workbook. Consequences the user can see:
 
-- Renaming, moving or "Save As" gives the workbook a new identity. Backups, manual backups and workbook rules stay with the old identity and are no longer shown; sessions linked to the old identity are no longer preferred on restore (see [sessions and tabs](sessions-and-tabs.md)).
+- Renaming, moving or "Save As" gives the workbook a new identity. While Pi follows the same open document, automatic backups move to it without copying payloads, preserving existing destination backups. Offline location changes cannot be matched safely. Sessions/layout, rules and manual backups have their own contracts: see [sessions and tabs](sessions-and-tabs.md), [rules](../guidance/rules.md) and [manual backups](../workbook/manual-backups.md).
 - Two copies of the same file in different folders are different workbooks.
 - A workbook with no location (never saved) has no identity; see below.
 
@@ -126,7 +127,7 @@ Pi recognizes a workbook by an identity derived from the file's location (a hash
 
 A workbook that has never been saved ("Book1") has no path-derived identity. On Excel on the web, a workbook opened through an "anyone with the link" sharing link without signing in has none either: Excel reports no location for it, so it behaves exactly like a never-saved workbook (confirmed in Excel on the web).
 
-- **Automatic backups** use a durable document token when no path identity is available. Saving does not delete them; a different identity can change which list is shown. Reading the list does not create a token.
+- **Automatic backups** use a durable document token when no path identity is available. First save moves token-scoped history to the saved identity rather than clearing it. Reading the list does not create a token. Where the host cannot store a token safely, Pi reports the unavailable backup.
 - **Manual backups** refuse: "Current workbook identity is unavailable; cannot create or restore manual full-workbook backups safely." (confirmed in Excel on the web). See [manual backups](../workbook/manual-backups.md).
 - **Workbook rules** cannot be set ("Can't identify this workbook right now — try saving the file first."). See [rules](../guidance/rules.md).
 
@@ -180,7 +181,7 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 
 **Notifications.** Tool cards, "Locking…" on tabs, the "lock" badge, queued approval dialogs and revert outcomes. Saving does not clear backups.
 
-**Settings and preferences.** The "Auto mode" switch in Settings, and the retention field in the Backups dialog.
+**Settings and preferences.** The "Auto mode" switch in Settings. Automatic-backup retention has no setting.
 
 **Host differences.** Tools share paging, checked-write and bounded wait rules. Anonymous-link workbooks may lack a location; optional state APIs differ. Neither desktop nor web clears backups on save. See [host differences](../cross-cutting/host-differences.md).
 
@@ -193,9 +194,11 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 - Parallel mutations in one tab can wait on that tab's own earlier write. Counted lock ownership keeps the tab non-closeable while any write holds the lock.
 - A no-op write (the same values written again) still takes a backup, with "0 changes".
 - Reading a very hidden sheet works if Pi names it; search skips hidden sheets unless Pi names the sheet.
-- Backups are retained per workbook, but the global 240-entry cap can still evict old entries across workbooks.
+- Backups for workbook A count against the same 512 MiB ceiling as workbook B; enough activity in one workbook can evict another's entire history.
 
 ## Open questions and verification
+
+Backup storage is updated for [#809](https://github.com/tmustier/pi-for-excel/pull/809), replacing count retention with the indexed byte ceiling. Current Mac/web acceptance and limitations are recorded in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). The merged-main observations below retain their original scope.
 
 - Merged coordinator/recovery source inspected: per-runtime read barrier, counted lock ownership, durable backups, applied retention, atomic storage updates and always-approved deletion. Old WB/REVERT/APPROVE findings remain in the recorded runs, not as present-tense defects here.
 - A real GPT-6 Luna turn read and wrote a formula; independent Excel read-back returned 8 and the receipt included a backup ID. A merge-child write was refused. See [the workbook checklist](../verification/workbook.md) for the wider acceptance work still required.

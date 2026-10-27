@@ -1,96 +1,223 @@
 # Keyboard shortcuts
 
-**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802), CC-08 (not merged), stacked on the turn and tabs/models changes in PRs #803 and #805. This describes that stack rather than main.
+Chat/thinking rows revised for CL-03, CL-09 / CC-07 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803). Tab chords and modal guards below describe CC-08, shipped in [PR #802](https://github.com/tmustier/pi-for-excel/pull/802).
 
 ## Summary
 
-The Keyboard shortcuts page is the read-only reference opened by `/shortcuts`, the gear menu, or Settings. It groups Chat, Tabs, Navigation and System. Tab actions use the same Control+Alt prefix on Windows, Mac and web; Mac labels use Control+Option, not Command. Keys act only while focus is inside Pi. Shortcuts do not change the system prompt or tool schemas.
+Pi for Excel can be driven almost entirely from the keyboard: sending, steering and following up, stopping, restoring queued messages, cycling the thinking level, opening, closing, reopening and switching tabs, the command menu, and returning focus to the composer. This document has two parts. The first describes the **Keyboard shortcuts** page, the in-product reference opened with `/shortcuts`, from the utilities menu's "Keyboard shortcuts" item, or from Settings → "Keyboard shortcuts". The second is the **index** of every shortcut the product actually handles, with where it works, what blocks it, and the document that owns its behaviour. Behaviour is described in the owning documents; this index only points to them (see the README's scope decision on shortcuts). The page is available while the tab is busy only from the utilities menu or Settings: `/shortcuts` is refused while busy. It needs no provider and works on every host, though some shortcuts collide with the browser on Excel on the web.
 
 ## The simple case
 
-With a draft in the composer, Ctrl+Alt+N opens a tab, Ctrl+Alt+Left returns to the previous tab, Ctrl+Alt+W closes the active tab and Ctrl+Alt+Shift+T reopens the last closed tab. On Mac these are Control+Option chords. The draft belongs to its tab. Ctrl/Cmd+Z is ordinary undo; Pi never uses it to reopen a tab.
+The user types `/shortcuts` and presses Enter, or opens the utilities menu (the gear) and chooses "Keyboard shortcuts". The Settings overlay opens directly on a page titled "Keyboard shortcuts" with the subtitle "Quick reference for chat, tab, navigation, and system shortcuts.", and a back arrow to the Settings root.
+
+The page lists four groups, "Chat", "Tabs", "Navigation" and "System", each a list of key labels and descriptions. Keys are shown in macOS notation (⌃ ⌘ ⌥ ⇧) when the taskpane runs on a Mac, and as "Ctrl+…", "Alt+…", "Shift+…" otherwise. Tab chords use Control+Option on Mac, not Command. The page is read-only.
+
+The user presses Escape once to go back to the Settings root and again to close Settings, or clicks × to close at once. They land back in the tab they came from.
 
 ## The interaction, event by event
 
-Open the reference, read the groups, then Escape goes back to the Settings root and a second Escape closes Settings. Opening the page changes no session or workbook state. An active turn continues behind it.
+```mermaid
+stateDiagram-v2
+    [*] --> composing
+    composing --> refused : /shortcuts while busy (toast, text kept)
+    refused --> composing
+    composing --> shortcuts_page : /shortcuts, or utilities menu "Keyboard shortcuts"
+    shortcuts_page --> settings_root : Escape or back arrow (nothing changed)
+    settings_root --> composing : Escape, ×, or backdrop click (Settings closed)
+    shortcuts_page --> composing : × or backdrop click (Settings closed)
+```
 
 ### Opening the page
 
-`/shortcuts`, gear → Keyboard shortcuts, and Settings → Keyboard shortcuts open the same page. Key notation follows the computer's platform, including a Mac browser running Excel on the web.
+`/shortcuts` and the utilities-menu item both open Settings at the shortcuts page; Settings → "Keyboard shortcuts" navigates there from the root. If Settings is already open, `/shortcuts` moves it to the shortcuts page. Which notation is shown is decided when the page renders, from the browser's platform: Excel on the web on a Mac shows Mac symbols.
 
 ### Ends at once
 
-A command refused while busy keeps its text for correction under the parent turn/command changes. The gear menu remains available. Shared modal and menu guards prevent shortcuts from changing covered tabs or moving focus behind the open surface.
+While the active tab is busy, `/shortcuts` shows "Can't run /shortcuts while Pi is busy". Whether the typed text survives depends on the path. Typing `/shortcuts` leaves the command menu open on that one match, so Enter runs the menu's highlighted command, which empties the composer before the busy check refuses it: the text is gone (confirmed in Excel on the web). Only when the command menu is not showing (for example after Escape closed it) does Enter refuse the command and leave the text in place. The utilities menu item works while busy. Nothing is recorded either way.
+
+### Committed, while busy, finishes
+
+There is nothing to commit. The page is a static list; opening it changes no setting and does not touch the session or the workbook. A turn running in the tab continues behind the overlay. Closing the page returns to the Settings root (Escape or back) or closes Settings (× or the backdrop).
 
 ### What the page lists
 
-| Group | Windows/web keys | Mac keys | Action |
-| --- | --- | --- | --- |
-| Chat | Enter | Enter | Send; while streaming, send a steer |
-| Chat | Alt+Enter | Option+Enter | Queue follow-up |
-| Chat | Alt+Up | Option+Up | Restore queued messages |
-| Chat | Ctrl+Alt+T | Control+Option+T | Cycle thinking depth, composer only |
-| Chat | Ctrl+O | Command+O | Toggle transcript details |
-| Tabs | Ctrl+Alt+N | Control+Option+N | New tab |
-| Tabs | Ctrl+Alt+W | Control+Option+W | Close tab |
-| Tabs | Ctrl+Alt+Shift+T | Control+Option+Shift+T | Reopen closed tab |
-| Tabs | Left / Right | Left / Right | Switch tabs outside text fields |
-| Tabs | Ctrl+Alt+Left / Right | Control+Option+Left / Right | Previous / next tab, including from the composer |
-| Tabs | Shift+F10 | Shift+F10 | Open focused tab's menu |
-| Navigation | / | / | Open command menu |
-| Navigation | Up / Down | Up / Down | Navigate menu |
-| Navigation | F2 | F2 | Focus chat input |
-| System | Escape | Escape | Dismiss topmost surface / Stop / leave input |
+Windows label first, Mac label second where they differ. The Windows/Linux chord names do not imply native Windows acceptance; see coverage below.
+
+| Group | Keys | Description |
+| --- | --- | --- |
+| Chat | Enter | "Send message" |
+| Chat | "Enter (while streaming)" | "Steer Pi after its current step" |
+| Chat | Alt+Enter / ⌥ Enter | "Queue follow-up message" |
+| Chat | Alt+↑ / ⌥ ↑ | "Restore queued message" |
+| Chat | Ctrl+Alt+T / ⌃ ⌥ T | "Cycle thinking level (in the message box)" |
+| Chat | Ctrl+O / ⌘ O | "Expand or collapse tool details" |
+| Tabs | Ctrl+Alt+N / ⌃ ⌥ N | "New tab" |
+| Tabs | Ctrl+Alt+W / ⌃ ⌥ W | "Close tab" |
+| Tabs | Ctrl+Alt+Shift+T / ⌃ ⌥ ⇧ T | "Reopen closed tab" |
+| Tabs | ← → | "Switch tabs (exit input first)" |
+| Tabs | Ctrl+Alt+← / → / ⌃ ⌥ ← / → | "Previous / next tab" |
+| Tabs | Shift+F10 / ⇧ F10 | "Open the menu for the focused tab" |
+| Navigation | / | "Open command menu" |
+| Navigation | ↑ ↓ | "Navigate menu items" |
+| Navigation | F2 | "Focus chat input" |
+| System | Esc | "Dismiss popup / Stop generation / Exit input" |
 
 ## The index
 
+Every shortcut the product handles, in the taskpane only (keys pressed while focus is in Excel's grid never reach Pi). "Text field" is as defined in the [glossary](../glossary.md#input). "Anywhere" means anywhere in the taskpane with no modal overlay open, unless a guard says otherwise. IME composition keys are not handled as shortcuts.
+
 ### Composer and turn
 
-Enter, Shift+Enter, Alt/Option+Enter and restore-queued behavior belong to [the composer](../turn/the-composer.md) and [steering and the queue](../turn/steering-and-the-queue.md). Ctrl+Alt+T cycles only the active model's supported thinking levels with composer focus; Shift+Tab is reverse focus navigation and does not change thinking. See [thinking](../turn/thinking.md). Ctrl/Cmd+O toggles tool and thinking details. F2 focuses the composer only when no modal owns focus.
+| Keys | What it does | Where and guards | Owner |
+| --- | --- | --- | --- |
+| Enter | Idle: sends. Responding: steers. Busy but not responding: queues. Text starting with `/`: runs the command instead. | Focus in the composer. Empty text does nothing. | [the composer](../turn/the-composer.md), [turns](../foundations/turns.md) |
+| Shift+Enter | Inserts a line break. | Composer. | [the composer](../turn/the-composer.md) |
+| Alt/Option+Enter | Responding: follow-up. Idle: sends like Enter. | Composer. | [steering and the queue](../turn/steering-and-the-queue.md) |
+| Alt/Option+Up | Restore queued: moves waiting steers, follow-ups and queued prompts into the composer. Toasts "Restored {count} queued message(s) to editor" or "No queued messages to restore". Also accepted as Alt/Option+PageUp, which some webviews send instead. | In the composer, or anywhere focus is not in another text field. Ignored on key repeat. | [steering and the queue](../turn/steering-and-the-queue.md) |
+| Escape | Responding: stops and restores waiting items to the composer. Idle with focus in the composer: moves focus to the tab strip. | Only when no menu, popover or overlay claims Escape; see [Escape](#escape). | [stopping](../turn/stopping.md) |
+| Ctrl+Alt/Option+T | Cycles the active tab's supported thinking levels; toast includes the dedicated chord. | Composer only, no modal. Not Cmd on Mac. | [thinking](../turn/thinking.md) |
+| Shift+Tab | Moves focus backwards normally; never changes thinking. | Native focus navigation, including composer and dialogs. | [thinking](../turn/thinking.md) |
+| Ctrl/Cmd+O | Shows or hides tool-card bodies and thinking blocks in the transcript; translated toast with the platform's shortcut label. | Anywhere. Lower-case o only, so Shift is not allowed. | [tool calls](../turn/tool-calls.md) |
+| F2 | Puts focus in the composer with the caret at the end. | Anywhere, with no modifier and no modal open. | [the composer](../turn/the-composer.md) |
 
 ### Tabs
 
-Tab chords work from the composer and other taskpane controls, subject to modal/menu guards. Plain Left/Right retain their outside-text-field guard; modified Left/Right do not move the editor caret. Adjacent switching wraps, ignores repeat, and does not alter thinking. Close keeps the normal last-tab refusal and busy-tab confirmation. Reopen uses the existing closed-tab history. Buttons, `/reopen` and the close toast's Undo remain alternatives. See [tabs](../sessions/tabs.md) and [reopening closed tabs](../sessions/reopening-closed-tabs.md).
+| Keys | What it does | Where and guards | Owner |
+| --- | --- | --- | --- |
+| Ctrl+Alt+N | Opens a new tab. | Anywhere, including text fields, with no dialog open. Control+Option on Mac. | [tabs](../sessions/tabs.md) |
+| Ctrl+Alt+W | Closes the active tab, with the usual refusals and confirmation. | Anywhere, including text fields, with no dialog open. Control+Option on Mac. | [tabs](../sessions/tabs.md) |
+| Ctrl+Alt+Shift+T | Reopens the most recently closed tab. | Anywhere with no dialog open. Control+Option+Shift on Mac. | [reopening closed tabs](../sessions/reopening-closed-tabs.md) |
+| ← / → | Switches to the previous or next tab, wrapping around. | Not in a text field, menu or status popover, and no dialog open; ignored on key repeat. When a tab itself has focus, the tab strip handles the arrows the same way. | [tabs](../sessions/tabs.md) |
+| Ctrl+Alt+Left / Ctrl+Alt+Right | Previous or next tab. | Also works in the composer, with no dialog open. Control+Option on Mac. | [tabs](../sessions/tabs.md) |
+| Enter or Space on a focused tab | Selects it. | Focus on a tab button. | [tabs](../sessions/tabs.md) |
+| Shift+F10 on a focused tab | Opens that tab's context menu, including Rename. | Focus on a tab button. | [tabs](../sessions/tabs.md) |
 
-The previous Ctrl/Cmd+T, Ctrl/Cmd+W, Ctrl/Cmd+Shift+T, Ctrl+PageUp/PageDown and Command+Shift+bracket aliases are no longer Pi shortcuts. Ctrl/Cmd+Z is never intercepted, whether the composer is empty, contains text, or the close toast is visible. A focused tab accepts Enter/Space and Shift+F10 for its menu.
+Ctrl/Cmd+Z is never handled as reopen, including while the close toast is visible; it stays native undo. The toast's **Undo** action and `/reopen` still reopen tabs. The old Ctrl/Cmd+T/W/Shift+T, Ctrl+PageUp/PageDown and Cmd+Shift+[ / ] tab aliases are removed.
 
 ### Menus, pickers and overlays
 
-The [command menu](../commands/the-command-menu.md) owns its navigation and completion keys. The [model picker](../setup/the-model-picker.md) owns filtering and selection. Modal dialogs own focus; tab and thinking chords do not act behind them. Shortcut behavior cannot be customized.
+| Keys | What it does | Where and guards | Owner |
+| --- | --- | --- | --- |
+| `/` | Typed as the first character of the composer, opens the command menu. | Composer, single line. | [the command menu](../commands/the-command-menu.md) |
+| ↑ / ↓ | Moves the command-menu highlight. | While the command menu is visible, anywhere. No modifiers. | [the command menu](../commands/the-command-menu.md) |
+| Enter | Runs the highlighted command, with no arguments. | While the command menu is visible, anywhere; Shift and Alt are ignored. | [the command menu](../commands/the-command-menu.md) |
+| Tab | Fills the composer with the highlighted command name. | While the command menu is visible. | [the command menu](../commands/the-command-menu.md) |
+| ↑ / ↓, Enter, typing | Moves through, chooses, filters models. | Model picker. | [the model picker](../setup/the-model-picker.md) |
+| Enter | Confirms a text-input dialog. | Its input field. | [the taskpane](../foundations/the-taskpane.md) |
 
 ### Escape
 
-The topmost menu, popover or overlay claims Escape first. In Settings it goes back a page or closes at the root. Without such a surface, Escape stops a responding tab; in an idle composer it moves focus to the tab strip. See [stopping](../turn/stopping.md).
+Escape goes to the first of these that applies, in this order:
+
+1. An open status popover closes. See [the status bar](the-status-bar.md).
+2. The command menu, if visible, closes.
+3. With the tab idle and focus in the composer, focus moves out to the tab strip.
+4. With the tab responding, Pi stops, unless a surface that claims Escape is open: the utilities menu, the command menu, the model picker, Settings, the API-key dialogs, the welcome overlay, or an extension widget. The established list is in [turns](../foundations/turns.md#stop).
+5. An open overlay handles it: if focus is in a text field inside the overlay, the first Escape only leaves the field and the second closes the overlay. In Settings, Escape goes back one page and closes at the root.
+6. The utilities menu or the tab context menu, if open, closes.
 
 ## What Excel on the web does with the keys
 
-Earlier acceptance on main demonstrated that Chrome takes Ctrl+T, Ctrl+W, Ctrl+Shift+T and Ctrl+PageUp/PageDown for browser tabs. CC-08 replaces those Pi bindings rather than attempting to intercept browser-reserved actions. F6 remains a host/browser function and is no longer advertised as a Pi shortcut. Keys pressed in Excel's grid still go to Excel, not Pi.
+**Historical pre-#802 observations**, retained to explain why the old tab aliases were replaced. Tried with real key input (operating-system key events into the Chrome window running Excel on the web, Linux, so Ctrl chords), focus in Pi's composer unless noted. "Pi saw it" was checked with a capturing key listener in the taskpane. These are not acceptance results for the new chords.
 
-The shared Ctrl+Alt chords are exercised with browser key input; real Excel-web reference/copy acceptance is separate from desktop shortcut acceptance. Excel for Mac's background app-targeted key delivery passed on the exact stacked pin below. Windows desktop and AltGr layouts remain untested, not blocked.
+| Keys | Pi saw it | What happened |
+| --- | --- | --- |
+| Ctrl+T | No | Chrome opened a new browser tab. |
+| Ctrl+W | No | Chrome closed the browser tab running Excel, and the taskpane with it. Reopening that tab with Ctrl+Shift+T brought back Excel with the taskpane closed; Pi had to be opened again from the ribbon. |
+| Ctrl+Shift+T | Only when Chrome had nothing to reopen | With a closed browser tab available, Chrome reopened it. In the one case where Chrome had none, Pi received the key and reopened its own closed tab. |
+| Ctrl+PageUp / Ctrl+PageDown | No | Chrome switched to the neighbouring browser tab; with only one browser tab, nothing happened. Focus on a Pi tab made no difference. |
+| Ctrl+O | Yes | Pi toggled details ("Details hidden (⌃O)"); no browser or Excel Open dialog. |
+| Ctrl+Z (empty composer, nothing closed) | Yes | Nothing; Excel's own undo did not run. |
+| Shift+Tab | Yes | Reverse-focus navigation only. PR #803 removes the old simultaneous thinking-level change. |
+| Escape, F2, ←/→, Alt+↑ | Yes | As in the index: Escape moved focus from the composer to the tab strip, F2 brought it back, arrows switched tabs from the tab strip, Alt+↑ toasted "No queued messages to restore". |
+| F6 | Not handled | Focus left the page entirely (to the browser's own controls); it did not reach the grid. |
+| Ctrl+F6 | Taken by Office.js | Office.js hands Ctrl+F6 to Excel as "leave the add-in"; no visible change was observed. |
 
 ## Mismatches between the page and the code
 
-CC-08 removes the old host-specific tab rows, the Ctrl/Cmd+Z reopen behavior and the unsupported F6 rows. The stacked turn change replaces Shift+Tab with the composer-only thinking chord and adds the details row. Other command descriptions and semantics belong to their owning documents, not to this reference.
+- **F6 and Shift+F6** are host/browser behavior, not Pi bindings. PR #802 removes their misleading entries from the page.
+- **Ctrl+P** appears only in the menu description of `/default-models`, "Switch models with Ctrl+P". No such shortcut exists; in Excel on the web Ctrl+P prints.
+- **Ctrl/Cmd+Z** is no longer a reopen shortcut. **Ctrl/Cmd+O** is now listed on the page.
+- **Tab** in the command menu, **Shift+Enter**, **Enter in the command menu**, **Alt/Option+PageUp** and **arrow keys on a focused tab** work but are not listed.
+- Enter while streaming is labelled **"Steer Pi after its current step"**: it waits for the current response/tools, rather than interrupting them. Send uses that same path while responding; Alt/Option+Enter remains follow-up.
+- **"Restore queued message"** is singular, but every waiting steer, follow-up and queued prompt is restored at once.
+- **"← → Switch tabs (exit input first)"** applies to plain arrows. The dedicated Ctrl+Alt+Left/Right chords also work inside the composer.
 
 ## Modifiers
 
-Model/provider changes affect supported thinking levels, not tab bindings. Tabs operate on the active tab, including while work runs, with the usual close confirmation. A modal owns the keys while open. Platform changes notation, not the Control+Alt prefix.
+| Modifier | Set before | Changed while busy |
+| --- | --- | --- |
+| Model and provider | No effect on the page. The thinking chord only offers the model's supported levels. | No effect. |
+| Thinking level | No effect on the page. | No effect. |
+| Execution mode | No effect. | No effect. |
+| Files in the workspace, or an overlay open | The page is itself a modal. Thinking cycling does not act behind it; Shift+Tab navigates its controls. | Same. |
+| Tab state (new, restored, another tab busy) | No effect on the page. Shortcuts act on the active tab. | `/shortcuts` is refused while busy; the menu item is not. |
+| Host (desktop or web) | Notation follows the platform. The common tab chords replace browser-reserved aliases; see [What Excel on the web does with the keys](#what-excel-on-the-web-does-with-the-keys) for historical observations. | No effect. |
 
 ## Cancel and interrupt
 
-Switching tabs does not cancel work. Closing a busy tab follows normal confirmation and cancellation. Reopening restores the closed session. Opening Settings neither stops work nor changes the tab behind it. Focus outside Pi means none of Pi's shortcuts apply.
+| Event | Before sent | While busy |
+| --- | --- | --- |
+| Stop (button or Escape) | Escape on the page goes back to the Settings root. | A turn running in the tab is not stopped by Escape while Settings is open; Settings claims it. |
+| The user sends something else | The overlay holds focus; nothing can be sent until it closes. | Same. |
+| Tab switched, created, closed or reopened | Tab shortcuts do not act behind the open modal page. | Same. |
+| An overlay or menu opens | Opening another Settings page replaces the shortcuts page. | Same. |
+| Model or thinking level changes | The thinking chord does not act behind the modal page. Shift+Tab navigates its controls. | Same. |
+| The provider fails | No effect. | No effect. |
+| The taskpane goes away | Nothing to lose. | Same. |
+| The workbook changes underneath | No effect. | No effect. |
+| Focus moves to the grid or another window | The page stays open. Shortcuts stop working until focus returns to the taskpane. | Same. |
+| The context window fills | No effect. | No effect. |
+
+After closing the page the user is back in the same tab with the composer as it was.
 
 ## Interactions with other systems
 
-**Persistence.** No shortcut preference is saved. Tab/session persistence is unchanged. **Workbook changes and recovery.** No tab shortcut writes cells. **Other tabs and sessions.** Drafts and work stay with their tabs. **Host differences.** Control+Option on Mac is not Command+Option; OS accessibility tools may reserve keys before Pi sees them. **Language.** Group and action labels use the UI translation layer; key names follow platform notation. **Accessibility and keyboard.** Shift+Tab remains reverse navigation; open modals keep focus and suppress background routing.
+**Persistence.** None. Shortcuts cannot be customised and nothing about them is saved.
+
+**Workbook changes and recovery.** None. No shortcut changes the workbook directly.
+
+**Other tabs and sessions.** Shortcuts act on the active tab; tab shortcuts change which tab is active.
+
+**Execution mode and approvals.** There is no shortcut for the execution mode.
+
+**Models and providers.** There is no shortcut for the model picker, despite "Switch models with Ctrl+P".
+
+**Offline and provider errors.** None.
+
+**Notifications.** The shortcuts' own toasts are listed in the index.
+
+**Settings and preferences.** The page lives in Settings and has no options.
+
+**Host differences.** Grid keys go to Excel, not Pi. Shift+Tab is only focus navigation. Thinking uses Ctrl+Alt+T on Windows/Linux and Ctrl+Option+T on Mac. Tab chords use the same Ctrl+Alt modifiers (Control+Option on Mac), not browser-tab aliases. This is a pane-focus contract, not a global workbook shortcut.
+
+**Language.** Group titles, descriptions, the "Enter (while streaming)" label and details-toggle toasts are translated; key names are not. Details-toggle labels follow the platform.
+
+**Accessibility and keyboard.** Shift+Tab retains reverse-focus navigation everywhere, with no thinking side effect. Ctrl+Alt+T (Ctrl+Option+T on Mac) cycles thinking only from the composer with no modal open. The page itself uses `kbd` labels. PR #803's browser regression test and Excel-web keyboard recording verify the new separation; the old desktop/web Shift+Tab findings are historical.
 
 ## Edge cases
 
-- Option may produce a non-ASCII character on Mac; letter chords also recognize the physical key code.
-- Ctrl+Alt+T without Shift is thinking; adding Shift makes it reopen. Thinking has the stricter composer-focus guard.
-- Alt/Option+Up may arrive as PageUp; restore-queued accepts both.
-- Native undo is not promised to change workbook cells from inside a webview; the guarantee is that Pi does not reinterpret it as reopen.
+- Ctrl+Alt+W in the composer closes the active tab, with the usual close refusals and confirmation.
+- Ctrl/Cmd+Z right after closing a tab remains native undo; Pi never consumes it for reopening.
+- Modal overlays block tab switching, thinking cycling, details toggling and F2 focus behind the overlay.
+- Holding an arrow key or Alt/Option+Up does not repeat the action.
+- Ctrl/Cmd+O is a single taskpane-wide toggle, not per tab, and resets on reload.
 
 ## Open questions and verification
 
-Browser regression tests exercise create/close/reopen/adjacent routing from the editor, ordinary undo not reopening, modal guards and help labels. The [Mac runner](https://ampcode.com/threads/T-01a1797b-5ec5-74c6-8c3c-9e9e80649744) tested 569f81984e432512dcffe737b3ae0cc051b51b8b using background app-targeted computer-use press_key, not HID/system-keyboard events. With composer focus, N/W/Shift+T/Left/Right/T all worked without inserting Option characters; thinking went high→xhigh. Cmd+Z reached the composer unprevented, and neither Cmd+Z nor Ctrl+Z reopened a tab. With grid focus none of those keys reached Pi, and no visible Excel action occurred. Foreground/global shortcut interception, tab-button focus and dialogs were not tested there; no Mac file artifacts survive, only the runner transcript. Windows/AltGr remain untested. See PR #802 for final checks and browser artifacts; historical verification tables may describe pre-PR behavior.
+- F6 and Shift+F6 are not Pi bindings and are no longer listed on the page. Host-specific pane cycling is outside this contract.
+- `/default-models` advertises Ctrl+P (`src/language/locales/en.json:45`), which is not implemented.
+- PR #803 releases Shift+Tab and assigns composer-only Ctrl+Alt/Option+T. The baseline browser regression changes thinking on Shift+Tab; the new version moves focus without changing it.
+- `/shortcuts` (and every busy-refused command) chosen with Enter from the command menu clears the composer before the refusal (`src/commands/command-menu.ts:35-41` clears, then `src/taskpane/init.ts:1713` refuses). Confirmed in Excel on the web. Inconsistent with the editor path (`src/taskpane/keyboard-shortcuts/editor-actions.ts:181`), which keeps the text.
+- Ctrl/Cmd+O toasts are translated and use the platform shortcut label in PR #802.
+- Every overlay built on the shared overlay dialog claims Escape (`src/utils/escape-guard.ts:9`, `src/ui/overlay-dialog.ts:192`, `:234`), matching goal.md. Confirmed in Excel on the web for the resume picker: Escape while responding closed the picker and the turn kept running.
+- Browser-reserved shortcuts on Excel on the web: confirmed with real key input; see [What Excel on the web does with the keys](#what-excel-on-the-web-does-with-the-keys). The Mac browser chords (Cmd+T, Cmd+W, Cmd+Shift+[ ]) were not tried.
+- Desktop Windows and Windows/AltGr layouts remain **untested**, not blocked. macOS background acceptance and its limits are recorded below.
+
+### CC-08 acceptance and limits
+
+Excel on the web exercised the dedicated tab chords with pane focus; browser tests cover undo preservation, modal suppression and the focused-tab menu. The baseline observations above were made against `ec453df`; the new behavior is from PR #802.
+
+Excel for Mac was checked on exact `569f81984e432512dcffe737b3ae0cc051b51b8b`, with the shortcut code unchanged by the later dark-select CSS fix. With the composer focused, Control+Option+N/W/Shift+T/Left/Right opened, closed, reopened and switched tabs; Control+Option+T cycled thinking high → xhigh. No Option characters were inserted and no visible Excel interception occurred. Cmd+Z reached the composer unprevented; Ctrl+Z produced no pane keydown; neither reopened a tab. With grid focus, none of these chords reached Pi and there was no visible Excel action.
+
+The Mac test used background, app-targeted computer-use `press_key`, **not HID/system-keyboard input**, and Excel was never foregrounded. It does not establish foreground/global macOS or Excel shortcut coverage. Tab-button focus and open dialogs were not tested in that native run. No screenshots or log files survived cleanup; the surviving per-chord output is in the [Mac verifier thread](https://ampcode.com/threads/T-01a1797b-5ec5-74c6-8c3c-9e9e80649744).

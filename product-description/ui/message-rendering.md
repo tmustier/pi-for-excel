@@ -1,6 +1,8 @@
 # Message rendering
 
-**Behavior update:** [PR #802](https://github.com/tmustier/pi-for-excel/pull/802), CC-04 and CC-05 (not merged). Answer references and answer/table/code copy below describe that PR, not main.
+**Behavior update:** CC-04 and CC-05 shipped in [PR #802](https://github.com/tmustier/pi-for-excel/pull/802). Answer references and answer/table/code copy below describe the merged behavior.
+
+Failure rendering revised for CC-01 / CC-02 in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803): one inline summary with Retry, a fix action and collapsed diagnostic Details; no separate run-error banner. Retried partial text stays as an interrupted response.
 
 ## Summary
 
@@ -21,7 +23,7 @@ stateDiagram-v2
     [*] --> streaming
     streaming --> rendered : model response completes (message fixed)
     streaming --> aborted : Stop ("Request aborted" shown)
-    streaming --> failed : provider error ("Error:" line shown)
+    streaming --> failed : provider error (one inline summary and recovery actions)
     rendered --> copied : click Copy, Copy CSV (clipboard written)
     copied --> rendered : about 1.5 s later (label restored)
     rendered --> selecting : click a cell link (Excel selection changes)
@@ -94,7 +96,7 @@ Pi for Excel cannot attach files to a message; dropped files go to the [Files wo
 
 ### Errors and endings
 
-- A model response that **failed** ends with a line "Error:" followed by the provider's reason, inside the assistant message. The [error banner](../glossary.md#the-taskpane) is separate; see [sending and the response](../turn/sending-and-the-response.md).
+- A final model response that **failed** shows one plain-language inline summary, Retry and a relevant fix action. The original diagnostic is collapsed under Details, not repeated in a separate banner. A partial response preserved for retry keeps its rendered text and interrupted marker; the continuation follows it rather than erasing what the user read. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 - A model response that was **aborted** ends with the label "Request aborted". Tool calls in it that never got a result render as failed cards with no output. Confirmed in Excel on the web: Stop mid-stream kept the partial text and ended it with "Request aborted", with no banner; a request sent offline ended with "Error: Failed to fetch".
 - Everything rendered before the ending stays as it was.
 

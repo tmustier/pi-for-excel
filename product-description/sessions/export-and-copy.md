@@ -31,7 +31,7 @@ stateDiagram-v2
 - Other `/export` arguments select transcript destination: exact `download`/`file`, exact `clipboard`, or default copy-with-download-fallback.
 - `/share-session` only displays its placeholder notice.
 
-Transcript JSON includes export time, model/provider, thinking level, raw message count, a simplified transcript and full raw messages. Simplified tool inputs/results are cut to 200/500 characters. Raw data can include workbook notes, tool results, thinking and attachments; review it before sharing. Toast counts use chat messages, not the raw message count.
+Transcript JSON includes export time, model/provider, thinking level, chat-message count, a simplified transcript and full raw messages. Its `messageCount` matches the toast's chat-message count: hidden workbook-context notes do not inflate it. Full raw records are retained for debugging, so the raw array can be longer than that count. Simplified tool inputs/results are cut to 200/500 characters. Raw data can include workbook notes, tool results, thinking and attachments; review it before sharing.
 
 ### Ends at once
 
@@ -89,4 +89,6 @@ Misspelled transcript destinations use the default path rather than validation. 
 
 Read merged clipboard/export commands, `copy-text.ts`, busy policy and `download.ts`. Earlier silent clipboard failures and extra-tab/download failures remain historical checklist observations, not current expectations. Desktop Save-sheet acceptance was not run in this orb.
 
-Verified against pi-for-excel commit `1f51cf8`.
+The P-141 regression exports one user message between two hidden context notes: `messageCount` is 1 and all three raw records remain. In Excel on the web, a live export counted 9 chat messages while retaining 19 raw records.
+
+Verified against pi-for-excel commit `c8f7016` for the count fix in [#806](https://github.com/tmustier/pi-for-excel/pull/806); other export/copy behavior was reviewed at `1f51cf8`.

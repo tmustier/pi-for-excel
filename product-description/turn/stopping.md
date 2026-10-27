@@ -1,5 +1,7 @@
 # Stopping
 
+CL-05 update in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803): cancellation explicitly shows "Stopping…" in the working line and disables Stop until the active work settles. Send can remain beside Stop for a non-empty draft; Enter is still a steer, not a stop.
+
 ## Summary
 
 Stop ends the active tab's work early without undoing workbook changes. The composer Stop button, Escape when no surface claims it, and "Stop and close" use the same cancellation path. It covers model requests, retry waits and compaction. Other tabs keep running.
@@ -58,6 +60,14 @@ Each message has Edit and ×; Alt/Option+Up edits only the newest editable row. 
 ### After stopping
 
 The tab returns to idle once its work settles. Completed cards retain their results; the aborted response does not turn into a raw provider abort error. A new send starts a new turn, without stale queued text.
+
+As of [PR #808](https://github.com/tmustier/pi-for-excel/pull/808) (CL-01),
+a stopped turn that changed the workbook keeps a typed, amber-accented change
+receipt under its partial answer. **Review** lists ranges, counts and backup
+ids; **Undo this turn** restores available backups newest first. It checks
+for later edits like `/revert` and saves ordinary inverse backups. Stop itself
+still does not undo anything. Changes without backups are explicitly marked.
+See [turn recovery](../workbook/backups-and-revert.md#review-and-undo-a-turn-cl-01).
 
 Closing a busy tab asks "Stop and close this tab?". If a write has already reached Excel, closing waits for it to settle, saves the session, then closes. Reopen restores the tab's stable label and held text. Closing does not undo the write.
 

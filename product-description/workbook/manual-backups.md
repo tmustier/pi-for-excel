@@ -81,7 +81,7 @@ Any other failure shows "Backup command failed: {message}" (from the Backups dia
 
 Copies are files in the Files workspace, visible in the [Files dialog](../files/the-files-workspace.md) under `manual-backups/full-workbook/v1/`, tagged with their workbook. Where the Files workspace keeps them depends on its storage: a folder on disk if the user connected one, otherwise the browser's private storage for the add-in. If neither is available, the workspace keeps files in memory only and the copies are lost when the taskpane closes.
 
-There is no size or count limit beyond what the storage allows; copies are never cleared automatically, including when the workbook is saved. They do not count against the 120 automatic backups.
+There is no size or count limit beyond what the storage allows; copies are never cleared automatically, including when the workbook is saved. They do not count against the automatic-history 512 MiB ceiling introduced by [#809](https://github.com/tmustier/pi-for-excel/pull/809).
 
 ## The confirmation for clear
 
