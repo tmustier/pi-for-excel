@@ -1,14 +1,16 @@
 # Web search and MCP
 
+Native-first search and honest tool availability revised for SE-07 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811). MCP setup and grants remain owned by the separate guidance revision.
+
 ## Summary
 
-Pi can reach outside the workbook in three ways: `web_search` (search the public web through a search provider), `fetch_page` (read one web page as text) and `mcp` (call tools on MCP servers the user configures). The user sets them up on the "Connections" page of the [Extensions hub](the-extensions-hub.md), titled "Connections" / "Web search, MCP servers, and bridges", opened with `/tools`, `/extensions` or "Extensions" in the [utilities menu](../ui/the-utilities-menu.md). The page also holds the Python and tmux bridge cards, which are out of scope here. All three tools only read: they never touch the workbook, never ask for approval and never wait for the workbook lock, in Auto or Confirm mode. Web search and page fetch are on by default, but web search needs an API key before it works. The MCP tool is off by default, and nothing on the page turns it on.
+Pi reaches outside the workbook with `web_search`, `fetch_page` and configured MCP tools. Setup lives on "Connections" in the [Extensions hub](the-extensions-hub.md), opened with `/tools`, `/extensions` or "Extensions" in the [utilities menu](../ui/the-utilities-menu.md). Web search uses the connected model provider's native search first and a configured search key as fallback. It is offered only when one of those backends exists. MCP behavior is described separately below and is unchanged by this search revision.
 
 ## The simple case
 
-The user asks "what is the current UK base rate?". Pi calls `web_search`; a [tool card](../turn/tool-calls.md) "Web search "UK base rate"" appears. With no key saved, the call fails ("Error: Web search API key is missing. Open /tools and set the Jina API key.") and an inline card appears under it, first "Checking search setup…", then "Web search needs an API key" / "Set up a Jina Search (default) API key:" with a link "Get a free key at jina.ai ↗", a password box, "Save" and "Dismiss". Pi's reply says search is not set up.
+The user asks "what is the current UK base rate?". On a supported connected provider, Pi calls `web_search` using that provider's native search and existing credentials. A [tool card](../turn/tool-calls.md) appears with concise findings and source URLs, without requiring a second search key. Supported routes are OpenAI Responses, ChatGPT/Codex, Anthropic, Google Gemini and xAI Responses. If native search fails or is unsupported, Pi uses the configured search provider. If neither route is usable, `web_search` is absent from Pi's active toolset, not a phantom tool that fails on first use. Connections explains the required setup.
 
-The user pastes a Jina key and clicks "Save". The button reads "Validating…", then a toast says "✓ Web search is ready — ask the assistant to try again." The user asks again. This time the card expands to "Web search via Jina Search (default)", the query sent, and numbered results with titles, links and snippets. Pi may follow up with `fetch_page` ("Fetch page https://…"), then answers citing sources as [1], [2].
+For a third-party fallback the user saves a search key in Connections. Jina remains the default third-party provider, alongside Firecrawl, Serper, Tavily and Brave. Native search takes priority; the saved key is an optional fallback, not an additional requirement on a supported model. Pi cites the returned source URLs.
 
 ## The interaction, event by event
 
@@ -103,7 +105,7 @@ The first time the taskpane starts with a provider connected, a bar under the he
 
 **Execution mode and approvals.** No approvals. [Confirm mode and approvals](../workbook/confirm-mode-and-approvals.md) does not apply.
 
-**Models and providers.** Independent of the model provider; keys are separate.
+**Models and providers.** Search follows the tab's selected provider when that route supports native search, using the same credentials. A search side request does not pollute the conversation's cached prefix. Changing to an unsupported provider with no fallback key removes the search integration from active capabilities; changing to a usable backend adds it. This intentional availability change can change the system prompt and tool prefix; repeated searches keep the schema stable.
 
 **Offline and provider errors.** All three fail offline with a tool error and, for search, a setup card. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
@@ -119,7 +121,7 @@ The first time the taskpane starts with a provider connected, a bar under the he
 
 ## Edge cases
 
-- The "Ready" badge never appears: every provider, including Jina, requires a key.
+- A supported model shows "Native search: {provider}" and "Uses your connected model provider. The key below is an optional fallback." Unsupported/no-key setup shows "Add a search key to let Pi search. Search is unavailable until a native provider or search key is connected."
 - Clearing the active provider's key while a Jina key exists makes searches fall back to Jina silently, apart from the warning line on the card, which then quotes "Web search API key is missing…" (confirmed with a mocked provider).
 - An MCP server can be added, enabled and tested successfully while Pi still cannot use it, because the `mcp` tool is not in Pi's toolset (confirmed: "everything: reachable (16 tools, direct)" with no `mcp` tool).
 - The bundled "mcp-gateway" skill tells users to "Enable **MCP Gateway** for session and/or workbook scope" (`skills/mcp-gateway/SKILL.md:32`), a control that does not exist.
@@ -128,7 +130,7 @@ The first time the taskpane starts with a provider connected, a bar under the he
 ## Open questions and verification
 
 - Confirmed in Excel on the web (WEB checklist): `/tools` opening "Connections" in the order External tools, Web search, Extension connections, MCP servers, Bridges; the Jina card ("Fast web search API with free tier.", "No API key"), its provider list and password box; "Saved Jina API key" and the badge turning "Connected"; "Enter an API key first.", "Cleared Jina API key", "No API key to validate."; "Web search provider set to Tavily"; "External tools disabled" / "External tools enabled"; MCP add, "Added MCP server", the card (URL, "(none)" token, Enabled, Test, Remove), "pdtest: Failed to fetch" for an unreachable server, and "Removed MCP server: pdtest" with no confirmation; a real search turn ending in the tool error and the setup card.
-- **Jina is described as keyless but needs a key.** Confirmed (WEB-04, WEB-20): a fresh install's search fails with "Web search API key is missing. Open /tools and set the Jina API key." (`src/tools/web-search.ts:876`; no provider sets `apiKeyOptional`, `src/tools/web-search-config.ts:34, 388-389`). The bundled skill's description, visible on the Skills page, says "Works out of the box with Jina (default, no API key needed)" (`skills/web-search/SKILL.md:3`, also `src/integrations/catalog.ts:45`). Either the copy or the code is wrong.
+- SE-07 acceptance: real Excel on the web with GPT-6 Luna returned an official Bank of England source through ChatGPT/Codex native search with no separate search key. An unsupported Mistral/no-key control had no `web_search` tool. The bundled search skill now describes native-first search and explicitly requires a key for third-party fallback. Other native routes were inspected but not live-verified with provider credentials in this pass.
 - **Masked key overwrites the real key.** Confirmed (WEB-10): after saving `jina_FAKEKEY…`, the box showed "jina**********************ef"; "Save" without retyping stored that mask as the key (read back from storage) and toasted "⚠️ Jina keys usually start with "jina_" — double-check the value. Key saved anyway — use Validate to test it.". The box is prefilled with the mask (`src/commands/builtins/extensions-hub-connections.ts:294`) and Save reads it (lines 335-339). "Validate" also sends the box's value (line 315); with a fake key both forms fail with 401, so that half is read from code.
 - **The MCP tool cannot be enabled from the UI.** Confirmed (WEB-17): with a server added and enabled, Pi listed its tools as web_search, fetch_page, files, skills, extensions_manager and instructions, with no `mcp`. `mcp_tools` has no `enabledByDefault` (`src/integrations/catalog.ts:56-66`) and the only scope toggles set `web_search` (`extensions-hub-connections.ts:397, 422`). The only way found to turn it on is the stored setting: write `["web_search","mcp_tools"]` to the add-in's IndexedDB `settings` store under `integrations.session.v1.{sessionId}` (or `integrations.workbook.v1.{workbookId}`) and reload the taskpane. Dispatching `pi:integrations-changed` without a reload did not add the tool. After the reload Pi had `mcp`, and "MCP call echo" against `@modelcontextprotocol/server-everything` returned "Echo: pd-ping" (confirmed in Excel on the web).
 - **Disclosure-bar switches do nothing.** Confirmed (WEB-22): turning "Web search & page fetch" off under "Customize" changed no stored setting (`external.tools.enabled` stayed on). `src/ui/disclosure-bar.ts:62-75` builds the switches with no change handler.
