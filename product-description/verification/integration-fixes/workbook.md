@@ -1,6 +1,6 @@
 # Integration verification: workbook
 
-This file reruns every item in [../workbook.md](../workbook.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there: fill_formula, the lock and Stop items (coordinator), the mode popover, Escape on Backups, the approval dialog's focus, refused format_cells and the backup-failure note. The branch was then force-pushed to `8099cd6`, and the items whose code changed again were rerun there: the approval dialog and Settings (Tab, live regions, Stop Pi), Clear all, refused format_cells, Stop on reads and writes, the lock badges, modify_structure, read_range and blocked writes (see "Retest at `8099cd6`"). The rows give the result at the latest build where the item was rerun. Items not rerun did not change between the builds. All runs were on 27 October 2026, by an agent in an Amp orb.
+This file reruns every item in [../workbook.md](../workbook.md) against the combined fix build, branch `integration-fixes`. That branch is `main` plus PRs #786–#799 (see `INTEGRATION.md` on the branch). The first full pass ran at `a2b3f2d`. After the branch was force-pushed to `e48d83c`, every item whose code changed was rerun there: fill_formula, the lock and Stop items (coordinator), the mode popover, Escape on Backups, the approval dialog's focus, refused format_cells and the backup-failure note. The branch was then force-pushed to `8099cd6`, and the items whose code changed again were rerun there: the approval dialog and Settings (Tab, live regions, Stop Pi), Clear all, refused format_cells, Stop on reads and writes, the lock badges, modify_structure, read_range and blocked writes (see "Retest at `8099cd6`"). Two more checks were then run at `cea7588` (see "Retest at `cea7588`"). The rows give the result at the latest build where the item was rerun. Items not rerun did not change between the builds. All runs were on 27 October 2026, by an agent in an Amp orb.
 
 Expected behavior is the checklist as amended by the fix PRs and `goal.md` "Fixes in flight". Where a PR deliberately changed behavior, the PR wins, and the note says "changed (#NNN)".
 
@@ -173,6 +173,13 @@ How it ran:
 - WB-06–WB-09 (tabs.css changed): Chat 1 showed "Waiting" and "Waiting for workbook" while Chat 2 wrote; each writing tab's close button stayed disabled while it held the lock; all 8 cells were written.
 - READ-02/06/11 (read_range changed): empty range "All cells are empty."; detailed read lists "Formulas F1: =A1+D1"; Big!A1:A700 gives one 500-row page with "Next page: read_range "Big!A501:A700"".
 - WRITE-03/10: in Confirm mode, "Write Sheet1!A1 — blocked" with no dialog; A1 still 1.
+
+### Retest at `cea7588`
+
+The branch was force-pushed to `cea7588` (`8099cd6` plus #794 81a17f6, where every backup restore goes through `runMutation`; #791 e1c3f29, `runMutation` for all mutation tools; and integration fix P-163). Only these two checks were rerun:
+
+- **A timed-out `/revert` does not write late.** Pi wrote AY1 = 5. In the taskpane, the restore's `Excel.run` (stack through `defaultApplySnapshot` and `run-mutation.ts`) held its first `sync`, the read before the write, for 65 s. At 61.2 s `/revert` reported "Revert failed: Excel did not answer within 60 s. The outcome is unknown…". At 66.2 s Excel answered the read, and the next `sync` (the write) was rejected with `AbandonedBatchError` without reaching Excel. AY1 was still 5 at about 80 s, and no rollback backup was added. A normal `/revert` afterwards worked both ways. Control on `8099cd6` with the same hold: the same failure toast at 61.2 s, then the write was sent at 66.3 s and AY1 was emptied, 5 s after the user was told the revert failed. Holding the later-edit preview read instead also failed cleanly at 61 s, with nothing written.
+- **A Confirm-mode approval is announced (P-163).** When the "Allow this change to the workbook?" dialog opened for a write, a polite live region (`.pi-announcer`, a direct child of `<body>`, not inert) read "Pi is waiting for your approval: Allow this change to the workbook?".
 
 ### Other changes checked at `e48d83c`
 
