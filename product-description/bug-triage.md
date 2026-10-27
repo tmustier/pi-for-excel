@@ -178,6 +178,8 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 | [P-166](#p-166-copy-content-on-a-built-in-doc-fails-in-excel-for-mac) | Copy content on a built-in doc fails in Excel for Mac | low | files | fix | Fixed in [#790](https://github.com/tmustier/pi-for-excel/pull/790) (merged 27 October 2026): 3666748 |
 | [P-167](#p-167-after-save-as-the-tabs-stay-with-the-old-file-and-the-new-file-opens-a-fresh-chat) | After Save As, the tabs stay with the old file and the new file opens a fresh chat | medium | sessions | fix | Fixed in [#795](https://github.com/tmustier/pi-for-excel/pull/795) (merged 27 October 2026): d32fd2b |
 | [P-168](#p-168-the-screen-reader-announcement-for-an-approval-stays-after-stop-withdraws-it) | The screen-reader announcement for an approval stays after Stop withdraws it | low | accessibility | fix | Assigned to #793 (follow-up after the stack merges) |
+| [P-169](#p-169-the-plugin-install-button-ignores-pointer-clicks-in-excel-for-mac) | The plugin Install button ignores pointer clicks in Excel for Mac | low | plugins | fix | Assigned to the remaining-bugs PR (in progress) |
+| [P-170](#p-170-dark-mode-leaves-the-gear-and-composer-file-buttons-light-with-a-pale-band-under-the-tabs) | Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs | low | theme | fix | Assigned to the CC-10 theme PR (in progress) |
 
 ## High
 
@@ -2213,3 +2215,27 @@ The six verification clusters raised 178 entries; merged by root cause, 152 rema
 - **Raised by:** guidance re-check on stack top 97e15a3, 27 October 2026
 - **Status:** Confirmed in Excel on the web on 2d91e58 and 97e15a3.
 - **Owner:** Assigned to #793 (follow-up after the stack merges)
+
+### P-169: The plugin Install button ignores pointer clicks in Excel for Mac
+
+- **Where the user meets it:** Settings → Plugins → install from a URL, in Excel for Mac.
+- **What happens / what was expected:** Pointer and accessibility clicks on Install did nothing; Tab then Space worked. Expected: a click installs (or opens the name dialog).
+- **Reproduce:** As above.
+- **Why (from the code):** Not yet traced; may be the same family as P-162 (a control re-rendered or covered under the pointer).
+- **Severity:** `low`.
+- **Decision needed:** `fix`.
+- **Raised by:** Desktop pass (HUB-16) on stack top 97e15a3, 27 October 2026
+- **Status:** Seen once in Excel for Mac; not yet reproduced on the web.
+- **Owner:** Assigned to the remaining-bugs PR (in progress)
+
+### P-170: Dark mode leaves the gear and composer file buttons light, with a pale band under the tabs
+
+- **Where the user meets it:** macOS dark appearance with dark mode on.
+- **What happens / what was expected:** The gear and composer file buttons stay light grey squares, and a pale band shows under the tab strip. Expected: every control follows the dark theme.
+- **Reproduce:** As above.
+- **Why (from the code):** Not yet traced; likely surfaces still using light-theme tokens.
+- **Severity:** `low`.
+- **Decision needed:** `fix`.
+- **Raised by:** Desktop pass (EXP-03) on stack top 97e15a3, 27 October 2026
+- **Status:** Confirmed in Excel for Mac.
+- **Owner:** Assigned to the CC-10 theme PR (in progress)
