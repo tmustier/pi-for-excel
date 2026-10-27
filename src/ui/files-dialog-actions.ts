@@ -12,6 +12,7 @@ import { isFilesDialogBuiltInDoc } from "./files-dialog-filtering.js";
 import { resolveRenameDestinationPath } from "./files-dialog-paths.js";
 import { requestTextInputDialog } from "./text-input-dialog.js";
 import { showToast } from "./toast.js";
+import { copyText } from "./copy-text.js";
 import { saveBlobAsFile } from "../utils/download.js";
 import { isEmbeddedAppleWebView } from "../utils/platform.js";
 import { t } from "../language/index.js";
@@ -91,38 +92,14 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
 }
 
 /**
- * Legacy copy for hosts that refuse the async clipboard API: Excel on the web
- * frames the taskpane without clipboard-write, and Excel for Mac rejects it
- * ("The request is not allowed…"). `execCommand("copy")` still works there.
- */
-function copyViaHiddenTextarea(text: string): boolean {
-  const textarea = document.createElement("textarea");
-  textarea.value = text;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  textarea.select();
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textarea.remove();
-  }
-}
-
-/**
  * Copy text content to clipboard — reliable in Office WebView where
- * window.open / blob URLs silently fail.
+ * window.open / blob URLs silently fail. Hosts that refuse both the clipboard
+ * API and `execCommand("copy")` get the manual-copy dialog instead of a toast.
  */
 async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
-  try {
-    await navigator.clipboard.writeText(text);
-  } catch (error) {
-    if (!copyViaHiddenTextarea(text)) throw error;
+  if (await copyText(text) === "copied") {
+    showToast(t("files-dialog-actions.toast.copied", { fileName }));
   }
-  showToast(t("files-dialog-actions.toast.copied", { fileName }));
 }
 
 async function openFileInBrowser(options: {
