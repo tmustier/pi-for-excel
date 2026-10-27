@@ -175,7 +175,7 @@ Counts are as of `8099cd6`: B-16, OJS-03 and SIZE-01 moved from fail to pass, an
 | EDIT-02 | pass | After 58 s: "nothing was written … ask the user". |
 | EDIT-03 | pass | Real turn: about 17 s wait between calls, then completed with three reads. |
 | EDIT-04 | pass | Raw `onChanged.add` still fails in edit mode, as expected. The tracker registers at start. |
-| EDIT-05 | blocked | Desktop only; routed to the Mac verification thread. |
+| EDIT-05 | pass | desktop (macOS), Excel for Mac, `8099cd6`: a cell held in edit mode by a real keystroke, then a turn asked for `read_range` on A1:A3. The dock showed "Waiting for you to finish editing a cell" / "Press Enter, Tab or Esc in Excel and Pi will continue" and the turn kept running; after Escape in Excel the read ran and the turn finished ("Sheet1!A1:A3 are all empty."). On `main` the read failed at once (hostility.md). |
 | MOVE-01 | pass | User edit `Unknown`, Pi `ThisLocalAddin`, co-author `Remote`. |
 | MOVE-02 | pass | Product call: the result names the sheet (B-17). |
 | MOVE-03 | pass | Agent answered "You changed UserAdded2!F11 …" from the stored note. |
