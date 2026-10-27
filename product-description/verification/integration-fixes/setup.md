@@ -30,7 +30,7 @@ How it ran:
 | MODEL-12 | pass | Mock gateway mid-reply, gateway deleted: the tab stayed on "slow-direct" until all twelve words arrived, then moved to "GPT-6.1 Sol". |
 | MODEL-13 | pass | No provider: the status bar shows "GPT-6.1 Sol"; "hi" opens "Connect OpenAI (API)". |
 | MODEL-14 | pass | Switching to a 16k gateway model moved the meter from 1% to 21% at once. |
-| MODEL-15 | pass (#795) | Standalone, with a browser-stored Anthropic login (`oauth.anthropic`) expiring 140 s later and the token endpoint stubbed. Turn 1, outside the 2-minute margin, sent `sk-ant-oat01-OLD`. Turn 2, inside it, called the token endpoint first, then sent `sk-ant-oat01-REFRESHED`, and the new grant was stored. Desktop part not rerun (see below). |
+| MODEL-15 | pass (#795) | Standalone, with a browser-stored Anthropic login (`oauth.anthropic`) expiring 140 s later and the token endpoint stubbed. Turn 1, outside the 2-minute margin, sent `sk-ant-oat01-OLD`. Turn 2, inside it, called the token endpoint first, then sent `sk-ant-oat01-REFRESHED`, and the new grant was stored. Desktop part not rerun (see below). Desktop (macOS), `e48d83c`: login made in the taskpane ("Login with Anthropic", code pasted, token endpoint stubbed at a local proxy in front of :3003), so it is stored as `oauth.anthropic`; `/__pi-auth` served `{}`. Claude Haiku 4.5. Turn 1 at 129 s before expiry sent `Bearer sk-ant-oat01-OLD`, no refresh. Turn 2 at about 75 s before expiry called the token endpoint first (`refresh_token`), then sent `sk-ant-oat01-NEW`; storage then held NEW with a 1-hour expiry. With the stub refusing refresh (400 `invalid_grant`), turn 3 at about 110 s before expiry tried the refresh, then sent the old (not yet expired) token and failed with Anthropic's 401. The pane showed only the 401; the "[auth] … refresh failed" console warning could not be read on desktop (no Web Inspector on the taskpane), so it is unconfirmed. |
 | MODEL-16 | pass (#795) | With stubbed OpenAI (API) and ChatGPT credentials, the copies now differ: "GPT-6.1 Sol · ChatGPT" / "GPT-6.1 Sol · API" (P-89). The picker tags them "openai-codex" (500k) and "openai" (272k). |
 | MODEL-17 | pass | "Max context: 16,384 tokens · Max output: 4,096 tokens". |
 | MODEL-18 | pass (#795) | Product call reversed: with both connected, a fresh taskpane starts on "GPT-6.1 Sol · ChatGPT" (openai-codex). |
@@ -59,7 +59,7 @@ How it ran:
 | LOGIN-19 | pass | "Waiting for the browser callback via the local proxy…". |
 | LOGIN-20 | pass | The first Escape leaves the URL field; the second closes the prompt. The row is back to "Login with Anthropic" with no error; the claude.ai tab stays open. |
 | LOGIN-21 | pass (#799) | "Login with GitHub Copilot" asks for an Enterprise domain (blank for github.com). Continue then shows "Finish sign-in in your browser", with a code and the verification URL. Escape closed it and reset the row. Note: the device-code request went through the dev server's `/oauth-proxy` to real GitHub, so GitHub issued a code that was never used. |
-| LOGIN-22 | pass | Production build: the gate text and "Copied!". Retry without a helper keeps the gate; Retry with one goes on to the login prompt and the claude.ai tab. Cancel and Escape close it. The copy is now platform-neutral ("on this computer", "in a terminal", #795). |
+| LOGIN-22 | pass | Production build: the gate text and "Copied!". Retry without a helper keeps the gate; Retry with one goes on to the login prompt and the claude.ai tab. Cancel and Escape close it. The copy is now platform-neutral ("on this computer", "in a terminal", #795). Desktop (macOS), production build of `e48d83c` and of `8099cd6` served on :3141: with no proxy, "Login with Anthropic" shows "One more step before login" / "This login method needs a small helper running on this computer. Open the Terminal app and paste this command:" / `npx pi-for-excel-proxy` / Copy / Cancel / Retry. Retry without a helper keeps the gate; Retry with one goes on to the paste prompt; Escape and Cancel close it. |
 | LOGIN-23 | pass (#793) | "Local HTTPS proxy", "Enabled", URL, "Save", hint, guide link. "Hide proxy settings" is gone: #793 removed the toggle. |
 | LOGIN-24 | pass (#795) | Suspected bug fixed: `http://example.com:3003` is refused with "Proxy URL not saved: Proxy URL is HTTP …". |
 | LOGIN-25 | pass (#793) | The gateway page opens with Back. Escape now closes Settings, because the gateway page is where the shell opened (#793's rule); it no longer goes to the root first. |
@@ -93,7 +93,7 @@ How it ran:
 | PICKER-18 | pass | Gemini rows tagged "google". |
 | PICKER-19 | pass (#795) | Suspected bug fixed: after deleting the stored Gemini key, the picker checks "gpt-6.1-sol", the model the refresh swapped in. |
 | PICKER-20 | pass | "Chat 1 (gpt-6.1-sol) (gpt-6-sol)". |
-| PICKER-21 | pass | Standalone: Ctrl+P and Cmd+P open nothing and are not prevented. Desktop not rerun. |
+| PICKER-21 | pass | Standalone: Ctrl+P and Cmd+P open nothing and are not prevented. Desktop not rerun. Desktop (macOS), `8099cd6`, real key event: Cmd+P in the composer did nothing in Pi; Excel opened its Print dialog (cancelled). |
 | SETTINGS-01 | pass | Five groups; "1 connected", "None", Proxy "On" (once enabled; a fresh profile starts "Off"), Plugins "1 installed". |
 | SETTINGS-02 | pass | Focus on `.pi-set-shell__body`. |
 | SETTINGS-03 | pass | Proxy → root → closed; focus in the composer. |
@@ -108,7 +108,7 @@ How it ran:
 | SETTINGS-12 | pass (#796) | The toast is now in the language being left ("Language changed. Reloading..." going to Chinese, "语言已更改，正在重新加载…" going back to English); reload at 1.05 s; the UI switched both ways. |
 | SETTINGS-13 | pass | "1 connected" and gateway row "4" (four gateways). |
 | SETTINGS-14 | pass (#793) | Changed: F2 no longer reaches the composer behind Settings, so `/settings` cannot be typed while Settings is open. On e48d83c: on the web, the first Tab from the Settings body left the add-in frame (same on a2b3f2d); fixed on 8099cd6, see bug 3 below. |
-| SETTINGS-15 | pass (#790) | Changed: Save in Rules (opened from the root page) shows "Rules saved" and closes Settings; it no longer returns to the root. The row reads "On: All my files". Rule cleared afterwards. Desktop not rerun. |
+| SETTINGS-15 | pass (#790) | Changed: Save in Rules (opened from the root page) shows "Rules saved" and closes Settings; it no longer returns to the root. The row reads "On: All my files". Rule cleared afterwards. Desktop not rerun. Desktop (macOS), `e48d83c`: saving a "This file" rule showed "Rules saved" and closed Settings; the rule was stored under the workbook's id. Cleared afterwards. |
 | SETTINGS-16 | pass (#795) | "Proxy" now has a subtitle: "Some providers and logins can't be reached straight from Excel. The proxy relays those requests." |
 | GATEWAY-01 | pass | All fields and placeholders. |
 | GATEWAY-02 | pass | All seven messages, class `pi-overlay-text-warning`, form kept. |
@@ -142,8 +142,8 @@ How it ran:
 | PROXY-11 | pass (#795) | Suspected bug fixed: right after the change, "⚠ Proxy is enabled at https://localhost:3999 but is not currently reachable." |
 | PROXY-12 | pass (#795) | Fixed in reverse too: after setting 3003 and turning the switch on, "✓ Proxy connected at https://localhost:3003" within 0.6 s. |
 | PROXY-13 | pass | See LOGIN-05. |
-| PROXY-14 | pass (#795) | With the switch on, saving `https://proxy.example.com` now toasts "Security warning: proxy URL is not localhost — it can see your tokens and prompts." The startup toast after a reload remains. Desktop not rerun. |
-| PROXY-15 | pass | See LOGIN-22. |
+| PROXY-14 | pass (#795) | With the switch on, saving `https://proxy.example.com` now toasts "Security warning: proxy URL is not localhost — it can see your tokens and prompts." The startup toast after a reload remains. Desktop not rerun. Desktop (macOS), `e48d83c`: saving `https://proxy.example.com` toasted "Proxy URL saved. Security warning: proxy URL is not localhost — it can see your tokens and prompts."; reopening the pane showed the warning again at open. URL restored. |
+| PROXY-15 | pass | See LOGIN-22. Desktop (macOS): see LOGIN-22. |
 | PROXY-16 | pass | Standalone, with a stubbed ChatGPT login and `chatgpt.com` blocked. Proxy off: "GPT-5.6 Luna currently requires the latest …". Proxy on without the bridge header: "GPT-5.6 Luna requires a newer …". |
 | PROXY-17 | pass | `https://localhost:3003`. |
 | PROXY-18 | pass | See MODEL-05. |
@@ -227,6 +227,12 @@ No item in this file is desktop-only, but these desktop halves were not rerun:
 - **SETTINGS-15:** saving a workbook rule now closes Settings (#790).
 - **LOGIN-22 / PROXY-15:** the proxy gate in a desktop production build, now with the "on this computer" / "in a terminal" copy.
 - From "Not checkable by hand": where the login window opens on Excel desktop (system browser), and the device-code dialog's polling after Escape on desktop (LOGIN-21 now reaches the dialog).
+
+Desktop results (macOS, Excel for Mac, `e48d83c` then `8099cd6`; rows above carry the item results):
+
+- **Login window:** a real click on "Login with Anthropic" opened the claude.ai authorize page as a new tab in the user's default browser (Chrome, existing window), not inside Excel. The pane shows the paste prompt and keeps polling the proxy for the callback.
+- **Copilot device code (production build, `8099cd6`):** "Finish sign-in in your browser" showed a code; the pane polled `github.com/login/oauth/access_token` every 5 s (5 polls), and after Escape closed the dialog no further poll arrived in the next 38 s. No GitHub authorization was completed.
+- **FILES-24 on built-in docs (`8099cd6`, real clicks):** the render loop is gone, so the buttons respond. Download opened the Save sheet and `README.md` (2.2 KB) landed. Copy content fails: "Copy failed: The request is not allowed by the user agent or the platform in the current context, possibly because the user denied permission." It calls `navigator.clipboard.writeText` directly (`src/ui/files-dialog-actions.ts:97-100`) and has no fallback, unlike `/copy`, which opens #795's "Copy text" dialog. The failure toast also stayed up after other dialogs opened.
 
 ## Notes on the run
 

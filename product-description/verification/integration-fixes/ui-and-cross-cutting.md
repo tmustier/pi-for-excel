@@ -39,7 +39,7 @@ How it ran:
 | STATUS-18 | pass (#793) | Changed: in a 349 × 580 pane the thinking popover opens at y 50–538 and no longer covers the meter (`elementFromPoint` on the meter hits the meter). Clicking the meter swaps to the context popover. |
 | STATUS-19 | pass (#795) | With ChatGPT and OpenAI (API) both connected, labels read "GPT-6 Luna · ChatGPT" and "GPT-4.1 mini · API". The suspected bug is fixed. |
 | STATUS-20 | pass | "No active session" was never seen. Sampling every 25 ms during a reload, the bar was empty until 0.9 s and then "π GPT-6 Luna High 5% Auto" (as the corrected document says). |
-| STATUS-21 | blocked | Needs Excel desktop. |
+| STATUS-21 | pass, changed (#793) | desktop (macOS), `8099cd6`, GPT-6 Luna: the thinking control is now a pop-up button and its levels a menu of radio items, Off to Max, with High selected. Choosing Low closed it and set "Low" with no toast. Shift+Tab gave Medium → High → Extra high → Max, each with "Thinking: {level} (next turn)". During a streaming turn, Escape closed only the menu; Stop stayed and the turn kept streaming. GPT-4.1 mini not rechecked. |
 | RENDER-01 | pass | `<b>raw</b> and $5 and $6` shows as text in the user message and the answer: no `<b>`, no KaTeX. |
 | RENDER-02 | pass | Link "image: logo" to the image URL; no `<img>`. |
 | RENDER-03 | pass | "js" is plain text; "site" has `target=_blank`, `rel="noopener noreferrer"`. |
@@ -69,9 +69,9 @@ How it ran:
 | KEYS-14 | pass (#793) | F6 is no longer listed (#793). Pi does not handle it; the page lost focus to the browser. |
 | KEYS-15 | pass | Ctrl+Z in an empty composer with no Undo toast showing: no reopen, A1 still "keep", no toast. |
 | KEYS-16 | pass (#789) | Responding tab, resume picker opened from the gear: Escape closes it and the turn keeps streaming. |
-| KEYS-17 | blocked | Needs Excel desktop. |
-| KEYS-18 | blocked | Needs Excel desktop (Mac). |
-| KEYS-19 | blocked | Needs Excel desktop for Windows. |
+| KEYS-17 | pass | desktop (macOS), `8099cd6`: four Shift+Tabs in the composer each cycled the level with its toast; focus stayed on the composer. |
+| KEYS-18 | pass | desktop (macOS), `8099cd6`: `/shortcuts` shows "⌥ Enter", "⌥ ↑", "⇧ Tab", "⌘ O", "⌘ T", "⌘ W", "⌘ ⇧ T", "⌘ ⇧ [ / ⌘ ⇧ ]". |
+| KEYS-19 | blocked | Needs Excel desktop for Windows; the desktop pass ran on macOS only. |
 | UTIL-01 | pass | Seven items in order: Settings, Extensions, Files, Rules, Resume session, Backups, Keyboard shortcuts. The menu is opaque (#793). |
 | UTIL-02 | pass (#793) | Behavior changed (#793 menu model): focus moves to "Settings", ↓/↑ wrap, Home jumps, and Escape returns to the gear. On `a2b3f2d` and `e48d83c`, Tab closed the menu and dropped focus out of the taskpane (new bug, fixed in `8099cd6`). Now Tab closes to the gear. |
 | UTIL-03 | pass | With the menu open, a real click on another tab closes the menu and activates that tab. |
@@ -79,7 +79,7 @@ How it ran:
 | UTIL-05 | pass | Escape closes the menu while responding; Stop is still shown. |
 | UTIL-06 | pass (#793) | Each item opens its view: Settings, Connections, Files, Rules, Resume session, Backups, Keyboard shortcuts. Each overlay takes focus (#793). |
 | UTIL-07 | pass | Fresh browser context: "Resume session" toasts "No previous sessions" and opens no overlay. |
-| UTIL-08 | blocked | Needs Excel for Mac. |
+| UTIL-08 | pass, changed (#793) | desktop (macOS), `8099cd6`, real clicks: with focus in the composer, clicking the gear opened the menu with focus on its first item, "Settings"; one Escape closed it and returned focus to the gear. The suspected bug does not arise. |
 | LANG-01 | pass | "Language / 语言" with "English" and "中文（简体）· AI 翻译". |
 | LANG-02 | pass (#796) | Picking Chinese: the toast is now in the current language, "Language changed. Reloading..." (the language only takes effect through the reload, #796), and the reload follows 0.86 s later. |
 | LANG-03 | pass (#789, #795) | Changed on purpose: the draft ("草稿 langdraft") survives the language reload (#789), and tab numbers are kept, 对话 1, 3, 5, 6, 7, 8, 9 (#795). |
@@ -90,7 +90,7 @@ How it ran:
 | LANG-08 | pass (#796) | The suspected bug is fixed: with the `language` put made to throw, the English error toast "Failed to save language setting." appeared with ×. The select reverted, there was no reload, and the UI stayed English. |
 | LANG-09 | pass | Fresh context, `/__pi-auth` blocked: on the welcome screen, "中文" reloaded into Chinese at once with no toast, and "English" switched back. |
 | LANG-10 | pass | The toast "Dark mode: enabled" appears but the taskpane stays light: Office on the web reports a white `officeTheme`, and the OS is not dark here. Then "Dark mode: disabled". |
-| LANG-11 | blocked | Needs Excel desktop. |
+| LANG-11 | pass | desktop (macOS), `8099cd6`, macOS and Office dark: `/experimental on dark-mode` turned the taskpane dark at once; `off` turned it light again. Flag left off. |
 | PERSIST-01 | pass | After a reload: three tabs, the third active, with models GPT-6 Luna / GPT-6.1 Sol / GPT-6 Luna and levels Low / High / Min. A level change alone is only saved with the next message or model change (same as on `main`). |
 | PERSIST-02 | pass (#795) | Changed on purpose: numbers are stable instead of renumbered. After closing Chat 2 and reloading: Chat 1, Chat 3, Chat 5. |
 | PERSIST-03 | pass (#789, #795) | Changed on purpose: the draft "draft three" comes back after a reload (#789), and Ctrl+Shift+T after a reload reopens the closed tab ("Reopened: Chat 8", #795). |
@@ -101,8 +101,8 @@ How it ran:
 | PERSIST-08 | pass (#795) | With the model request held in the page, the reload brings back the tab with its unanswered "PERSIST08c…" message, idle. (A request held with CDP `Fetch` blocks the reload itself until it is released.) |
 | PERSIST-09 | pass (#789) | The suspected bug is fixed: with session puts made to throw, the toast "Couldn't save this chat: injected" appears with ×. |
 | PERSIST-10 | pass (#789) | Changed on purpose: after auto-compaction (11%) and after a popover /compact (18%), a reload keeps the compacted context. |
-| PERSIST-11 | blocked | Needs Excel desktop. |
-| PERSIST-12 | blocked | Needs a signed-in OneDrive workbook in Excel desktop. |
+| PERSIST-11 | fail | desktop (macOS), `8099cd6`: Save As E2 → E3 gave the new identity without a reload, but the tab layout did not move: nothing was stored under E3's identity, and after reopening the pane E3 started a fresh "Chat 1" (new session, 1 message). Reopening E2 restored its own session (27 messages). So the new file does not reopen the old file's sessions, unlike the persistence table. Also seen: right after the Save As the pane kept showing the Backups page with no tab strip until it was reopened. |
+| PERSIST-12 | blocked | Excel on the Mac is not signed in to OneDrive (no AutoSave switch); needs Thomas's sign-in. |
 | MULTI-01 | pass | Pane B opened on the same link with pane A's tabs. |
 | MULTI-02 | pass (#794) | Changed on purpose (#794: one mode for every pane): B set to Auto, A showed "Auto" at once, and the stored value is "yolo". |
 | MULTI-03 | pass | Last write wins: B's close, and then B's new tab, replaced the stored layout (1, then 2 ids). Side note: B's new tab was numbered "Chat 3" while A had a different "Chat 3". |
@@ -113,7 +113,7 @@ How it ran:
 | MULTI-08 | pass | After the writes, both panes read D1:D2 as 51, 52. No lag was seen at this delay. |
 | MULTI-09 | pass (#794) | The suspected bug is fixed: ALPHA in A and BRAVO in B on one session. BRAVO was saved as a new conversation, the original kept ALPHA, and later turns (CHARLIE, DELTA) stayed in their own sessions. The "saved as a new conversation" toast was not caught by a 9 s poll. |
 | MULTI-10 | pass (#795) | Throwaway stubbed grant, not the shared login: one CDP browser context (`/__pi-auth` blocked) with two taskpanes, a fake expired `oauth.openai-codex` grant seeded in IndexedDB, and the token endpoint stubbed through CDP Fetch. Both panes were opened together. **Success:** 1 token request in total (pane B). B logged "token refreshed from IndexedDB" and A logged "session restored from IndexedDB". Both ended on the new access token and rotated refresh token, so the refresh was single-flight. **500 error:** the panes refreshed one after the other, each with the same unrotated refresh token. Each logged "refresh failed; it will be retried before the next request", and the stored grant and key were kept. **Stale grant** (no current-scopes marker): no token request. The grant and provider key were cleared with "stored OAuth grant is stale; cleared credentials, please login again". |
-| MULTI-11 | blocked | Needs Excel desktop. |
+| MULTI-11 | pass | desktop (macOS), `8099cd6`: Window → New Window on pd-desktop-E2, then "Open Pi" in "pd-desktop-E2 - 2": a second pane registered on the same workbook and session, alongside the first. Windows not run. |
 | PROVIDER-01 | pass (#789) | The suspected bug is fixed: offline shows "Error: Failed to fetch" and the banner "You're offline. Reconnect, then send your message again.", not the CORS banner. |
 | PROVIDER-02 | pass (#789) | Changed on purpose: with the proxy enabled and stopped, the banner reads "Couldn't reach the provider through the proxy at https://localhost:3003. Check that the proxy is running, then retry." |
 | PROVIDER-03 | pass (#793) | The warning "The proxy is turned on but isn’t running, so some providers and web tools won’t work." appeared 8 s and 29 s after the stop. It went ~31 s after the restart, and at once when the proxy was turned off in Settings (`8099cd6`/`e48d83c` re-check). |
@@ -125,7 +125,7 @@ How it ran:
 | PROVIDER-09 | pass | A substituted overflow on an 18% session gave "Compacting to free up context", "Summarized 2 messages", and a retried request answering "OK". On a small session it gave "Nothing to compact" and "Context window exceeded. Run /compact…", with no retry promised (#789). |
 | PROVIDER-10 | pass (#789) | The suspected bug is fixed: a 400 "Request was cancelled upstream" shows the banner "Couldn’t get a response: Request was cancelled upstream". |
 | PROVIDER-11 | pass on `8099cd6` | It failed on `e48d83c` (regression, #789): after the proxy was stopped mid-stream, #789's retry dropped the partial answer. On `8099cd6` (#789 a66868d), the partial text (325 chars) is kept and ends with "Error: Failed to fetch", plus the proxy banner. |
-| PROVIDER-12 | blocked | Needs Excel for Mac. |
+| PROVIDER-12 | pass, changed | desktop (macOS), `8099cd6`: with the proxy pointed at an unreachable https://localhost:3998, "hi" on GPT-6 Luna gave "Error: Load failed", and the banner now reads "Couldn't reach the provider through the proxy at https://localhost:3998. Check that the proxy is running, then retry." instead of the CORS banner. The Mac was not taken offline. |
 | HOST-01 | pass | OfficeOnline; ExcelApi 1.16–1.20 true, 1.21 false. |
 | HOST-02 | pass (#795) | The suspected bug is fixed: `/copy` gives "Copied to clipboard" (execCommand fallback). |
 | HOST-03 | pass (#793) | The proxy banner's "Show how to start it", then "Copy command". On `8099cd6` it only selected "npx pi-for-excel-proxy" (the frame denies `clipboard-write`). On `cea7588` (#793 c88b997, P-155) a real click falls back to `execCommand('copy')`, which returns true. The button reads "Copied" for 1.4 s and focus returns to it, and Ctrl+V into the composer pastes "npx pi-for-excel-proxy". |
@@ -133,9 +133,9 @@ How it ran:
 | HOST-05 | pass (#793) | Changed on purpose: on the web, Shift+Tab in the composer cycles the level and no longer moves focus. From other controls it moves focus back without cycling. |
 | HOST-06 | pass (#794) | `isDirty` is false, and backups are no longer cleared on opening (see PERSIST-07). |
 | HOST-07 | pass (#794) | The suspected bug is fixed: with the document token removed, Pi wrote B17. The backup count went from 17 to 18 and stayed at 18 for more than 15 s. |
-| HOST-08 | blocked | Needs Excel desktop (Windows half; Mac recorded on `main`). |
-| HOST-09 | blocked | Needs a OneDrive workbook with AutoSave in Excel desktop. |
-| HOST-10 | blocked | Needs Excel desktop (#796's Mac download fix). |
+| HOST-08 | pass on Mac, fixed (#793) | desktop (macOS): double-clicking a tab now opens the in-pane rename dialog; no `window.prompt`, no freeze (see RENAME-09). Windows not run. |
+| HOST-09 | blocked | Needs a OneDrive workbook with AutoSave; Excel on the Mac is not signed in. |
+| HOST-10 | pass on Mac, fixed (#796) | desktop (macOS): `/export` opens the native Save sheet and the file lands (see EXPORT-11). Windows not run. |
 | HOST-11 | pass, with a difference | In the Excel frame, `document.featurePolicy.allowsFeature("loopback-network")` is false and the permission is "denied"; there is no prompt. The dev build is served from localhost, so #796's "browser blocks the proxy" banner is deliberately not used (`isLoopbackHostname`). The proxy works here only because the orb's Chrome turns Local Network Access checks off. |
 
 ## Redesign at ~340 px, keyboard and live regions

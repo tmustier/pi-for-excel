@@ -38,7 +38,7 @@ How it ran:
 | TASKPANE-11 | pass (#793 changed) | The dead switches are gone (replaced by "Review in Settings"), so the suspected bug no longer applies. |
 | TASKPANE-12 | pass (#793) | A toast shown while Settings was open drew above the card: elementFromPoint at the toast's centre hit the toast. Escape closed Settings. |
 | TASKPANE-13 | pass (#793 changed) | With the proxy off in Settings, stopping the proxy service showed no banner (by design). With the proxy on, stopping the service showed "The proxy is turned on but isn't running, so some providers and web tools won't work. Show how to start it ×" about 29 s later. New bug: turning the proxy on while it is already down shows no banner. |
-| TASKPANE-14 | blocked | Desktop-only, skipped here; listed for the Mac pass. |
+| TASKPANE-14 | pass | desktop (macOS), `8099cd6`: after a real click on "Open Pi", keys typed at once ("hi") went into the composer. |
 | TASKPANE-15 | pass | Taskpane frame set to 490 px: composer limit 137 px = 28%. The π mark was not on screen in this answered tab at either height, so only the composer limit was checked. |
 | TURN-01 | pass | Enter sent; message in transcript, composer cleared, Stop, busy dot, "Working…" within ~10 ms. A "Queued" row flashed for ~8 ms before the turn started (pre-send compaction check, #789). |
 | TURN-02 | pass | Indicator, Stop and dot went at turn end; placeholder rotating again. |
@@ -63,7 +63,7 @@ How it ran:
 | TURN-21 | pass | Shift+Tab while responding: toast "Thinking: Extra high (next turn)". |
 | TURN-23 | pass (wording) | Excel.run delayed 8 s, Chat 4 and Chat 5 each asked to set a cell with execute_office_js 0.2 s apart: Chat 5 showed the badge "Waiting" (tooltip "Waiting for another tab to finish changing the workbook") and the status bar "Waiting for workbook" while Chat 4 wrote, then "Changing workbook" for its own write; J1 = 61 and J2 = 62. The badge now says "Waiting" instead of "Locking…". |
 | TURN-24 | pass | With Excel.run delayed 8 s, while Chat 5's write held the lock its × was disabled with the tooltip "Wait for workbook changes to complete"; enabled again after the write. Status bar showed "Changing workbook". |
-| TURN-22 | blocked | Desktop-only, skipped here; listed for the Mac pass. |
+| TURN-22 | pass | desktop (macOS), `8099cd6`: Auto mode, Pi's `fill_formula` of `=ROW()*2` over `Sheet1!F1:F1000000`; Stop pressed about 1 s after the card appeared. The turn ended "aborted" and the fill handed to Excel still completed (F1 = 2, F1000000 = 2000000); the card reads "Filled Sheet1!F1:F1000000 — 1000000 changed, no backup". Same as on `main`. |
 | COMPOSE-01 | pass | Shift+Enter: "line one\nline two" in the composer, nothing sent. |
 | COMPOSE-02 | pass | Alt+Enter while idle sent both lines as one message. |
 | COMPOSE-03 | pass | Idle placeholders changed every ~8 s in the order "Have Pi edit…" → "Summarize…" → "Ask about…" → "Type / for commands…"; fixed "Redirect reply (↵) · New question (⌥↵)" while responding (TURN-01). |
@@ -76,7 +76,7 @@ How it ran:
 | COMPOSE-10 | pass (#789) | As TURN-06. |
 | COMPOSE-11 | pass (8099cd6) | 8099cd6 (#789 @ a66868d): five typed Shift+Enter lines and clearing the draft kept following on, gap 0. Failed on a2b3f2d and e48d83c: with the transcript at the bottom, three typed Shift+Enter lines turned following off (gap 59–98 px). #789 claims this fixed. Cause: pi-input's `height: auto` autosize (src/ui/pi-input.ts:182) briefly collapses the composer, Chrome clamps scrollTop, and the scroll listener reads that as the user scrolling up. #789's owner reproduced it and fixed it in #789 @ 4354892, after this build. |
 | COMPOSE-12 | pass | CDP Input.dispatchDragEvent with a real file on the composer: toast "Imported 1 file into Files.", draft "KEEP-DRAFT" kept (drag-over hint not captured, as before). |
-| COMPOSE-13 | blocked | Desktop-only, skipped here; listed for the Mac pass. |
+| COMPOSE-13 | pass | desktop (macOS), `8099cd6`: Simplified Chinese Pinyin, keys posted at the HID event tap. With the candidate bar "1 你 2 尼 3 泥 4 腻 …" open over the composer (screenshot), Return committed "ni" and left it in the composer; nothing was sent (23 messages before and after). Two earlier tries in which the input method did not engage (no candidate bar) sent "ni" and are not counted. The second-Return send was not rechecked here (it passed on #789 alone). |
 | COMPOSE-14 | pass | A paste event carrying a PNG added nothing to the draft and imported nothing. |
 | COMPOSE-15 | pass | 40 lines inserted in a 622 px pane: composer stopped at 248 px (40%) and scrolls. |
 | SEND-01 | pass | "Working…" for 1.25 s, then a phrase ("Finagling…"); phrases and hints rotated ("Adjusting for seasonality…", "Discombobulating…"; hints "⇧Tab to adjust reasoning depth", "Type / for commands", "Press Enter to redirect Pi"). Hint timing was not measured. |
@@ -138,7 +138,7 @@ How it ran:
 | STOP-12 | pass (#789 changed) | As TURN-18: compaction can now be stopped. |
 | STOP-13 | pass (#789 changed) | Window shrunk to 49k on a 30.8k tab; a 400-row read triggered compaction between model responses; Stop during "Compacting context…" cancelled it: toast "Compaction stopped", turn ended "Request aborted" (no longer waits for the summary). |
 | STOP-14 | pass (#795 changed) | "Stop and close" closed Chat 4 with "Closed Chat 4 · Undo"; Undo reopened it as "Chat 4" (its old number) with the partial answer and the aborted ending. |
-| STOP-15 | blocked | Desktop-only, skipped here; listed for the Mac pass. |
+| STOP-15 | fail | desktop (macOS), `8099cd6`: unchanged from `main`. During a streaming turn, Escape with focus in the grid stayed with Excel and the turn kept streaming; Escape with focus in the composer stopped it. |
 | THINK-01 | pass | Popover on GPT-6 Luna: Off, Min, Low, Medium, High (ticked), Extra high, Max, each with a hint. |
 | THINK-02 | pass | From High: Extra high, Max, Off, Min, Low, Medium, High, Extra high, each with "Thinking: {level} (next turn)". GPT-6 Luna offers Off, so it wraps to Off. |
 | THINK-03 | pass (#786) | Finished block "Thought for 1s" when seen live. |

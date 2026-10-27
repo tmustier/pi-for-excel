@@ -47,8 +47,8 @@ How it ran:
 | TABS-01 | pass | "+" adds Chat 13 at the right end, active, with the empty state and focus in the composer. |
 | TABS-02 | pass | `/new` while busy opens Chat 16, with no refusal. |
 | TABS-03 | pass | web-keys (wtype) on `e48d83c`: Ctrl+T from the composer opened `chrome://newtab`; Pi's tabs were unchanged. |
-| TABS-04 | pass, changed (#795, #793) | Tab shortcuts are off while a dialog is open: Ctrl+T delivered to the page with `/resume` open adds no tab, and the picker stays. |
-| TABS-05 | pass on `cea7588` (fail on `8099cd6`), regression fixed (#793 c88b997) | The inactive tab's × is back in its own space (main's layout, `position: static`, always visible). With "Chat 13" inactive (title 117–158, × 166–188), clicks at 15%, 40% and 60% of the tab and at the title's right edge, each after a hover, all switch to it. Only a click on the × itself (171) closes the tab, as on `main`. On `8099cd6`, a click at 152 on the title closed it (regression 3). |
+| TABS-04 | pass, changed (#795, #793) | Tab shortcuts are off while a dialog is open: Ctrl+T delivered to the page with `/resume` open adds no tab, and the picker stays. desktop (macOS), `8099cd6`, real key events: with the resume picker open, Cmd+T, Cmd+W and Cmd+Shift+T did nothing in Pi (picker open, tabs unchanged) and Excel took none of them (one window, same workbook). Control without a dialog: Cmd+T added Chat 2, Cmd+W closed it, Cmd+Shift+T reopened it. The Tab trap holds on WKWebView: twelve Tabs in the resume picker cycled its four controls and never left it. |
+| TABS-05 | pass on `cea7588` (fail on `8099cd6`), regression fixed (#793 c88b997) | The inactive tab's × is back in its own space (main's layout, `position: static`, always visible). With "Chat 13" inactive (title 117–158, × 166–188), clicks at 15%, 40% and 60% of the tab and at the title's right edge, each after a hover, all switch to it. Only a click on the × itself (171) closes the tab, as on `main`. On `8099cd6`, a click at 152 on the title closed it (regression 3). desktop (macOS), `8099cd6`, real pointer: clicking the inactive tab's title 4 px inside its right edge switched to it with focus in the composer, twice (Chat 1, then Chat 2); no tab closed. |
 | TABS-06 | pass | ArrowRight from the last tab wraps to the first; ArrowLeft goes back; focus stays on the tab. Rerun on `e48d83c` with 11 tabs. Plain arrows inside the tab menu no longer switch tabs (#793). |
 | TABS-07 | pass | Ctrl+PageUp in the composer does nothing; Ctrl+PageDown from the body switches. Cmd+Shift+[ does nothing in the composer and switches from the body; ] switches back. |
 | TABS-08 | pass, changed (#795) | With focus on a tab, Ctrl+PageUp and Ctrl+PageDown switch tabs. The suspected bug is fixed. |
@@ -67,7 +67,7 @@ How it ran:
 | TABS-21 | pass | While a tab holds the lock: × disabled ("Wait for workbook changes to complete"); Ctrl+W gives "Wait for workbook changes to finish before closing this tab"; "Close tab" disabled. |
 | TABS-22 | pass on `e48d83c` (fail on `a2b3f2d`), changed (#794) | On `a2b3f2d` a confirmed "Stop and close", after the tab took the lock behind the dialog, showed "Wait for workbook changes to finish…", did not stop the turn, and left the tab open. This was the #795 + #794 combination; see below. On `e48d83c` the toast is "Stopping — closing after Pi's current change finishes." and the tab closed 0.8 s later. Neither the delayed L1 write nor the queued M1 write landed: my delay sat before the call reached Excel, so Stop cancelled it there. A write that is already inside Excel and then lands was not observed. |
 | TABS-23 | pass, changed (#789) | Closing a compacting tab now asks "Stop and close this tab?". The suspected bug is fixed. Rerun on `e48d83c`. |
-| TABS-24 | pass, changed (#795, #793) | Ctrl+W (and Ctrl+Shift+T) delivered to the page with the picker open are ignored: no tab closes, and the picker stays. |
+| TABS-24 | pass, changed (#795, #793) | Ctrl+W (and Ctrl+Shift+T) delivered to the page with the picker open are ignored: no tab closes, and the picker stays. desktop (macOS): see TABS-04; Cmd+W under the picker closed nothing and Excel did not close a window. |
 | TABS-25 | pass | web-keys (wtype): with Excel the only page, Ctrl+W closed the Excel browser tab (only `about:blank` was left); Pi saw nothing. |
 | TABS-26 | pass, changed (#793) | On `8099cd6`: with 11 tabs at 349 px, tabs keep their natural width and full titles (no more "C…"), and the strip scrolls with ‹ ›. The native scrollbar is gone (0 px). The arrows scroll the strip and it stays where it was scrolled. "+" stays outside the scroller and is always visible. ArrowRight wraps and scrolls the active tab into view. On `a2b3f2d` the new tab was half under › and "+" was off-screen; fixed. On `cea7588` (× back to main's layout): with 12 tabs at 349 px, every title is complete (84–96 px tabs), there is no scrollbar (0 px), the active tab (150–237) is fully inside the scroller (32–237), and "+" (243–271) is visible. |
 | TABS-27 | pass | After the duplicate, a new tab is "Chat 15". |
@@ -80,11 +80,11 @@ How it ran:
 | RENAME-06 | pass | `/name` from the menu: "Usage: /name My Session Name"; the composer is empty. |
 | RENAME-07 | pass, changed (#795) | After a reload the label is still "Q3 budget". The suspected bug is fixed. |
 | RENAME-08 | pass, changed (#795) | Resuming the closed "Q3 budget" opens a tab labelled "Q3 budget"; toast "Resumed in new tab: Q3 budget". |
-| RENAME-09 | blocked | desktop. The `window.prompt` freeze on Excel for Mac should be gone, since #793 uses an in-pane dialog; this needs a Mac run. |
+| RENAME-09 | pass, fixed (#793) | desktop (macOS), `e48d83c` and `8099cd6`: double-clicking a tab opens the in-pane "Rename tab" dialog ("Leave empty to let Pi name it.") with focus in its field; no freeze. Enter gave "Renamed tab to “Desk rename”"; an empty name gave "Tab name reset to automatic". |
 | REOPEN-01 | pass, changed (#795) | Undo reopens with the old number: "Chat 16", toast "Reopened: Chat 16". The draft in Chat 19 is untouched. |
 | REOPEN-02 | pass | Chat 18 closed; "draft text" typed in Chat 19; Ctrl+Z gives "Reopened: Chat 18". Chat 19's draft is still "draft text". |
 | REOPEN-03 | pass | Ctrl+Shift+T delivered to the page from the composer: "Reopened: Chat 15". |
-| REOPEN-04 | pass | web-keys (wtype): with Pi's Chat 2 closed and a browser tab closed, Ctrl+Shift+T reopened the browser tab; no Pi tab. |
+| REOPEN-04 | pass | web-keys (wtype): with Pi's Chat 2 closed and a browser tab closed, Ctrl+Shift+T reopened the browser tab; no Pi tab. desktop (macOS), `8099cd6`: Cmd+Shift+T reaches Pi and reopens Chat 2, and the "Closed Chat 2" toast is gone afterwards (the stale toast seen on `main` is retired). |
 | REOPEN-05 | pass, changed (#795, #793) | Close, then Ctrl+Shift+T at once: the Undo toast is retired and "Reopened: Chat 18" shows. The suspected bug is fixed. |
 | REOPEN-06 | pass, changed | With the stale Undo toast gone (REOPEN-05), there is nothing left to click. |
 | REOPEN-07 | pass | With the list cleared, `/reopen` and Ctrl+Shift+T give "No recently closed tab". |
@@ -122,7 +122,7 @@ How it ran:
 | EXPORT-08 | pass, changed (#795) | "Transcript download started (2 messages)"; `pi-session-2026-10-27.json` completed (91,752 B); no extra browser tab. |
 | EXPORT-09 | pass | "Audit log download started (9 records)"; `pi-audit-log-2026-10-27.json` (4,545 B). |
 | EXPORT-10 | pass, changed (#795) | Counts now cover only visible messages: the toast says 2, while the file's `messageCount` is 5 (system, 2× autoContext, user, assistant). |
-| EXPORT-11 | blocked | desktop. #796 replaces the Mac download path (`saveBlobAsFile`); Excel for Mac needs to be clicked through. |
+| EXPORT-11 | pass, changed (#795, #796) | desktop (macOS), `e48d83c` and `8099cd6`: `/copy` and `/export clipboard` cannot write the clipboard, so they open the "Copy text" dialog ("This window can't write to the clipboard. The text is selected: press Ctrl+C (⌘C on Mac).") with the text selected; ⌘C then put it on the clipboard (checked with `pbpaste`). `/export` and `/export download` open the native Save sheet ("Download from: Pi for Excel", `pi-session-2026-10-27.json`); the JSON landed in ~/Documents (90–138 KB, with the reply text). |
 | MENU-01 | pass, changed (#795) | Order as documented, without `/default-models` (removed); `/snake` [ext] last. |
 | MENU-02 | pass | `/tab` lists `/new`, `/resume-here`, `/reopen`. |
 | MENU-03 | pass | `/skills` and `/plugins`: the exact match is first. |

@@ -37,13 +37,13 @@ How it ran:
 | WB-13 | pass, fixed (#794) | 19 backups before CDP `Page.reload` and 19 after 12 s. Tabs and mode were kept. |
 | WB-14 | pass, fixed (#794) | The first backup on the fresh web-anon workbook was still listed after 10 s. |
 | WB-15 | pass | The R1 backup taken after the reload was still listed after 10 s. |
-| WB-16 | blocked | Desktop only. |
+| WB-16 | pass, changed (#794) | desktop (macOS), `e48d83c` and `8099cd6`: after Pi wrote B2 (then C3) and the saved workbook was saved again (AppleScript save), Backups still listed "1 backup" ("Write · Sheet1!B2") 6 s later. Backups are now kept on save, as the Backups page says. |
 | WB-17 | pass | Pi wrote R1 = 5. On the grid, Ctrl+Z emptied R1 and Ctrl+Y put 5 back. |
-| WB-18 | blocked | Desktop only. |
+| WB-18 | pass | desktop (macOS), `8099cd6`: R1 = 5 written through Office.js; with the grid focused (real click), Cmd+Z emptied R1 and Cmd+Y put 5 back. |
 | WB-19 | pass, changed (#792) | With C10 held in edit mode, the dock showed "Waiting for you to finish editing a cell / Press Enter, Tab or Esc in Excel and Pi will continue". After about 58 s the card read: "Error reading "Sheet1!A1:A3": Excel is in cell-edit mode … Waited 58 s for the user to finish. Nothing was read or changed. Ask the user to finish editing the cell, then retry." Pi asked the user to finish editing. |
 | WB-20 | pass | See BACKUP-01. |
 | WB-21 | pass, fixed (#794) | Same workbook in two browser tabs. Opening pane B did not clear backups (28 before, 28 after). A wrote V1 and B wrote V2 at the same time: both panes listed both (30). B deleted V2, then A wrote V4: V2 stayed deleted in both panes (31). |
-| WB-22 | blocked | Desktop only. |
+| WB-22 | pass | desktop (macOS): Save As (pd-desktop-E → E2 on `e48d83c`, E2 → E3 on `8099cd6`) gave a new identity without a reload, and Backups → Refresh showed "No backups yet". |
 | WB-23 | pass, changed (#791) | "Filled Sheet1!AG1:AG21000 — 21000 changed, no backup", with "ℹ️ No backup: this change covers 21,000 cells, more than the 20,000 a backup can hold. … was empty before, so clearing it undoes the change." and a partial-verification note. At `e48d83c` (one `copyFrom` paste) the turn took 5 s, and AG21000 = `=ROW()*2` = 42000. |
 | WB-24 | pass | "Set freeze rows (Sheet1) — no backup", "ℹ️ Backup not created. …" |
 | WB-25 | pass, fixed (#794) | See APPROVE-17. |
@@ -153,14 +153,14 @@ How it ran:
 | BACKUP-02 | pass | The same for `/backup restore`. |
 | BACKUP-03 | pass | "No manual full-workbook backups for this workbook." |
 | BACKUP-04 | pass | `help` and `bogus` give "Usage: /backup [create\|list [limit]\|restore [id]\|clear]". |
-| BACKUP-05 | blocked, changed (#794) | `/backup clear` now checks identity before asking, so the confirmation never shows on web-anon. Needs a workbook with an identity (desktop). |
+| BACKUP-05 | pass, changed (#794) | desktop (macOS), saved workbook: `/backup clear` with one copy asks "Delete all manual full-workbook backups?" / "This will delete 1 manual full-workbook backups for the active workbook." / "Cancel" / "Delete all"; Delete all gave "Deleted 1 manual backups." With no copies it skips the dialog: "No manual full-workbook backups for this workbook." |
 | BACKUP-06 | pass, fixed (#794) | `/backup clear` fails on identity with no confirmation. |
 | BACKUP-07 | pass, changed (#794) | `/backup` while Pi was streaming ran (the identity error on web-anon, not "busy"), and the turn kept going. |
-| BACKUP-08 | blocked | Desktop only. #796 says the Excel for Mac download fix is still to come. |
-| BACKUP-09 | blocked | Desktop only. #794 WT-07 says toasts and lists now show full ids. |
-| BACKUP-10 | blocked | Desktop only (WKWebView, WebView2). |
-| BACKUP-11 | blocked | Desktop only. |
-| BACKUP-12 | blocked | Desktop only. |
+| BACKUP-08 | pass, fixed (#796) | desktop (macOS): `/backup` opened the native Save sheet for `2026-10-27T07-49-21-420Z_pd-desktop-e.xlsx_201dbf51.xlsx`; a valid 10.8 KB .xlsx landed; toast "Manual backup created: #2026-10-27T07-49-21-420Z_pd-desktop-e.xlsx_201dbf51 (11 KB)."; the copy is in Files under `manual-backups`. |
+| BACKUP-09 | pass, fixed (#794) | desktop (macOS): the toast and `/backup list` show the full id, and `/backup restore 2026-10-27T07-49-21-420Z_pd-desktop-e.xlsx_201dbf51` found the copy. |
+| BACKUP-10 | pass on WKWebView, fixed (#796) | desktop (macOS): the download works in Excel for Mac (Save sheet, file lands), with the pane in the background. WebView2 (Windows) not run. |
+| BACKUP-11 | pass, fixed (#796) | desktop (macOS): `/backup restore {id}` opened the Save sheet, the 10.8 KB copy landed, toast "Download of backup #2026-10-27T07-49-21-420Z_pd-desktop-e.xlsx_201dbf51 started. Open the file in Excel to restore." The workbook was unchanged (A1:C3 read back the same). |
+| BACKUP-12 | pass | desktop (macOS): after a Pi write and a save, `/backup list` still listed the copy. |
 | BACKUP-13 | pass | "Download backup" is hidden when there are no backups. |
 
 ### Retest at `8099cd6`
