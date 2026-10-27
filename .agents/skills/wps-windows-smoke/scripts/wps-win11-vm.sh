@@ -15,6 +15,9 @@ DISPLAY_DEVICE=${WPS_DISPLAY_DEVICE:-ramfb}
 DISK=${WPS_DISK:-"$VM_DIR/wps-win11-arm64.qcow2"}
 VARS=${WPS_EFI_VARS:-"$VM_DIR/edk2-arm-vars.fd"}
 TPM_DIR=${WPS_TPM_DIR:-"$VM_DIR/tpm"}
+# QEMU 11.1 on HVF refuses to start with tpm-tis-device (HV_BAD_ARGUMENT).
+# An installed Windows boots without a TPM, so it is opt-in (set 1 for setup).
+TPM=${WPS_TPM:-0}
 MONITOR=${WPS_MONITOR:-"$VM_DIR/qemu-monitor.sock"}
 PIDFILE=${WPS_PIDFILE:-"$VM_DIR/qemu.pid"}
 CREDENTIALS=${WPS_CREDENTIALS:-"$VM_DIR/credentials.txt"}
@@ -38,7 +41,9 @@ Commands:
 
 Environment overrides: WPS_VM_DIR, WPS_NET_DEVICE (virtio-net-pci or e1000e),
 WPS_DISPLAY_DEVICE (ramfb or e.g. virtio-gpu-pci,xres=1280,yres=800),
-WPS_RDP_PORT, WPS_WINRM_PORT, WPS_VNC_DISPLAY, WPS_MEMORY, WPS_SMP.
+WPS_RDP_PORT, WPS_WINRM_PORT, WPS_VNC_DISPLAY, WPS_MEMORY, WPS_SMP,
+WPS_TPM (1 attaches an swtpm TPM, needed only for Windows setup; QEMU 11.1
+on HVF fails to start with it).
 
 Credentials are read from $WPS_VM_DIR/credentials.txt with lines like:
   User: piadmin
@@ -142,7 +147,6 @@ PY
 
 start_vm() {
   [[ -x "$QEMU" ]] || die "missing QEMU: $QEMU"
-  [[ -x "$SWTPM" ]] || die "missing swtpm: $SWTPM"
   [[ -f "$DISK" ]] || die "missing qcow2 disk: $DISK"
   [[ -f "$VARS" ]] || die "missing writable EDK2 vars fd: $VARS"
   if running; then
@@ -150,14 +154,24 @@ start_vm() {
     return
   fi
 
-  mkdir -p "$TPM_DIR"
   rm -f "$VM_DIR/swtpm-sock" "$MONITOR" "$PIDFILE"
-  "$SWTPM" socket \
-    --tpm2 \
-    --tpmstate dir="$TPM_DIR" \
-    --ctrl type=unixio,path="$VM_DIR/swtpm-sock" \
-    --flags not-need-init \
-    --daemon
+  local tpm_args=()
+  if [[ "$TPM" == 1 ]]; then
+    [[ -x "$SWTPM" ]] || die "missing swtpm: $SWTPM"
+    mkdir -p "$TPM_DIR"
+    "$SWTPM" socket \
+      --tpm2 \
+      --tpmstate dir="$TPM_DIR" \
+      --ctrl type=unixio,path="$VM_DIR/swtpm-sock" \
+      --flags not-need-init \
+      --terminate \
+      --daemon
+    tpm_args=(
+      -chardev socket,id=chrtpm,path="$VM_DIR/swtpm-sock"
+      -tpmdev emulator,id=tpm0,chardev=chrtpm
+      -device tpm-tis-device,tpmdev=tpm0
+    )
+  fi
 
   "$QEMU" \
     -name wps-win11-arm64 \
@@ -176,9 +190,7 @@ start_vm() {
     -device nvme,drive=systemdisk,serial=wpswin11disk \
     -netdev user,id=net0,hostfwd=tcp:127.0.0.1:${RDP_PORT}-:3389,hostfwd=tcp:127.0.0.1:${WINRM_PORT}-:5985 \
     -device "${NET_DEVICE},netdev=net0" \
-    -chardev socket,id=chrtpm,path="$VM_DIR/swtpm-sock" \
-    -tpmdev emulator,id=tpm0,chardev=chrtpm \
-    -device tpm-tis-device,tpmdev=tpm0 \
+    ${tpm_args[@]+"${tpm_args[@]}"} \
     -display none \
     -vnc "127.0.0.1:${VNC_DISPLAY}" \
     -monitor unix:"$MONITOR",server,nowait \
