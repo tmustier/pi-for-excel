@@ -40,7 +40,7 @@ stateDiagram-v2
 | API keys and OAuth access tokens | IndexedDB store `provider-keys` | On login, and when an expired OAuth token is refreshed at startup | All workbooks |
 | OAuth grants (refresh tokens) | Settings store, one entry per provider | On login and refresh | All workbooks |
 | Custom gateways and fetched model lists | IndexedDB stores `custom-providers` and `model-catalogs` | When added or refreshed | All workbooks |
-| [Automatic backups](../workbook/backups-and-revert.md) | One settings entry holding every workbook's backups, newest first, at most 120 in total | Before each mutation | Tagged per workbook identity |
+| [Automatic backups](../workbook/backups-and-revert.md) | Independent compressed backups and indexed summaries; 512 MiB shared ceiling, no count/age limit | State captured before a supported mutation, saved after it succeeds | Tagged per workbook identity; observed identity changes move history |
 | Workbook change audit log | One settings entry, at most 500 entries | After each mutation | All workbooks |
 | [Files workspace](../files/the-files-workspace.md) | The browser's private file area ("Sandboxed workspace"), or a folder on disk the user connected ("Local folder"); file tags and the Files audit trail in the settings store | When files are imported, written or deleted | All workbooks; files are tagged with the workbook they came from |
 | [Manual backups](../workbook/manual-backups.md) | Files workspace, under `manual-backups/full-workbook/v1/`, one folder per workbook identity | On `/backup` | Per workbook identity |
@@ -78,7 +78,7 @@ Every restored tab gets a fresh default title: "Chat 1", "Chat 2", … in tab or
 | Each tab's model and thinking level | Steers, follow-ups, queued prompts and queued commands |
 | Saved titles (in the [resume picker](../sessions/resuming-a-session.md) only) | Chosen tab titles on the tabs themselves; tabs show "Chat N" again (confirmed in Excel on the web) |
 | All settings, logins, rules and conventions | Recently closed: the undo toast, Ctrl/Cmd+Shift+T and `/reopen` find nothing ("No recently closed tab", confirmed in Excel on the web) |
-| Automatic backups, unless the workbook has been saved since (see [Edge cases](#edge-cases)) | The error banner, the working indicator, open overlays and menus, toasts |
+| Automatic backups, including across saves and reloads (subject to deletion, eviction or storage loss) | The error banner, the working indicator, open overlays and menus, toasts |
 | Files in the Files workspace | Permission to a connected local folder, if the browser no longer grants it (Pi falls back to the sandboxed workspace) |
 | | A session that never received an answer from Pi: the tab comes back blank |
 
@@ -94,9 +94,9 @@ What happens when the identity changes while Pi is open:
 
 | Change | Sessions | Tab layout | Automatic backups | Workbook rules |
 | --- | --- | --- | --- | --- |
-| First save of a new workbook | The next save of each open session links it to the new identity; sessions not saved again stay unlinked | Written under the new identity from the next layout save; the shared slot keeps its old copy | Backups taken before the save are cleared, as for any save | Become available, starting empty |
-| Save As / rename of a saved workbook | Existing sessions stay linked to the old identity; the resume picker in the new file lists them under "Show sessions from all workbooks" | Written under the new identity; the old file keeps its last layout, so both files reopen the same sessions | Backups stay under the old identity and are no longer visible | Stay with the old identity; the renamed file starts with none |
-| Save As a copy of a never-saved workbook | As for a first save | As for a first save | The copy carries the document token but never sees the original's backups | As for a first save |
+| First save of a new workbook | The next save of each open session links it to the new identity; sessions not saved again stay unlinked | Written under the new identity from the next layout save; the shared slot keeps its old copy | Token-scoped history moves to the saved identity | Become available, starting empty |
+| Save As / rename of a saved workbook | Existing sessions stay linked to the old identity; the resume picker in the new file lists them under "Show sessions from all workbooks" | Written under the new identity; the old file keeps its last layout, so both files reopen the same sessions | When observed on the same open document, history moves without copying, retaining any destination history | Stay with the old identity; the renamed file starts with none |
+| Save As a copy of a never-saved workbook | As for a first save | As for a first save | The open document's history follows its new identity; no duplicate history is kept for the old identity | As for a first save |
 
 ## Modifiers
 
@@ -122,7 +122,7 @@ Changing any of these mid-turn changes what the next save writes; nothing alread
 | Model or thinking level changes | A model change forces a save; a thinking-level change waits for the next message. | Model change refused; thinking level saved with the next message. |
 | The provider fails | Not applicable. | The failed model response is saved with its "Error:" text and counts as Pi's first answer. |
 | The taskpane goes away | The draft is lost. | Completed messages are already saved; the streaming response, the queue and the draft are lost. In a session Pi never answered, nothing is saved and the tab comes back blank. |
-| The workbook changes underneath | Not saved by Pi; Excel owns the workbook. Saving the workbook in Excel clears its automatic backups. | Same; a save in Excel during a turn clears backups already taken in that turn. |
+| The workbook changes underneath | Excel owns the workbook. Saving it does not clear automatic backups. | A save during a turn does not expire earlier backups. |
 | Focus moves to the grid or another window | No effect. Regaining focus re-reads the workbook identity and saves the tab layout under it. | Same. |
 | The context window fills | Not applicable. | Compaction's result is saved with the next completed message, not when compaction ends. |
 
@@ -132,7 +132,7 @@ After any interrupt, storage holds the last completed message of every tab that 
 
 **Persistence.** This document.
 
-**Workbook changes and recovery.** Automatic backups persist in the same database and survive reloads, but are cleared whenever Pi sees the workbook in a saved state: when a save is detected, and also when the taskpane opens on a workbook with no unsaved changes. On Excel on the web, which always reports "saved", that means every opening of any taskpane on the workbook (confirmed: a backup in storage was gone after a second taskpane on the same workbook was reloaded). See [backups and revert](../workbook/backups-and-revert.md).
+**Workbook changes and recovery.** Automatic backups persist through saves, AutoSave and reloads. Their 512 MiB ceiling is shared across all workbooks; exceeding it evicts oldest first, without a protected newest floor. Lists use pages of summaries, and restoring loads only the chosen backup. See [backups and revert](../workbook/backups-and-revert.md).
 
 **Other tabs and sessions.** Each tab saves its own session. The tab layout is one record per workbook, rewritten in full on every change. For two taskpanes writing to the same storage, see [several taskpanes](several-taskpanes.md).
 
@@ -154,10 +154,16 @@ After any interrupt, storage holds the last completed message of every tab that 
 
 ## Storage failures, quota and clearing
 
-- **A failed save is silent.** A session save, a tab-layout save, a backup or a Files tag that cannot be written is logged to the developer console and nothing is shown. The tab keeps working from memory; the loss appears only after the next reload.
-- **Quota.** Pi never asks the browser to make its storage persistent and never checks how much space is left (confirmed in Excel on the web: `navigator.storage.persisted()` is false). Storage is "best effort": the browser may evict it under disk pressure, and once full, saves fail silently as above. Long sessions with images and large tool results are the largest records.
+- **Backup failure is visible.** A workbook change already applied stays applied if its backup cannot be stored. Pi reports that the change has no available backup rather than implying it can be reverted. Backup storage failures do not prevent ordinary session/settings writes. Other save paths have their own notification behavior.
+- **Quota.** Storage is best effort: the host can refuse writes or evict the whole origin under pressure. Automatic history uses a fixed ceiling rather than trusting free-space estimates; backup-write failures are visible. Neither that ceiling nor being under quota guarantees durability for other Pi data.
 - **Storage unavailable at startup.** If the database cannot be opened, startup fails with "Initialization failed: {msg}", or after 60 seconds with "Initialization failed: taskpane timeout".
 - **Clearing storage.** Clearing the Office webview's cache (on macOS, deleting `~/Library/Containers/com.microsoft.Excel/Data/Library/WebKit/`), the browser's site data on Excel on the web, or running in a private window removes every session, tab layout, setting, login, backup, Files workspace file (sandboxed workspace) and manual backup at once. The next open shows the welcome screen. The document token inside a workbook survives, but nothing refers to it any more.
+
+**Automatic-history upgrade.** Existing backups are copied once, preserving their IDs and contents. The source is deleted only in the same successful commit as the copy and completion marker. Failed migration leaves the old data intact and readable; sessions/settings still open, but new backups may be unavailable until a retry succeeds. The warning says "Backups could not be upgraded. Existing backups are unchanged; new backups may be unavailable until storage recovers."
+
+> Technical note: [#809](https://github.com/tmustier/pi-for-excel/pull/809) advances the shared IndexedDB schema from v2 to v3. The schema upgrade only creates empty stores/indexes; the payload copy runs afterwards so a failed copy cannot block the rest of Pi. Older builds cannot open any Pi data on an upgraded origin: on Mac the old bundle displays the raw lower-database-version initialization error. Test branches on isolated origins; clearing storage to remove this lock also deletes chats and sign-ins. This is a forward-only change, not a reversible data downgrade.
+
+The automatic-history ceiling counts compressed backups and metadata, not all Pi data or database overhead. It does not reserve space or prevent the host evicting the whole origin. Mac storage-usage estimates were stale and persistence was denied; no quota estimate controls retention. Deleting Blob-backed history freed its files immediately in the Mac test. Real disk-full failure and long-term eviction remain unmeasured.
 
 ## Edge cases
 
@@ -167,12 +173,14 @@ After any interrupt, storage holds the last completed message of every tab that 
 - `/compact` followed immediately by a reload brings back the conversation as it was before compaction.
 - Two unsaved workbooks, or two workbooks on Excel on the web without an identity, share one tab layout: whichever taskpane changed tabs last decides what the next unsaved workbook opens with.
 - Opening Pi for the first time in an unsaved workbook restores the most recently changed session from any workbook, if the shared layout slot is empty.
-- On Excel on the web, Excel always reports the workbook as saved, so every open of the taskpane clears the workbook's automatic backups, and in a workbook without an identity the first backup Pi takes may be cleared within seconds. See [host differences](host-differences.md#workbook-identity-and-saving).
-- Automatic backups are capped at 120 for all workbooks together; heavy use in one workbook pushes out the oldest backups of others.
+- Save and reload preserve history, including the first backup in an anonymous-link web workbook that can store its document token.
+- Automatic history has no count limit. Crossing the shared 512 MiB ceiling removes the oldest backups, potentially all history for another workbook.
 - Recently closed holds 10 items per taskpane and is gone on reload, even though the closed sessions themselves are saved and can be found in the resume picker.
 - A workbook whose file is moved or renamed outside Excel gets a new identity the next time it opens: its tab layout, links, rules and backups stay behind under the old one.
 
 ## Open questions and verification
+
+Backup-specific updates above follow main's merged fixes and [#809](https://github.com/tmustier/pi-for-excel/pull/809); current Mac/web observations and limitations are recorded in [backups and revert](../workbook/backups-and-revert.md#open-questions-and-verification). The older pass below is historical. In particular, its save-clearing, silent-backup-failure and ignored-count-setting observations do not describe the current backup contract. Non-backup persistence observations remain outside this storage update.
 
 - Pass of 2026-10-26 in Excel on the web: restore after a reload (tabs, order, active tab, model and thinking level), the draft lost, the shared layout slot, the stored execution mode, `navigator.storage.persisted()` false, and backups cleared when a taskpane opens were confirmed. Later in the pass, a failed save (write made to fail), compaction before a reload, and a reload with an unanswered message were also confirmed (below). Real quota exhaustion and Save As were not exercised; Save As needs desktop.
 - Two tabs both labelled "GPT-6.1 Sol" showed different context windows after a reload ("/ 500k" and "/ 272k"). They were on different providers (`openai-codex` and `openai`); restore keeps the saved provider (`src/taskpane/sessions.ts:54`). See [the status bar](../ui/the-status-bar.md#open-questions-and-verification).
