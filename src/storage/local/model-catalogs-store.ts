@@ -4,120 +4,87 @@ import type {
   ModelsStore,
   ModelsStoreEntry,
 } from "@earendil-works/pi-ai";
+import {
+  ModelCostSchema,
+  ModelInputLimitsSchema,
+  ModelInputModalitySchema,
+  ModelPromptCacheSchema,
+  ThinkingLevelMapSchema,
+} from "@earendil-works/pi-ai/providers/model-schema";
+import { ProviderCompatSchema } from "@earendil-works/pi-ai/providers/compat-schema";
+import { Type } from "typebox";
+import { Value } from "typebox/value";
 
-import { decodeModelInputLimits } from "../../models/input-limits.js";
 import { Store } from "./store.js";
 import type { StoreConfig } from "./types.js";
 
-function isModelCatalogPayload(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+export const MAX_MODEL_ID_LENGTH = 256;
 
-function parseFiniteNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
+/** Chat model fields shared by persisted catalogues and pi.dev catalogue responses. */
+const catalogModelSchema = Type.Object({
+  type: Type.Optional(Type.Literal("chat")),
+  id: Type.String({ minLength: 1, maxLength: MAX_MODEL_ID_LENGTH }),
+  name: Type.String(),
+  api: Type.String({ minLength: 1 }),
+  provider: Type.String({ minLength: 1 }),
+  baseUrl: Type.String(),
+  reasoning: Type.Boolean(),
+  input: Type.Array(ModelInputModalitySchema),
+  cost: ModelCostSchema,
+  contextWindow: Type.Number(),
+  maxTokens: Type.Number(),
+  headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+  thinkingLevelMap: Type.Optional(ThinkingLevelMapSchema),
+  promptCache: Type.Optional(ModelPromptCacheSchema),
+  inputLimits: Type.Optional(ModelInputLimitsSchema),
+  compat: Type.Optional(ProviderCompatSchema),
+});
 
-function parseCost(value: unknown): Model<Api>["cost"] | null {
-  if (!isModelCatalogPayload(value)) return null;
+const catalogEntrySchema = Type.Object({
+  models: Type.Array(Type.Unknown()),
+  checkedAt: Type.Optional(Type.Number()),
+  lastModified: Type.Optional(Type.Number()),
+  etag: Type.Optional(Type.String()),
+});
 
-  const input = parseFiniteNumber(value.input);
-  const output = parseFiniteNumber(value.output);
-  const cacheRead = parseFiniteNumber(value.cacheRead);
-  const cacheWrite = parseFiniteNumber(value.cacheWrite);
-  if (input === null || output === null || cacheRead === null || cacheWrite === null) {
-    return null;
-  }
-
-  return { input, output, cacheRead, cacheWrite };
-}
-
-function parseInputKinds(value: unknown): Model<Api>["input"] | null {
-  if (!Array.isArray(value)) return null;
-
-  const parsed: Model<Api>["input"] = [];
-  for (const item of value) {
-    if (item !== "text" && item !== "image") return null;
-    parsed.push(item === "text" ? "text" : "image");
-  }
-  return parsed;
-}
-
-function parseHeaders(value: unknown): Record<string, string> | undefined | null {
-  if (value === undefined) return undefined;
-  if (!isModelCatalogPayload(value)) return null;
-
-  const parsed: Record<string, string> = {};
-  for (const [name, headerValue] of Object.entries(value)) {
-    if (typeof headerValue !== "string") return null;
-    parsed[name] = headerValue;
-  }
-  return parsed;
-}
-
-function parseModel(value: unknown): Model<Api> | null {
-  if (!isModelCatalogPayload(value)) return null;
-
-  const { id, name, api, provider, baseUrl, reasoning } = value;
-  const contextWindow = parseFiniteNumber(value.contextWindow);
-  const maxTokens = parseFiniteNumber(value.maxTokens);
-  const input = parseInputKinds(value.input);
-  const cost = parseCost(value.cost);
-  const headers = parseHeaders(value.headers);
-  const inputLimitsValue = value.inputLimits;
-  const inputLimits = inputLimitsValue === undefined
-    ? undefined
-    : typeof inputLimitsValue === "object" && inputLimitsValue !== null
-      ? decodeModelInputLimits(inputLimitsValue)
-      : null;
-
-  if (
-    typeof id !== "string"
-    || typeof name !== "string"
-    || typeof api !== "string"
-    || typeof provider !== "string"
-    || typeof baseUrl !== "string"
-    || typeof reasoning !== "boolean"
-    || contextWindow === null
-    || maxTokens === null
-    || !input
-    || !cost
-    || headers === null
-    || inputLimits === null
-  ) {
-    return null;
-  }
-
+/** Decode one chat model, dropping top-level fields the runtime does not use. Null if invalid. */
+export function decodeCatalogModel(value: unknown): Model<Api> | null {
+  if (!Value.Check(catalogModelSchema, value)) return null;
+  const { headers, thinkingLevelMap, promptCache, inputLimits, compat } = value;
   return {
-    id,
-    name,
-    api,
-    provider,
-    baseUrl,
-    reasoning,
-    input,
-    cost,
-    contextWindow,
-    maxTokens,
-    ...(inputLimits !== undefined ? { inputLimits } : {}),
+    id: value.id,
+    name: value.name,
+    api: value.api,
+    provider: value.provider,
+    baseUrl: value.baseUrl,
+    reasoning: value.reasoning,
+    input: value.input,
+    cost: value.cost,
+    contextWindow: value.contextWindow,
+    maxTokens: value.maxTokens,
     ...(headers !== undefined ? { headers } : {}),
+    ...(thinkingLevelMap !== undefined ? { thinkingLevelMap } : {}),
+    ...(promptCache !== undefined ? { promptCache } : {}),
+    ...(inputLimits !== undefined ? { inputLimits } : {}),
+    ...(compat !== undefined ? { compat } : {}),
   };
 }
 
-function parseEntry(value: unknown): ModelsStoreEntry | undefined {
-  if (!isModelCatalogPayload(value) || !Array.isArray(value.models)) {
-    return undefined;
-  }
+function decodeEntry(value: unknown): ModelsStoreEntry | undefined {
+  if (!Value.Check(catalogEntrySchema, value)) return undefined;
 
   const models: Model<Api>[] = [];
   for (const rawModel of value.models) {
-    const model = parseModel(rawModel);
+    const model = decodeCatalogModel(rawModel);
     if (model) models.push(model);
   }
 
-  const checkedAt = parseFiniteNumber(value.checkedAt);
+  const { checkedAt, lastModified, etag } = value;
   return {
     models,
-    ...(checkedAt !== null ? { checkedAt } : {}),
+    ...(checkedAt !== undefined ? { checkedAt } : {}),
+    ...(lastModified !== undefined ? { lastModified } : {}),
+    ...(etag !== undefined ? { etag } : {}),
   };
 }
 
@@ -129,7 +96,7 @@ export class ModelCatalogsStore extends Store implements ModelsStore {
 
   async read(providerId: string): Promise<ModelsStoreEntry | undefined> {
     const raw = await this.getBackend().get<unknown>("model-catalogs", providerId);
-    return parseEntry(raw);
+    return decodeEntry(raw);
   }
 
   async write(providerId: string, entry: ModelsStoreEntry): Promise<void> {

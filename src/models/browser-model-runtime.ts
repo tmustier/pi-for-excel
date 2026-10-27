@@ -14,12 +14,17 @@ import {
   type Provider,
   type ProviderStreams,
 } from "@earendil-works/pi-ai";
-import { builtinProviders } from "@earendil-works/pi-ai/providers/all";
+import {
+  builtinProviders,
+  getBuiltinModelDataGeneratedAt,
+} from "@earendil-works/pi-ai/providers/all";
 
 import { originalFetch } from "../auth/cors-proxy.js";
 import { isOpenAiGatewayProvider } from "../auth/custom-gateways.js";
 import { normalizeProxyUrl } from "../auth/proxy-validation.js";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
+import { MAX_MODEL_ID_LENGTH } from "../storage/local/model-catalogs-store.js";
+import { withRemoteCatalog } from "./remote-model-catalog.js";
 import {
   ProviderCredentialsStore,
   type ProviderKeysStoreLike,
@@ -30,7 +35,6 @@ const DEFAULT_DISCOVERED_MAX_TOKENS = 4_096;
 const MODEL_DISCOVERY_TIMEOUT_MS = 8_000;
 const MAX_MODEL_DISCOVERY_RESPONSE_BYTES = 2 * 1024 * 1024;
 const MAX_DISCOVERED_MODELS = 2_000;
-const MAX_DISCOVERED_MODEL_ID_LENGTH = 256;
 
 const openAiCompletionsStreams: ProviderStreams = lazyApi(
   () => import("@earendil-works/pi-ai/api/openai-completions"),
@@ -79,6 +83,8 @@ export interface CreateBrowserModelRuntimeOptions {
   modelCatalogs: ModelsStore;
   getProxyUrl: () => Promise<string | undefined>;
   fetchFn?: typeof globalThis.fetch;
+  /** Relay URL for a built-in provider's pi.dev catalogue. Omit to use only bundled models. */
+  modelCatalogUrl?: (providerId: string) => string;
 }
 
 interface DynamicProviderCatalogSpec {
@@ -307,9 +313,9 @@ function parseModelIds(value: unknown): string[] {
     if (!isModelsResponse(entry) || typeof entry.id !== "string") continue;
     const id = entry.id.trim();
     if (id.length === 0) continue;
-    if (id.length > MAX_DISCOVERED_MODEL_ID_LENGTH) {
+    if (id.length > MAX_MODEL_ID_LENGTH) {
       throw new Error(
-        `Discovered model id exceeds ${MAX_DISCOVERED_MODEL_ID_LENGTH} characters.`,
+        `Discovered model id exceeds ${MAX_MODEL_ID_LENGTH} characters.`,
       );
     }
     ids.push(id);
@@ -557,10 +563,19 @@ export class BrowserModelRuntime {
       },
     });
 
+    const catalogUrl = options.modelCatalogUrl;
     for (const provider of builtinProviders()) {
-      const browserProvider = provider.auth.apiKey
+      const adapted = provider.auth.apiKey
         ? provider
         : createBrowserAdapterProvider(provider);
+      // Providers that refresh their own catalogue (Radius) keep it.
+      const browserProvider = catalogUrl && !adapted.refreshModels
+        ? withRemoteCatalog(adapted, {
+          catalogUrl,
+          fetchFn: this.fetchFn,
+          bundledGeneratedAt: getBuiltinModelDataGeneratedAt(),
+        })
+        : adapted;
       this.models.setProvider(browserProvider);
       this.builtinProviderIds.add(browserProvider.id);
     }

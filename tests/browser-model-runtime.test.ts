@@ -1,3 +1,4 @@
+import "fake-indexeddb/auto";
 import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 
@@ -18,6 +19,9 @@ import {
   type ModelRefreshRuntime,
 } from "../src/models/model-refresh-owner.ts";
 import type { CustomProvider } from "../src/storage/local/custom-providers-store.ts";
+import { ModelCatalogsStore } from "../src/storage/local/model-catalogs-store.ts";
+import { IndexedDBStorageBackend } from "../src/storage/local/indexeddb-storage-backend.ts";
+import { getAppStorageConfig } from "../src/storage/init-app-storage.ts";
 import { saveOpenAiGatewayConfig } from "../src/auth/custom-gateways.ts";
 import { createOfficeStreamFn } from "../src/auth/stream-proxy.ts";
 import {
@@ -164,14 +168,16 @@ void test("Office continuation after Stop returns an aborted result without disp
 
 function createRuntime(args?: {
   providerKeys?: MemoryProviderKeys;
-  catalogs?: MemoryCatalogs;
+  catalogs?: ModelsStore;
   fetchFn?: typeof globalThis.fetch;
+  modelCatalogUrl?: (providerId: string) => string;
 }): BrowserModelRuntime {
   return new BrowserModelRuntime({
     providerKeys: args?.providerKeys ?? new MemoryProviderKeys(),
     modelCatalogs: args?.catalogs ?? new MemoryCatalogs(),
     getProxyUrl: () => Promise.resolve(undefined),
     ...(args?.fetchFn !== undefined ? { fetchFn: args.fetchFn } : {}),
+    ...(args?.modelCatalogUrl !== undefined ? { modelCatalogUrl: args.modelCatalogUrl } : {}),
   });
 }
 
@@ -964,8 +970,9 @@ void test("model refresh owner publishes cached startup before network discovery
   assert.ok(runtime.models.getModel("Gateway · Acme", "cached-before-network"));
   assert.equal(runtime.models.getModel("Gateway · Acme", "network-model"), undefined);
 
+  // The network pass republishes the cached state, then the discovered catalogue.
   releaseFetch();
-  await waitForOwnerRevision(owner, 2);
+  await waitForOwnerRevision(owner, 3);
   assert.ok(runtime.models.getModel("Gateway · Acme", "network-model"));
 });
 
@@ -1052,3 +1059,216 @@ void test("direct plain-http requests to another machine explain the mixed-conte
     "http://localhost:8080/v1/chat/completions",
   );
 });
+
+const CATALOG_RELAY = (providerId: string): string => `https://relay.test/model-catalog/${providerId}`;
+const FUTURE_LAST_MODIFIED = "Wed, 01 Jan 2031 00:00:00 GMT";
+
+function remoteAnthropicModel(overrides: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: "claude-next",
+    name: "Claude Next",
+    api: "anthropic-messages",
+    provider: "anthropic",
+    baseUrl: "https://api.anthropic.com",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 },
+    contextWindow: 1_000_000,
+    maxTokens: 128_000,
+    ...overrides,
+  };
+}
+
+function catalogResponse(models: readonly unknown[], headers: Record<string, string> = {}): Response {
+  return new Response(JSON.stringify(models), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json",
+      "Last-Modified": FUTURE_LAST_MODIFIED,
+      ETag: "\"v1\"",
+      ...headers,
+    },
+  });
+}
+
+function persistentCatalogs(): ModelCatalogsStore {
+  const store = new ModelCatalogsStore();
+  store.setBackend(new IndexedDBStorageBackend(getAppStorageConfig(`catalog-test-${crypto.randomUUID()}`)));
+  return store;
+}
+
+void test("built-in providers add pi.dev catalogue models but keep their own transport", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  await providerKeys.set("anthropic", "test-key");
+  const catalogs = persistentCatalogs();
+  const requested: string[] = [];
+  const validators: (string | null)[] = [];
+  const bundledId = "claude-fable-5";
+  const fetchFn: typeof globalThis.fetch = (input, init) => {
+    requested.push(input instanceof Request ? input.url : input.toString());
+    validators.push(new Headers(init?.headers).get("if-none-match"));
+    return Promise.resolve(catalogResponse([
+      remoteAnthropicModel({
+        headers: { "x-leak": "credential" },
+        compat: { forceAdaptiveThinking: true },
+        thinkingLevelMap: { off: null, max: "max" },
+        cost: {
+          input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75,
+          tiers: [{ input: 6, output: 22.5, cacheRead: 0.6, cacheWrite: 7.5, inputTokensAbove: 200_000 }],
+        },
+      }),
+      remoteAnthropicModel({ id: "claude-elsewhere", baseUrl: "https://collector.example.com" }),
+      remoteAnthropicModel({ id: "claude-new-transport", api: "anthropic-next" }),
+      remoteAnthropicModel({ id: "claude-broken", contextWindow: "lots" }),
+      remoteAnthropicModel({ id: bundledId, name: "Claude Fable 5 (updated)" }),
+    ]));
+  };
+
+  const runtime = createRuntime({ providerKeys, catalogs, fetchFn, modelCatalogUrl: CATALOG_RELAY });
+  const result = await runtime.refresh({ allowNetwork: true, force: true });
+
+  assert.equal(result.errors.size, 0);
+  // Only configured providers are fetched, through the relay.
+  assert.deepEqual(requested, ["https://relay.test/model-catalog/anthropic"]);
+  assert.deepEqual(validators, [null]);
+
+  const added = runtime.models.getModel("anthropic", "claude-next");
+  assert.ok(added);
+  assert.equal(added.baseUrl, "https://api.anthropic.com");
+  assert.equal(added.headers, undefined);
+  assert.deepEqual(added.compat, { forceAdaptiveThinking: true });
+  assert.deepEqual(added.thinkingLevelMap, { off: null, max: "max" });
+  assert.equal(added.cost.tiers?.[0]?.inputTokensAbove, 200_000);
+  assert.equal(runtime.models.getModel("anthropic", bundledId)?.name, "Claude Fable 5 (updated)");
+  for (const dropped of ["claude-elsewhere", "claude-new-transport", "claude-broken"]) {
+    assert.equal(runtime.models.getModel("anthropic", dropped), undefined, dropped);
+  }
+
+  // A fresh taskpane restores the persisted overlay offline, with every field intact.
+  const offline = createRuntime({
+    providerKeys,
+    catalogs,
+    fetchFn: () => Promise.reject(new Error("cache-only restore must not fetch")),
+    modelCatalogUrl: CATALOG_RELAY,
+  });
+  await offline.refresh({ allowNetwork: false });
+  assert.deepEqual(offline.models.getModel("anthropic", "claude-next"), added);
+
+  // The next network refresh revalidates; 304 keeps the overlay.
+  const revalidated = createRuntime({
+    providerKeys,
+    catalogs,
+    fetchFn: (_input, init) => {
+      validators.push(new Headers(init?.headers).get("if-none-match"));
+      return Promise.resolve(new Response(null, { status: 304 }));
+    },
+    modelCatalogUrl: CATALOG_RELAY,
+  });
+  await revalidated.refresh({ allowNetwork: true, force: true });
+  assert.equal(validators.at(-1), "\"v1\"");
+  assert.ok(revalidated.models.getModel("anthropic", "claude-next"));
+});
+
+void test("an unusable pi.dev catalogue leaves bundled and cached models in place", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  await providerKeys.set("anthropic", "test-key");
+  const catalogs = new MemoryCatalogs();
+  const bundledIds = (runtime: BrowserModelRuntime): string[] =>
+    runtime.models.getModels("anthropic").map((model) => model.id).sort();
+  const baseline = bundledIds(createRuntime({ providerKeys }));
+
+  const responses: Response[] = [
+    // Self-hosted without the relay.
+    new Response("Not found", { status: 404 }),
+    // Requires a newer pi-ai than this build ships.
+    catalogResponse([remoteAnthropicModel({ id: "needs-newer-pi" })], {
+      "x-pi-model-catalog-minimum-version": "999.0.0",
+    }),
+    // Older than the bundled model data.
+    catalogResponse([remoteAnthropicModel({ id: "stale-model" })], {
+      "Last-Modified": "Thu, 01 Jan 2015 00:00:00 GMT",
+    }),
+  ];
+  for (const response of responses) {
+    const runtime = createRuntime({
+      providerKeys,
+      catalogs,
+      fetchFn: () => Promise.resolve(response),
+      modelCatalogUrl: CATALOG_RELAY,
+    });
+    const result = await runtime.refresh({ allowNetwork: true, force: true });
+    assert.equal(result.errors.size, 0);
+    assert.deepEqual(bundledIds(runtime), baseline);
+  }
+
+  // A good catalogue, then a failing request: the last good overlay survives.
+  const good = createRuntime({
+    providerKeys,
+    catalogs,
+    fetchFn: () => Promise.resolve(catalogResponse([remoteAnthropicModel({})])),
+    modelCatalogUrl: CATALOG_RELAY,
+  });
+  await good.refresh({ allowNetwork: true, force: true });
+  const failing = createRuntime({
+    providerKeys,
+    catalogs,
+    fetchFn: () => Promise.resolve(new Response("<html>", { status: 502 })),
+    modelCatalogUrl: CATALOG_RELAY,
+  });
+  const result = await failing.refresh({ allowNetwork: true, force: true });
+  assert.equal(result.errors.size, 1);
+  assert.ok(failing.models.getModel("anthropic", "claude-next"));
+});
+
+void test("a newly connected provider is available before its catalogue request settles", async () => {
+  const providerKeys = new MemoryProviderKeys();
+  let releaseFetch: () => void = () => {};
+  const fetchGate = new Promise<void>((resolve) => {
+    releaseFetch = resolve;
+  });
+  const runtime = createRuntime({
+    providerKeys,
+    modelCatalogUrl: CATALOG_RELAY,
+    fetchFn: async () => {
+      await fetchGate;
+      return catalogResponse([remoteAnthropicModel({})]);
+    },
+  });
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve([]),
+    getRuntimes: () => [],
+  });
+  await owner.startup(Promise.resolve(), 50);
+  // Let startup's background pass settle so only the connection refresh can publish.
+  await owner.refresh(false);
+  assert.deepEqual(owner.snapshot().availableProviders, []);
+
+  await providerKeys.set("anthropic", "test-key");
+  const refresh = owner.refreshConfiguredProviders(true);
+  await waitForOwner(owner, (snapshot) => snapshot.availableProviders.includes("anthropic"));
+  assert.equal(runtime.models.getModel("anthropic", "claude-next"), undefined);
+
+  releaseFetch();
+  await refresh;
+  assert.ok(runtime.models.getModel("anthropic", "claude-next"));
+});
+
+function waitForOwner(
+  owner: ModelRefreshOwner,
+  predicate: (snapshot: ReturnType<ModelRefreshOwner["snapshot"]>) => boolean,
+): Promise<void> {
+  if (predicate(owner.snapshot())) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error("Timed out waiting for the model refresh owner"));
+    }, 2_000);
+    const unsubscribe = owner.subscribe((snapshot) => {
+      if (!predicate(snapshot)) return;
+      clearTimeout(timeout);
+      unsubscribe();
+      resolve();
+    });
+  });
+}

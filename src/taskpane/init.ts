@@ -45,6 +45,7 @@ import { createDraftStore } from "./draft-store.js";
 import { showSubscriptionWarning } from "./subscription-warning.js";
 import { runNativeWebSearch, supportsNativeWebSearch } from "../tools/native-web-search.js";
 import { getApiKeyForProvider, loadWebSearchProviderConfig } from "../tools/web-search-config.js";
+import { PI_AI_VERSION } from "@earendil-works/pi-ai/utils/version";
 import { submitComposerText } from "./keyboard-shortcuts/editor-actions.js";
 import { readAutoCompactionEnabled } from "../compaction/settings.js";
 import { runCompactCommand } from "../commands/builtins/export.js";
@@ -309,6 +310,12 @@ export async function initTaskpane(opts: {
     providerKeys,
     modelCatalogs,
     getProxyUrl: getConfiguredProxyUrl,
+    // Same-origin relay to pi.dev (vercel.json rewrite, Vite proxy in dev). The version
+    // selects the newest catalogue this pi-ai supports.
+    modelCatalogUrl: (providerId) => new URL(
+      `/model-catalog/${PI_AI_VERSION}/${encodeURIComponent(providerId)}`,
+      window.location.origin,
+    ).href,
   });
 
   // 2. Resolve available providers through one owner. Static, custom,

@@ -151,6 +151,7 @@ worst-case tool-loop context proportional to the model's actual capacity (#566).
 | Credentials | filesystem-backed auth storage and provider OAuth | existing IndexedDB key/OAuth stores, adapted to Pi AI's credential contract |
 | Dynamic catalogues | coding-agent models store | IndexedDB `model-catalogs` store |
 | Provider plugins | trusted coding-agent extensions can register full providers | extensions register declarative providers; host owns credentials, known stream implementations and URL policy |
+| Built-in catalogue updates | `withRemoteCatalog()` fetches pi.dev directly, refreshes after 4 h, all model types; OpenRouter personalised per key | ported overlay fetches through a same-origin relay (`/model-catalog/<version>/<provider>`, no CORS on pi.dev) on every network refresh (startup, picker open); chat models only; entries must reuse a bundled (API, base URL) route and its headers; OpenRouter gets the plain overlay |
 
 **Rationale:** Pi AI 0.80 removed the legacy global registry/dispatch API. The
 coding-agent `ModelRuntime` is not suitable for an Office WebView because it
@@ -168,6 +169,7 @@ discovered and extension-owned providers all flow through one injected
 the direct browser-safe API subpath.
 
 **Files:** `src/models/browser-model-runtime.ts`,
+`src/models/remote-model-catalog.ts`,
 `src/storage/local/model-catalogs-store.ts`,
 `src/storage/local/provider-credentials-store.ts`,
 `src/auth/stream-proxy.ts`, `src/compat/bedrock-provider-stub.ts`

@@ -207,6 +207,11 @@ export class ModelRefreshOwner {
       }
       this.activeProviderRevision = this.modelRuntime.providerRevision;
 
+      if (allowNetwork) {
+        // Availability must not wait for catalogue requests: publish the cached state first.
+        const cached = await this.modelRuntime.refresh({ allowNetwork: false });
+        await this.publish(Array.from(cached.errors.keys()).sort());
+      }
       const result = await this.modelRuntime.refresh({
         allowNetwork,
         ...(allowNetwork ? { force: true } : {}),

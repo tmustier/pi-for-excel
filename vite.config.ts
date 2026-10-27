@@ -249,6 +249,16 @@ export default defineConfig({
       "/api-proxy/google-cloudcode-sandbox": proxyEntry("https://daily-cloudcode-pa.sandbox.googleapis.com", "/api-proxy/google-cloudcode-sandbox"),
       "/api-proxy/google-cloudcode": proxyEntry("https://cloudcode-pa.googleapis.com", "/api-proxy/google-cloudcode"),
       "/api-proxy/google": proxyEntry("https://generativelanguage.googleapis.com", "/api-proxy/google"),
+
+      // pi.dev model catalogue relay; production uses the matching vercel.json rewrite.
+      "/model-catalog": {
+        target: "https://pi.dev",
+        changeOrigin: true,
+        rewrite: (p: string) =>
+          p.replace(/^\/model-catalog\/([0-9][0-9a-z.+-]*)\/([a-z0-9-]+)$/, "/api/models/providers/$2?types=chat&pi-version=$1"),
+        secure: true,
+        configure: stripBrowserHeaders,
+      },
     },
   },
 
