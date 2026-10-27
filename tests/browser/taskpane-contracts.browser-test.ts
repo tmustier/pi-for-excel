@@ -301,13 +301,13 @@ void test("Settings Backups exposes manual backup and reports browser-host unava
         const { getSettingsPagesDependencies } = await import("/src/commands/builtins/settings-pages/dependencies.ts");
         const backups = getSettingsPagesDependencies().backups;
         if (!backups) throw new Error("Backups dependencies were not configured");
-        backups.loadCheckpoints = () => Promise.resolve([{
+        backups.loadCheckpoints = () => Promise.resolve({ entries: [{
           id: "browser-checkpoint",
           at: Date.now(),
           toolName: "write_cells",
           address: "Sheet1!A1",
           changedCount: 1,
-        }]);
+        }] });
       })()
     `);
 

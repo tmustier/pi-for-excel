@@ -17,7 +17,7 @@ const defaultScopeResolver = createRecoveryScopeResolver();
 /**
  * Keeps a never-saved workbook's backups with it through its first save.
  *
- * Saving does not expire backups (see `applyRetention` in recovery-log.ts):
+ * Saving does not expire backups:
  * Excel on the web and desktop AutoSave save every few seconds and report
  * the workbook as never dirty, so a "cleared on save" rule left nothing to
  * revert there. What saving can change is the identity backups are filed
@@ -46,7 +46,6 @@ export class BackupIdentityMonitor {
     if (!scope) return;
 
     const previous = this.lastObservedWorkbookId;
-    this.lastObservedWorkbookId = scope.workbookId;
 
     const firstSaveOfNewWorkbook =
       previous !== null
@@ -60,6 +59,8 @@ export class BackupIdentityMonitor {
         workbookLabel: scope.workbookLabel,
       });
     }
+    // A failed move must be retried, not recorded as already followed.
+    this.lastObservedWorkbookId = scope.workbookId;
   }
 }
 

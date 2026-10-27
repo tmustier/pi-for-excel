@@ -8,8 +8,8 @@ import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   getWorkbookRecoveryLog,
   type WorkbookRecoveryRestorePreview,
-  type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
+import { RecoveryCursorSchema, type RecoveryPage, type RecoveryPageOptions, type RecoveryMetadata } from "../workbook/recovery/log-store.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -51,6 +51,7 @@ const schema = Type.Object({
       description: "Max backups to list (list action only). Default: 10.",
     }),
   ),
+  cursor: Type.Optional(RecoveryCursorSchema),
 });
 
 type Params = Static<typeof schema>;
@@ -64,7 +65,8 @@ type RestoreResult = {
 };
 
 interface WorkbookHistoryRecoveryLogLike {
-  listForCurrentWorkbook(limit?: number): Promise<WorkbookRecoverySnapshot[]>;
+  listForCurrentWorkbook(limit?: number): Promise<Array<Pick<RecoveryMetadata, "id">>>;
+  pageForCurrentWorkbook(options?: RecoveryPageOptions): Promise<RecoveryPage>;
   restore(snapshotId: string): Promise<RestoreResult>;
   previewRestore(snapshotId: string): Promise<WorkbookRecoveryRestorePreview>;
   delete(snapshotId: string): Promise<boolean>;
@@ -89,7 +91,7 @@ function formatTimestamp(ts: number): string {
   }
 }
 
-function buildListMarkdown(snapshots: WorkbookRecoverySnapshot[]): string {
+function buildListMarkdown(snapshots: RecoveryMetadata[]): string {
   const lines: string[] = [];
   lines.push("Recent backups (current workbook):");
   lines.push("");
@@ -142,7 +144,8 @@ export function createWorkbookHistoryTool(
       try {
         if (action === "list") {
           const limit = params.limit ?? 10;
-          const snapshots = await log.listForCurrentWorkbook(limit);
+          const page = await log.pageForCurrentWorkbook({ limit, ...(params.cursor ? { cursor: params.cursor } : {}) });
+          const snapshots = page.entries;
 
           if (snapshots.length === 0) {
             return {
@@ -157,11 +160,13 @@ export function createWorkbookHistoryTool(
           }
 
           return {
-            content: [{ type: "text", text: buildListMarkdown(snapshots) }],
+            content: [{ type: "text", text: buildListMarkdown(snapshots) + (page.nextCursor
+              ? `\n\nMore backups: call list with cursor ${JSON.stringify(page.nextCursor)}.` : "") }],
             details: {
               kind: "workbook_history",
               action: "list",
               count: snapshots.length,
+              ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}),
               snapshots: snapshots.map((snapshot) => ({
                 id: snapshot.id,
                 at: snapshot.at,

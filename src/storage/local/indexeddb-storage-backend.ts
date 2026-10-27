@@ -174,6 +174,31 @@ export class IndexedDBStorageBackend implements StorageBackend {
     mode: "readonly" | "readwrite",
     operation: (tx: StorageTransaction) => Promise<T>,
   ): Promise<T> {
+    return this.indexedTransaction(storeNames, mode, async (idbTx) => {
+      const storageTx: StorageTransaction = {
+        get: async <V = unknown>(storeName: string, key: string): Promise<V | null> => {
+          const result = await this.promisifyRequest<V | undefined>(
+            idbTx.objectStore(storeName).get(key) as IDBRequest<V | undefined>,
+          );
+          return result ?? null;
+        },
+        set: async <V = unknown>(storeName: string, key: string, value: V): Promise<void> => {
+          await this.putIntoStore(idbTx.objectStore(storeName), key, value);
+        },
+        delete: async (storeName: string, key: string): Promise<void> => {
+          await this.promisifyRequest(idbTx.objectStore(storeName).delete(key));
+        },
+      };
+      return operation(storageTx);
+    });
+  }
+
+  /** Native indexes/cursors for stores with bounded, indexed queries. */
+  async indexedTransaction<T>(
+    storeNames: string[],
+    mode: IDBTransactionMode,
+    operation: (tx: IDBTransaction) => Promise<T>,
+  ): Promise<T> {
     const db = await this.getDB();
     const idbTx = db.transaction(storeNames, mode);
     // Settle only once the transaction commits, so a write that fails at
@@ -186,26 +211,14 @@ export class IndexedDBStorageBackend implements StorageBackend {
     });
     // Callers that fail the operation get that error, not the abort it causes.
     void committed.catch(() => {});
-    const storageTx: StorageTransaction = {
-      get: async <V = unknown>(storeName: string, key: string): Promise<V | null> => {
-        const store = idbTx.objectStore(storeName);
-        const result = await this.promisifyRequest<V | undefined>(
-          store.get(key) as IDBRequest<V | undefined>,
-        );
-        return result ?? null;
-      },
-      set: async <V = unknown>(storeName: string, key: string, value: V): Promise<void> => {
-        const store = idbTx.objectStore(storeName);
-        await this.putIntoStore(store, key, value);
-      },
-      delete: async (storeName: string, key: string): Promise<void> => {
-        const store = idbTx.objectStore(storeName);
-        await this.promisifyRequest(store.delete(key));
-      },
-    };
     let result: T;
     try {
-      result = await operation(storageTx);
+      // A transaction can abort without delivering the pending request's
+      // error (Chromium's oversized structured-clone IPC is one example).
+      result = await Promise.race([
+        operation(idbTx),
+        committed.then(() => new Promise<never>(() => {})),
+      ]);
     } catch (error) {
       try {
         idbTx.abort();

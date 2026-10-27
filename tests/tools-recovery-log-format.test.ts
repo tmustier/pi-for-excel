@@ -3,7 +3,7 @@ import { test } from "node:test";
 
 import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 import type { RecoveryFormatRangeState } from "../src/workbook/recovery-states.ts";
-import { RECOVERY_SETTING_KEY } from "./fixtures/recovery-log.ts";
+import { RECOVERY_SETTING_KEY, createInMemorySettingsStore } from "./fixtures/recovery-log.ts";
 
 function recoveryLog(formatRangeState: unknown, apply: (state: RecoveryFormatRangeState) => void): WorkbookRecoveryLog {
   const payload = {
@@ -23,11 +23,13 @@ function recoveryLog(formatRangeState: unknown, apply: (state: RecoveryFormatRan
       workbookId: "book-format",
     }],
   };
+  const settings = createInMemorySettingsStore();
+  const seeded = settings.set(RECOVERY_SETTING_KEY, payload);
   return new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve({
-      get: <T>(key: string): Promise<T | null> => Promise.resolve(key === RECOVERY_SETTING_KEY ? payload as T : null),
-      set: () => Promise.resolve(),
-    }),
+    getStore: async () => {
+      await seeded;
+      return settings.recovery;
+    },
     getWorkbookContext: () => Promise.resolve({
       workbookId: "book-format",
       workbookName: "Formatting.xlsx",

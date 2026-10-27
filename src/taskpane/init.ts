@@ -149,15 +149,13 @@ import {
   getWorkbookRecoveryLog,
   WorkbookRecoveryLog,
   type WorkbookRecoveryRestorePreview,
-  type WorkbookRecoverySnapshot,
 } from "../workbook/recovery-log.js";
 import { formatRelativeDate } from "../commands/builtins/overlay-relative-date.js";
 import {
   getWorkbookChangeAuditLog,
   WorkbookChangeAuditLog,
 } from "../audit/workbook-change-audit.js";
-import { readRetentionLimit, writeRetentionLimit } from "../workbook/recovery/log-store.js";
-import { MAX_RECOVERY_ENTRIES } from "../workbook/recovery/constants.js";
+import type { RecoveryMetadata } from "../workbook/recovery/log-store.js";
 import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
 import { requestApproval } from "../ui/approval-dialog.js";
 import { humanizeToolInput } from "../ui/humanize-params.js";
@@ -640,7 +638,11 @@ export async function initTaskpane(opts: {
     },
   }));
 
-  const workbookRecoveryLog = getWorkbookRecoveryLog(new WorkbookRecoveryLog({ settings }));
+  const workbookRecoveryLog = getWorkbookRecoveryLog(new WorkbookRecoveryLog());
+  // Upgrade/copy never holds up opening chats. Failure keeps legacy data intact.
+  void workbookRecoveryLog.initialize().catch(() => {
+    showToast(t("recovery.migrationDeferred"), { variant: "error", duration: 8000 });
+  });
   getWorkbookChangeAuditLog(new WorkbookChangeAuditLog({ settings }));
   const manualFullBackupStore = getManualFullWorkbookBackupStore(
     new ManualFullWorkbookBackupStore(),
@@ -733,7 +735,7 @@ export async function initTaskpane(opts: {
   };
 
   const toRecoveryCheckpointSummary = (
-    snapshot: WorkbookRecoverySnapshot,
+    snapshot: RecoveryMetadata,
   ): RecoveryCheckpointSummary => ({
     id: snapshot.id,
     at: snapshot.at,
@@ -1943,11 +1945,9 @@ export async function initTaskpane(opts: {
       onChanged: refreshCapabilitiesForAllRuntimes,
     },
     backups: {
-      loadCheckpoints: async () => {
-        // Every backup of this workbook (at most "Keep at most"), so counts
-        // such as "Clear all" match what is stored.
-        const checkpoints = await workbookRecoveryLog.listForCurrentWorkbook(MAX_RECOVERY_ENTRIES);
-        return checkpoints.map((checkpoint) => toRecoveryCheckpointSummary(checkpoint));
+      loadCheckpoints: async (options) => {
+        const page = await workbookRecoveryLog.pageForCurrentWorkbook(options);
+        return { ...page, entries: page.entries.map(toRecoveryCheckpointSummary) };
       },
       onRestore: async (snapshotId: string) => {
         await restoreAfterConfirmation(await workbookRecoveryLog.previewRestore(snapshotId));
@@ -1960,14 +1960,6 @@ export async function initTaskpane(opts: {
       },
       onCreateManualFullBackup: async () => {
         return createManualFullBackup();
-      },
-      getRetentionConfig: async () => {
-        const maxSnapshots = await readRetentionLimit();
-        return { maxSnapshots };
-      },
-      setRetentionConfig: async (config) => {
-        await writeRetentionLimit(config.maxSnapshots);
-        await workbookRecoveryLog.applyRetentionLimit();
       },
     },
   });
@@ -2258,6 +2250,14 @@ export async function initTaskpane(opts: {
       settings,
       resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,
       onIdentityChanged: async ({ from, to }) => {
+        if (from !== null) {
+          // Same open Office document under a new path. Move metadata only;
+          // copying would duplicate the only undo left after Save As.
+          await workbookRecoveryLog.rescopeWorkbook({
+            fromWorkbookId: from, toWorkbookId: to,
+            workbookLabel: formatWorkbookLabel(await resolveWorkbookContext()),
+          });
+        }
         for (const tab of runtimeManager.snapshotTabs()) {
           await moveSessionToWorkbook(settings, tab.sessionId, from, to);
         }

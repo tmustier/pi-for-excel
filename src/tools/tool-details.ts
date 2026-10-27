@@ -364,6 +364,7 @@ export const workbookHistoryDetailsSchema = Type.Object({
   kind: Type.Literal("workbook_history"),
   action: StringEnum(["list", "restore", "delete", "clear"]),
   count: Type.Optional(Type.Number()),
+  nextCursor: Type.Optional(Type.Object({ at: Type.Number(), id: Type.String() })),
   snapshots: Type.Optional(Type.Array(workbookHistorySnapshotSummarySchema)),
   snapshotId: Type.Optional(Type.String()),
   restoredSnapshotId: Type.Optional(Type.String()),

@@ -31,7 +31,7 @@ void test("restore rejects legacy snapshots without workbook identity", async ()
   });
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
       workbookId: "url_sha256:target",
       workbookName: "Target.xlsx",
@@ -67,7 +67,7 @@ void test("restore rejects when current workbook identity is unavailable", async
   });
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
       workbookId: null,
       workbookName: null,
@@ -100,7 +100,7 @@ void test("restore applies checkpoint values and creates inverse checkpoint", as
   let appliedValues: unknown[][] = [];
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000001000,
     createId,
@@ -205,7 +205,7 @@ void test("restore round-trips comment-thread states for present and absent thre
     let appliedState: RecoveryCommentThreadState | null = null;
 
     const log = new WorkbookRecoveryLog({
-      getSettingsStore: () => Promise.resolve(settingsStore),
+      getStore: () => Promise.resolve(settingsStore.recovery),
       getWorkbookContext: () => Promise.resolve(workbookContext),
       now: () => 1700000003200 + index,
       createId,
@@ -242,9 +242,8 @@ void test("restore round-trips comment-thread states for present and absent thre
     assert.equal(appliedAddress, address, `Expected apply address for ${scenario.name}.`);
     assert.deepEqual(appliedState, scenario.targetState, `Expected applied state for ${scenario.name}.`);
 
-    const snapshots = await log.listForCurrentWorkbook(10);
     const inverse = restored.inverseSnapshotId
-      ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+      ? await log.read(restored.inverseSnapshotId)
       : null;
 
     assert.ok(inverse, `Expected inverse snapshot for ${scenario.name}.`);
@@ -278,7 +277,7 @@ void test("a restore that times out sends nothing more to Excel", async () => {
   };
   const settingsStore = createInMemorySettingsStore();
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve({
       workbookId: "url_sha256:timeout",
       workbookName: "Model.xlsx",

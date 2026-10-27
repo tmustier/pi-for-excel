@@ -3,8 +3,8 @@ import { test } from "node:test";
 
 import type { DocumentInstanceIdentity } from "../src/host/document-instance.ts";
 import type { WorkbookContext } from "../src/workbook/context.ts";
-import { WorkbookRecoveryLog, type WorkbookRecoverySnapshot } from "../src/workbook/recovery-log.ts";
-import { createInMemorySettingsStore, RECOVERY_SETTING_KEY } from "./fixtures/recovery-log.ts";
+import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
+import { createInMemorySettingsStore, persistedSnapshots } from "./fixtures/recovery-log.ts";
 
 const UNSAVED: WorkbookContext = { workbookId: null, workbookName: null, source: "unknown" };
 
@@ -41,21 +41,16 @@ function createLog(args: {
 }): WorkbookRecoveryLog {
   let nextId = 0;
   return new WorkbookRecoveryLog({
-    settings: args.settings,
+    getStore: () => Promise.resolve(args.settings.recovery),
     getWorkbookContext: () => Promise.resolve(args.context?.() ?? UNSAVED),
     getDocumentInstance: () => args.document,
-    createId: () => `snap-${nextId += 1}`,
+    createId: () => `snap-${crypto.randomUUID()}-${nextId += 1}`,
     now: () => 1_700_000_000_000 + nextId,
     applySnapshot: (address) => {
       args.applied?.push(address);
       return Promise.resolve({ values: [["current"]], formulas: [["current"]] });
     },
   });
-}
-
-async function persistedSnapshots(settings: ReturnType<typeof createInMemorySettingsStore>): Promise<WorkbookRecoverySnapshot[]> {
-  const payload = await settings.get<{ snapshots: WorkbookRecoverySnapshot[] }>(RECOVERY_SETTING_KEY);
-  return payload?.snapshots ?? [];
 }
 
 const write = { toolName: "write_cells" as const, toolCallId: "call-1", address: "Sheet1!A1", beforeValues: [["before"]], beforeFormulas: [["before"]] };
@@ -90,7 +85,7 @@ void test("reading history on a pristine unsaved workbook creates no token", asy
 
   assert.deepEqual(await log.listForCurrentWorkbook(), []);
   assert.equal(await log.clearForCurrentWorkbook(), 0);
-  await assert.rejects(() => log.restore("missing"), /not found/i);
+  await assert.rejects(() => log.restore("missing"), /identity is unavailable/i);
   assert.equal(document.ensureCalls, 0);
   assert.equal(document.token, null);
 });

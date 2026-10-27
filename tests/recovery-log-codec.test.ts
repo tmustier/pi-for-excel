@@ -20,7 +20,7 @@ async function loadFromPersisted(snapshots: unknown[]): Promise<{
   await settingsStore.set(RECOVERY_SETTING_KEY, { version: 1, snapshots });
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbook),
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
   });
@@ -116,7 +116,9 @@ void test("a loaded snapshot carries its state and drops properties the schema d
     { ...base, id: "chart", at: 1, snapshotKind: "chart_state", chartState: { kind: "chart_absent", sheetName: "Sheet1", name: "Chart 1" } },
   ]);
 
-  const [rules, chart] = await log.list({ limit: 2 });
+  const entries = await log.list({ limit: 2 });
+  const rules = await log.read(entries[0]?.id ?? "");
+  const chart = await log.read(entries[1]?.id ?? "");
   assert.ok(rules && chart);
   assert.deepEqual(rules.conditionalFormatRules, [{ type: "data_bar", dataBar }]);
   assert.equal(rules.cellCount, 1);
@@ -133,7 +135,7 @@ void test("a payload that is not the versioned envelope loads as empty", async (
   await settingsStore.set(RECOVERY_SETTING_KEY, { snapshots: [{ ...base, beforeValues: [[1]], beforeFormulas: [[""]] }] });
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbook),
     applySnapshot: () => Promise.resolve({ values: [[1]], formulas: [[1]] }),
   });

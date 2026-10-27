@@ -35,7 +35,7 @@ async function withRecoveryPage(
         const entries = ${JSON.stringify(entries)};
         configureSettingsPages({
           backups: {
-            loadCheckpoints: () => Promise.resolve(entries),
+            loadCheckpoints: () => Promise.resolve({ entries }),
             onRestore: () => Promise.resolve(),
             onDelete: () => Promise.resolve(true),
             onClear: () => Promise.resolve(entries.length),
@@ -57,7 +57,7 @@ function visibleIds(page: Page): Promise<string[]> {
 }
 
 async function search(page: Page, query: string): Promise<void> {
-  await page.getByPlaceholder("Search backups…").fill(query);
+  await page.getByPlaceholder("Search this page…").fill(query);
   await page.waitForTimeout(250);
 }
 

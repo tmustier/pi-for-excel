@@ -5,6 +5,7 @@ import { getWorkbookRules, setWorkbookRules, workbookRulesKey } from "../src/rul
 import { createWorkbookIdentityFollower } from "../src/taskpane/workbook-identity-follower.ts";
 import { getSessionWorkbookId, moveSessionToWorkbook } from "../src/workbook/session-association.ts";
 import { createInMemorySettingsStore } from "./fixtures/recovery-log.ts";
+import { WorkbookRecoveryLog } from "../src/workbook/recovery-log.ts";
 
 void test("Save As is reported once as a move from the old identity to the new one", async () => {
   const identities = ["url_sha256:budget", "url_sha256:budget", null, "url_sha256:budget-v2", "url_sha256:budget-v2"];
@@ -21,6 +22,36 @@ void test("Save As is reported once as a move from the old identity to the new o
   // The pane opens on "budget"; a failed read (null) in between is not a move.
   for (let i = 0; i < 5; i += 1) await follower.checkOnce();
   assert.deepEqual(changes, [{ from: "url_sha256:budget", to: "url_sha256:budget-v2" }]);
+});
+
+void test("backups follow observed Save As, rename and move; a failed move retries", async () => {
+  const settings = createInMemorySettingsStore();
+  let identity = "url_sha256:original";
+  const log = new WorkbookRecoveryLog({
+    getStore: () => Promise.resolve(settings.recovery),
+    getWorkbookContext: () => Promise.resolve({ workbookId: identity, workbookName: "Book.xlsx", source: "document.url" }),
+    createId: () => "same-backup", now: () => 1,
+    applySnapshot: () => Promise.resolve({ values: [[2]], formulas: [[2]] }),
+  });
+  await log.append({ toolName: "write_cells", toolCallId: "call", address: "Sheet1!A1", beforeValues: [[1]], beforeFormulas: [[1]] });
+  let fail = true;
+  const follower = createWorkbookIdentityFollower({
+    settings, resolveIdentity: () => Promise.resolve(identity),
+    onIdentityChanged: async ({ from, to }) => {
+      if (fail) { fail = false; throw new Error("Storage temporarily unavailable"); }
+      if (from) await log.rescopeWorkbook({ fromWorkbookId: from, toWorkbookId: to, workbookLabel: "Book.xlsx" });
+    },
+  });
+  await follower.checkOnce();
+  for (const next of ["url_sha256:save-as", "url_sha256:renamed", "url_sha256:moved"]) {
+    const old = identity;
+    identity = next;
+    if (next === "url_sha256:save-as") await assert.rejects(follower.checkOnce(), /temporarily unavailable/);
+    await follower.checkOnce();
+    assert.deepEqual((await log.listForCurrentWorkbook()).map((entry) => entry.id), ["same-backup"]);
+    assert.deepEqual(await log.list({ workbookId: old }), []);
+    assert.deepEqual((await log.read("same-backup"))?.beforeValues, [[1]]);
+  }
 });
 
 void test("the first save of a new workbook moves its tabs from the document token to the path", async () => {

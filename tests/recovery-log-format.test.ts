@@ -23,7 +23,6 @@ import {
 import { normalizeConditionalFormatType } from "../src/workbook/recovery/conditional-format-normalization.ts";
 import {
   createInMemorySettingsStore,
-  findSnapshotById,
   withoutUndefined,
 } from "./fixtures/recovery-log.ts";
 
@@ -112,7 +111,7 @@ void test("persisted format checkpoints retain dimension state", async () => {
   };
 
   const logA = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     now: () => 1700000000100,
     createId: () => "snap-format-persist-1",
@@ -130,7 +129,7 @@ void test("persisted format checkpoints retain dimension state", async () => {
   assert.ok(appended);
 
   const logB = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext,
     applySnapshot: () => Promise.resolve({ values: [["old"]], formulas: [["old"]] }),
   });
@@ -138,7 +137,7 @@ void test("persisted format checkpoints retain dimension state", async () => {
   const entries = await logB.listForCurrentWorkbook(10);
   assert.equal(entries.length, 1);
   assert.equal(entries[0]?.snapshotKind, "format_cells_state");
-  assert.deepEqual(withoutUndefined(entries[0]?.formatRangeState), withoutUndefined(formatState));
+  assert.deepEqual(withoutUndefined((await logB.read(entries[0]?.id ?? ""))?.formatRangeState), withoutUndefined(formatState));
 });
 void test("restore applies format-cells checkpoints and creates inverse checkpoint", async () => {
   const settingsStore = createInMemorySettingsStore();
@@ -219,7 +218,7 @@ void test("restore applies format-cells checkpoints and creates inverse checkpoi
   };
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000001800,
     createId,
@@ -248,9 +247,8 @@ void test("restore applies format-cells checkpoints and creates inverse checkpoi
   assert.equal(appliedAddress, "Sheet1!A1:B1");
   assert.deepEqual(withoutUndefined(appliedState), withoutUndefined(restoredTargetState));
 
-  const snapshots = await log.listForCurrentWorkbook(10);
   const inverse = restored.inverseSnapshotId
-    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    ? await log.read(restored.inverseSnapshotId)
     : null;
 
   assert.ok(inverse);
@@ -337,7 +335,7 @@ void test("restore round-trips conditional-format rules in target and inverse sn
   let appliedRules: RecoveryConditionalFormatRule[] = [];
 
   const log = new WorkbookRecoveryLog({
-    getSettingsStore: () => Promise.resolve(settingsStore),
+    getStore: () => Promise.resolve(settingsStore.recovery),
     getWorkbookContext: () => Promise.resolve(workbookContext),
     now: () => 1700000002500,
     createId,
@@ -373,9 +371,8 @@ void test("restore round-trips conditional-format rules in target and inverse sn
   assert.equal(appliedAddress, "Sheet1!A1:E10");
   assert.deepEqual(withoutUndefined(appliedRules), withoutUndefined(targetRules));
 
-  const snapshots = await log.listForCurrentWorkbook(10);
   const inverse = restored.inverseSnapshotId
-    ? findSnapshotById(snapshots, restored.inverseSnapshotId)
+    ? await log.read(restored.inverseSnapshotId)
     : null;
 
   assert.ok(inverse);
