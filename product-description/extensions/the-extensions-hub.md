@@ -51,9 +51,9 @@ Opening, expanding cards, going back and closing record nothing. Cancelling any 
 
 ### Changes
 
-- **Enable / disable.** Disabling unloads the extension: its tools leave Pi's toolset from the next request and its commands leave the menu. Widgets shown through the newer widget API are removed; a widget shown the older way, as Snake's game is, stays on screen until it is dismissed (confirmed; see Open questions). Enabling loads it again. For a plugin that is not built in and holds higher-risk permissions, enabling first asks "Enable plugin "{name}"?" listing "Granted higher-risk permissions:" and "Source: {source}". The toast is "{name}: enabled" or "{name}: disabled".
-- **Permissions.** Toggling a capability saves it, shows "{name}: {capability} granted" or "{name}: {capability} revoked", and reloads the extension if it is on. At this commit the toggles are only enforced when the experimental flag "Extension permission gates" is on (see [experimental](experimental.md)); with the default, every extension can use every capability whatever the grid says.
-- **Install from URL.** With an empty box, "Install" says "Enter a URL first.". Otherwise Pi asks for a name with the browser's "Extension name:" prompt (on Excel on the web this fails at once with "Install failed: Function window.prompt is not supported." and the URL box is already cleared; confirmed), then confirms "Install plugin "{name}"?" with "Source: {url}", "Default permissions:" and "Higher-risk:" (each list may read "(none)"). On "Install" the extension is saved enabled and loaded; the toast is "Installed: {name}". A load failure shows "Install failed: {error}", but the entry stays installed with its error on the card. A remote http(s) URL is meant to be refused unless "Remote extension URLs" is on, but that check applies only to extensions loaded in the taskpane; a URL install runs in the sandbox by default and loads with the flag off (confirmed in Excel on the web with the name prompt stubbed; see [Open questions](#open-questions-and-verification)).
+- **Enable / disable.** Disabling unloads tools and commands and clears both legacy and v2 widgets owned by the extension. Enabling loads it again; a non-built-in plugin with higher-risk grants first asks, listing the source and grants. The toast is "{name}: enabled" or "{name}: disabled".
+- **Permissions.** Toggling saves the grant/revocation and reloads an enabled extension. Capability permissions are always enforced; there is no experimental bypass switch.
+- **Install from URL.** Empty input says "Enter a URL first." Non-URL sources are refused here; remote URLs require the opt-in. An in-taskpane text dialog collects the name and shows source-appropriate default/higher-risk permissions. Cancel installs nothing; Install saves and activates it, with "Installed: {name}" or a specific failure. The remote-source gate also runs at host load and before sandbox activation, not just at installation.
 - **Uninstall.** "Uninstall "{name}"?" / "This removes the plugin and its settings." / "Cancel" / "Uninstall"; the toast is "Uninstalled: {name}".
 
 Failures from the page itself show "Plugins: {error}".
@@ -69,7 +69,7 @@ The list of installed extensions, their enabled state and their permissions are 
 - **Widgets.** An extension's widget appears in a slot between the working indicator and the composer. Snake's board lives there while a game is open. Escape with focus outside the composer closes Snake's board.
 - **Commands.** Extension commands appear in the command menu next to built-ins and run even while the tab is busy unless the extension opts out.
 - **Tools.** Tools an extension registers are added to Pi's toolset after the built-in tools, in a stable order, and appear as ordinary [tool cards](../turn/tool-calls.md).
-- **Pi as installer.** Pi has an `extensions_manager` tool that lists, installs from code it writes, enables, disables, reloads and uninstalls extensions. Its card header reads "Tool Call": the tool has no card renderer of its own. It is not a workbook mutation, so it never asks for approval, not even in Confirm mode; an extension Pi writes is installed without the confirmation the user's own install shows (confirmed in Excel on the web). Code Pi writes runs in the sandbox; its card reads "inline code ({N} chars, {M} lines) · sandbox iframe". In the run checked, the installed extension's effective permissions were the full set, not the restricted defaults.
+- **Pi as installer.** `extensions_manager` is local state, not a workbook mutation. Both modes ask before installing/enabling code and uninstalling; Confirm also asks before disabling. Reload does not ask. Installation shows the code and requested capabilities; pasted code starts with restricted untrusted defaults plus approved grants. An action requiring consent cannot proceed without approval UI.
 
 ## Modifiers
 
@@ -77,10 +77,10 @@ The list of installed extensions, their enabled state and their permissions are 
 | --- | --- | --- |
 | Model and provider | No effect on the pages. An extension that calls the model uses the tab's current model. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect on the pages. Extension tools follow the same rules as built-in tools: read-only tools never ask, workbook mutations ask in Confirm mode. `extensions_manager` never asks. | No effect. |
+| Execution mode | Extension workbook tools follow workbook policy; manager changes have the separate local-change consent above. | Next decision uses current mode. |
 | Files in the workspace, or an overlay open | The hub is a page of the Settings overlay; the commands replace any other Settings page that is open. | — |
 | Tab state (new, restored, another tab busy) | Extensions are the same for every tab. | A responding tab keeps its toolset; disabling an extension mid-turn removes its widgets and commands at once, and its tools from the next request. |
-| Host (desktop or web) | Install from URL fails on Excel on the web, where the name prompt is unavailable, and freezes the taskpane on Excel for Mac, where the prompt never appears (confirmed in Excel for Mac). Sandboxed extensions need iframes, which every host provides. | No effect. |
+| Host (desktop or web) | Name entry is an in-pane dialog, not unsupported `window.prompt`. Sandboxed extensions need iframes. | No effect. |
 
 ## Cancel and interrupt
 
@@ -113,7 +113,7 @@ The list of installed extensions, their enabled state and their permissions are 
 
 **Notifications.** Toasts for every change and failure. Pi's own installs show only as tool cards, though the Plugins page updates live if open.
 
-**Settings and preferences.** Four [experimental flags](experimental.md) change extension behaviour: remote URLs, permission gates, sandbox rollback and Widget API v2.
+**Settings and preferences.** [Experimental flags](experimental.md) cover remote URLs, sandbox rollback and Widget API v2. Capability permissions are always enforced, not experimental.
 
 **Host differences.** See the Host row and [host differences](../cross-cutting/host-differences.md).
 
@@ -125,10 +125,12 @@ The list of installed extensions, their enabled state and their permissions are 
 
 - Uninstalling Snake removes it for good. It is seeded again only if the stored extension list is missing or unreadable, for example after the add-in's storage is cleared.
 - An install whose code fails to load is still listed, enabled, with "Error: …"; the user must uninstall it.
-- Revoking a permission from an extension that relies on it has no effect unless permission gates are on; with gates on, the extension's next use of that capability fails with an error naming it.
+- Revoking a required permission makes the extension's next use of that capability fail with actionable advice; enforcement has no experimental opt-out.
 - Two extensions may register commands of the same name; which one wins was not checked.
 
 ## Open questions and verification
+
+Merged source at `1f51cf8` replaces the browser name prompt, clears legacy widgets, enforces remote-source policy before sandbox activation and enforces capabilities unconditionally. The old HUB-08/12/16 observations and no-consent claims below are historical, not current defects. Source inspected; no new remote extension was fetched or activated during this pass.
 
 - Confirmed in Excel on the web (HUB checklist): `/plugins` opening "Plugins" with the Snake card ("../extensions/snake.js · host runtime") and the "Paste a plugin URL…" box; the expanded card ("Commands" `/snake`, "Permissions" with one switch per capability); "Snake: disabled" / "Snake: enabled" with `/snake` leaving and returning to the command menu; "Snake: register model providers revoked" / "… granted"; "Enter a URL first."; the uninstall question ("Uninstall "Snake"?", "This removes the plugin and its settings.") and Escape cancelling it with Snake kept; Escape going back to the Settings root.
 - **Install from URL is broken on Excel on the web.** Confirmed (HUB-12): "Install failed: Function window.prompt is not supported.", with the URL box already cleared. `src/commands/builtins/extensions-hub-plugins.ts:296` calls `window.prompt("Extension name:")`, which Office.js stubs to throw. Confirmed in Excel for Mac (HUB-16): no prompt appears and the taskpane stops responding until it is closed and Pi is opened again, so the remote-URL gate is never reached.
@@ -141,4 +143,4 @@ The list of installed extensions, their enabled state and their permissions are 
 - The Plugins page's busy guard is never set (`src/commands/builtins/settings-pages/extensions-pages.ts:175,182`), so double clicks can start two installs or toggles. Minor; not tried.
 - Install confirmation always lists the remote-URL defaults (`extensions-hub-plugins.ts:298`); confirmed with the prompt stubbed: the dialog listed default permissions and no "Higher-risk:" section.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

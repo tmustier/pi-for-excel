@@ -62,7 +62,7 @@ There is no busy phase.
 
 ### After saving
 
-The user lands on the "Settings" page, as for [rules](rules.md#after-saving). Existing cells do not change: conventions only affect formatting Pi does from now on (confirmed in Excel on the web: cells Pi had formatted kept their `€* #,##0_)…` string after the decimal places changed). Conventions are stored in the add-in's browser storage on this computer, not in the workbook.
+The overlay closes, as for [rules](rules.md#after-saving). Existing cells keep their formatting; conventions affect later formatting calls. Conventions remain in browser storage, not the workbook. Save writes changed scopes only and asks before replacing concurrent changes.
 
 ## The defaults
 
@@ -147,14 +147,16 @@ The Formats tab shares its overlay, its exits and its interrupts with the Rules 
 ## Edge cases
 
 - There is no control for the thousands separator in the editor. Pi can turn it off through its tool; the editor then shows the resulting format string.
-- The Percent preview shows "1,234.5%" for 1,234.5, but Excel's percent format multiplies by 100; the cell would show 123,450.0%.
+- The Percent preview uses ±0.125 and multiplies by 100, showing ±12.5% at one decimal; zero follows the format's zero section.
 - Renaming a custom format to a name that already exists is ignored without a message; the card keeps its old name (confirmed in Excel on the web).
 - A custom format named like a built-in one ("currency") does not replace the built-in.
 - Hand-editing a built-in format and saving it means Pi's "decimal places" and "currency symbol" adjustments no longer apply to that format.
 - Changing the header style affects only headers Pi formats afterwards with its "header" style.
-- When Pi changes the conventions mid-conversation, the next formatting call uses the new values at once, but the list of non-default values in Pi's instructions is only refreshed at the next refresh (the taskpane regaining focus, or rules being saved). In Excel on the web that refresh did not run at all, so the list stayed stale until a reload; see [rules](rules.md#open-questions-and-verification).
+- A conventions-tool update refreshes runtime guidance as well as changing what later formatting calls use. A reload is not required.
 
 ## Open questions and verification
+
+Earlier missing-listener and percent-scaling observations below are historical, superseded by #788. This pass independently read 0.125 formatted as 0.0% from real Excel and received "12.5%"; it did not rerun every editor preview. #804's consent and Undo wording above is retained.
 
 - Confirmed in Excel on the web (CONV checklist): the tab's hint and the six built-in cards with the default format strings above; the expanded Currency card (Format field, the three previews, "dp", "neg", "zero" and "symbol"); changing "dp" to 0 and the symbol to `€` rebuilding the string as `€* #,##0_);€* (#,##0);€* --_)`; Save writing it with "Rules saved"; Pi then formatting A1:A3 "with your currency style" and Excel getting exactly that string, showing "€1,235", "€(1,235)" and "€--"; a hand-typed Format removing the quick options and the previews reading "Custom"; the reset link restoring the built-in defaults; "Add custom format" adding "custom-1"; an invalid colour reverting without a message; a change on this tab raising "Discard changes?", and "Discard" leaving nothing saved.
 - After the `conventions` tool saves, it announces the change with an event nothing listens for (`src/tools/conventions.ts:90-94`; no listener for `pi:conventions-updated` in `src/`). Pi's instructions keep the old list of overrides and custom names until something else refreshes them. Read from code; probably a bug. Not checkable by hand without reading Pi's instructions.

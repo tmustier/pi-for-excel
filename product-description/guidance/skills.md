@@ -37,7 +37,7 @@ The page reads the bundled catalog, the external skills found in the [Files work
 
 - **Switching a skill off** saves at once and shows "Disabled skill: {name}" ("Enabled skill: {name}" when switched on). A switched-off skill disappears from what Pi is told and cannot be read with the `skills` tool; the switch is per name and applies to every workbook on this computer.
 - **Installing** takes the pasted markdown. It must start with a `---` block containing `name:` and `description:`; otherwise the toast is "Extensions: Invalid SKILL.md document: expected frontmatter with name and description." A valid skill is saved as `skills/external/{name}/SKILL.md` in the Files workspace, replacing any external skill of the same name, and the toast says "Saved external skill: {name}". The box clears.
-- **Removing** an external skill: expand its card (it shows "Location" and a red "Remove"), click "Remove". It is deleted at once, with no confirmation; the toast is "Removed external skill: {name}". Bundled skills cannot be removed, only switched off.
+- **Removing** an external skill: expand its card and click "Remove". A confirmation asks before deleting it; success says "Removed external skill: {name}". Bundled skills cannot be removed, only switched off.
 
 ### While saving
 
@@ -45,7 +45,7 @@ Each action takes a moment; switches are disabled until the page re-renders. The
 
 ### After an action
 
-The page re-renders with the new state, and every open tab's instructions to Pi are meant to be refreshed, taking effect from its next model request. In Excel on the web that refresh did not run, so the list of skills in Pi's instructions stayed as it was until the taskpane reloaded; see [rules](rules.md#open-questions-and-verification). The `skills` tool itself reads the current catalog, so a list or read call sees the change at once. Nothing is added to any transcript.
+The page re-renders and refreshes every open runtime's available skills without a reload. The `skills` tool reads the current catalog. The historical missing-refresh observation is superseded by #788; guidance-tool consent and Undo follow #804 below.
 
 ## External skills and the Files workspace
 
@@ -127,6 +127,8 @@ As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-03), Pi's
 - Removing an external skill leaves its on/off state stored; installing one with the same name later inherits it.
 
 ## Open questions and verification
+
+The older no-confirmation UI removal, stale-runtime catalog and workbook-mutation observations below are historical, superseded by #788/#790 and the #804 policy above. Source inspected; no new skill was installed during this pass.
 
 - Confirmed in Excel on the web (SKILLS checklist): `/skills` opening the page with "5 skills active (5 bundled, 0 external)", the five bundled skills with descriptions and "Bundled" badges, the empty external list and the install box; "Paste a SKILL.md document first."; the invalid-frontmatter and path-separator toasts; "Saved external skill: pd-test" with the box cleared and the count going to 6; "Disabled skill: {name}" / "Enabled skill: {name}" with the count following; the expanded external card ("Location" `skills/external/pd-test/SKILL.md`, "Remove"); "Removed external skill: {name}" with no confirmation; a reinstalled skill coming back switched off; an external "web-search" showing "Shadowed" with a disabled switch; the skill appearing in Files under "SKILLS"; Escape going back to "Settings" and then closing; Pi's "List skills" card.
 - **Every `skills` call is treated as a workbook mutation.** Confirmed in Excel on the web (SKILLS-20, SKILLS-21): in Confirm mode both `skills:list` and `skills:read` opened "Allow workbook mutation in Safe mode?" (body "Allow workbook mutation in Confirm mode?", "Tool: skills:list"); Escape on the read returned "Mutation cancelled by user (Confirm mode)." to Pi and the card read "Read skill web-search" with no source suffix. The `skills` tool is missing from the read-only list in `src/tools/execution-policy.ts:11-31`, so `getToolExecutionMode` falls through to `mutate` (`execution-policy.ts:111`). Looks like a bug. The dialog's title still says "Safe mode" while its body says "Confirm mode".

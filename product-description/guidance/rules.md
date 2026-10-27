@@ -8,7 +8,7 @@ Rules are standing instructions that Pi follows in every conversation without be
 
 The user types `/rules` and presses Enter. The Settings overlay opens on the "Rules" page, subtitled "Set guidance for all files, this workbook, and format conventions.", with the "All my files" tab selected and the cursor in an empty text box. The hint above it says "Guidance given to Pi in all your conversations. Pi can also update these when you tell it your preferences — e.g. "always use EUR".", and the counter under it says "0 / 2,000 chars".
 
-The user types "Always use EUR for currencies" and clicks "Save". A toast says "Rules saved". The overlay does not close: it goes back to the "Settings" page, and a second click on × or a second Escape returns the user to the chat. From the next model request in every tab, Pi has the rule.
+The user types "Always use EUR for currencies" and clicks "Save". A toast says "Rules saved" and the overlay closes. From the next refreshed model request in every tab, Pi has the rule.
 
 Alternatively the user just tells Pi in chat, "from now on, use EUR". Pi may call its `instructions` tool; a tool card labelled "Remember user rules" appears. In Auto the user rule saves immediately; Confirm first previews the complete new rules in "Change Pi’s guidance?". After saving, a toast offers Undo.
 
@@ -23,7 +23,7 @@ stateDiagram-v2
     discard_prompt --> editing : "Keep editing" or Escape (draft kept)
     discard_prompt --> settings_root : "Discard" (drafts dropped)
     discard_prompt --> closed : "Discard" after × or backdrop (drafts dropped)
-    editing --> settings_root : Save (all three tabs written, "Rules saved")
+    editing --> closed : Save (changed scopes written, "Rules saved")
     settings_root --> closed : × or Escape
     closed --> [*]
 ```
@@ -33,7 +33,7 @@ stateDiagram-v2
 Every way in opens the Settings overlay directly on the "Rules" page, on the "All my files" tab, with focus in the text box. When the page opens it reads three things once: the stored user rules, the stored workbook rules for the workbook it identifies at that moment, and the stored [conventions](conventions.md). These become three drafts. Switching between "All my files", "This file" and "Formats" swaps what is shown but keeps every draft; nothing is saved by switching.
 
 - **"All my files"** shows the user rules with the placeholder "Your preferences and habits, e.g. • Always use EUR for currencies • Format dates as dd-mmm-yyyy • Check circular references after writes" and a counter "{chars} / 2,000 chars".
-- **"This file"** adds a line "Workbook: {label}" naming the workbook, the hint "Guidance given to Pi only when it reads this file.", the placeholder "Notes about this workbook's structure, e.g. • DCF model for Acme Corp, FY2025 • Revenue assumptions in Inputs!B5:B15 • Don't modify the Summary sheet" and a counter out of 4,000. If Pi cannot identify the workbook (typically a new workbook that has never been saved), the hint is instead "Can't identify this workbook right now — try saving the file first." and the line reads "Workbook: Current workbook"; the text box still accepts typing (see [Open questions](#open-questions-and-verification)).
+- **"This file"** adds a line "Workbook: {label}" naming the workbook, the hint "Guidance given to Pi only when it reads this file.", the placeholder "Notes about this workbook's structure, e.g. • DCF model for Acme Corp, FY2025 • Revenue assumptions in Inputs!B5:B15 • Don't modify the Summary sheet" and a counter out of 4,000. Without an identity the hint is "Can't identify this workbook right now — try saving the file first.", the line reads "Workbook: Current workbook", and the text box is disabled rather than accepting unsavable text.
 - **"Formats"** shows the conventions editor, owned by [conventions](conventions.md).
 
 The limits are soft. The counter turns to a warning style when the text passes 2,000 (user) or 4,000 (workbook) characters, but typing and saving are not blocked.
@@ -48,7 +48,7 @@ Nothing is recorded when the user leaves without saving:
 
 ### Saving
 
-"Save" commits all three drafts at once: the user rules, the workbook rules (only if the workbook was identified), and the conventions, even the ones the user did not touch. Text is trimmed; an empty box clears that kind of rule. Then the toast "Rules saved" appears and the page goes back to the "Settings" page rather than closing the overlay.
+"Save" writes only scopes the user changed: user rules, identified-workbook rules and conventions. Unchanged drafts do not overwrite Pi's intervening changes. If a changed scope also changed in storage, "Rules changed" asks "Keep editing" or "Replace"; keeping it writes nothing and retains the draft. Text is trimmed; an empty changed box clears that scope. Success says "Rules saved" and closes the overlay. Cancel also closes it, after the unsaved-change guard; Back/Escape follow the Settings navigation stack.
 
 From that moment every open tab is told about the new rules. Each tab's instructions to the model are rebuilt and take effect from its next model request; nothing is added to any transcript. A tab that is responding at the time picks the change up at its next model response.
 
@@ -58,7 +58,7 @@ There is no busy phase. Saving is instantaneous from the user's point of view, t
 
 ### After saving
 
-The user lands on the "Settings" page of the same overlay. Rules are stored in the add-in's browser storage on this computer, not in the workbook file: they do not travel with the workbook to another computer or another Excel profile, and other people who open the workbook do not get them. Workbook rules are keyed to the workbook's identity, which is derived from where the file is saved; a copy saved elsewhere, or the same file moved or renamed, starts with no workbook rules. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
+The overlay closes. Rules remain in the add-in's browser storage, not in the workbook, and do not travel to another computer/profile. Workbook rules follow its location-derived identity; moving or copying it can change the scope. See [persistence and restore](../cross-cutting/persistence-and-restore.md).
 
 The editor has no undo/history. Pi's own changes offer a short-lived Undo toast (below). Rules cannot be reverted from [Backups](../workbook/backups-and-revert.md), because they are not part of the workbook.
 
@@ -78,7 +78,7 @@ The tool does not take the workbook lock or create a workbook backup. A successf
 | Thinking level | No effect. | No effect. |
 | Execution mode | User rules ask in Confirm; workbook rules always ask. Both offer Undo after saving. | Applied when the tool starts. |
 | Files in the workspace, or an overlay open | No effect from files; rules are not files and do not appear in the [Files workspace](../files/the-files-workspace.md). Opening `/rules` while the Settings overlay is already open on another page moves it to "Rules", passing that page's own unsaved-changes check first. | Opening another overlay is not possible while the Settings overlay covers the taskpane. |
-| Tab state (new, restored, another tab busy) | No effect; the page is not tied to a tab. Rules apply to every tab, including restored ones. | A responding tab keeps running behind the overlay. A save is meant to apply to it from its next model response; in Excel on the web it applied only after a reload (see [Open questions](#open-questions-and-verification)). |
+| Tab state (new, restored, another tab busy) | The page is not tied to a tab. Rules apply to every tab. | A responding tab continues; refreshed guidance applies to subsequent requests. |
 | Host (desktop or web) | Works the same on both. Workbook rules are unavailable whenever the workbook has no [workbook identity](../glossary.md#sessions-and-tabs): a new, never-saved workbook on any host, and a workbook opened signed out through a shared link on Excel on the web (confirmed). | No effect. |
 
 Saving while a tab is mid-turn changes Pi's instructions between two model responses of that turn; Pi is not told that they changed.
@@ -95,7 +95,7 @@ Saving while a tab is mid-turn changes Pi's instructions between two model respo
 | The provider fails | No effect. The page makes no network request. | Not applicable. |
 | The taskpane goes away | Unsaved drafts are lost; there is no warning on reload or close (confirmed in Excel on the web for a reload). | Saved rules are kept. |
 | The workbook changes underneath | Edits and selection changes do not affect the page. The workbook is identified once, when the page opens: saving a new workbook for the first time while the page is open does not make "This file" usable until the page is opened again (confirmed in Excel for Mac). | Not applicable. |
-| Focus moves to the grid or another window | The page and its drafts stay as they were. Returning to the taskpane is meant to refresh every tab's view of the workbook and re-read the saved rules; in Excel on the web it read nothing (see [Open questions](#open-questions-and-verification)). | Not applicable. |
+| Focus moves to the grid or another window | Drafts stay. Focus/visibility refresh re-reads runtime capabilities and guidance. | Not applicable. |
 | The context window fills | No effect on the page. Rules are part of Pi's instructions, so they count towards every model request; [compaction](../turn/context-and-compaction.md) summarizes the conversation, not the rules. | Not applicable. |
 
 After any interrupt the user is on the "Rules" page with the drafts as they were, unless the taskpane itself went away.
@@ -106,7 +106,7 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 **Workbook changes and recovery.** No interaction. Rules are not stored in the workbook, saving them creates no backup, and Excel's Undo does not affect them.
 
-**Other tabs and sessions.** Rules are not per tab or per session: one save updates every open tab. Two taskpanes on different workbooks share user rules and have their own workbook rules. A second taskpane is meant to learn of a change at its next refresh (focus, a save, or the next time it rebuilds its instructions). In Excel on the web it learned of it only when it reloaded (confirmed with a second browser tab on the same workbook); see [several taskpanes](../cross-cutting/several-taskpanes.md).
+**Other tabs and sessions.** One save refreshes every local runtime; other panes receive settings updates and refresh on focus/visibility. User rules are shared, workbook rules scoped. See [several taskpanes](../cross-cutting/several-taskpanes.md).
 
 **Execution mode and approvals.** User rules ask in Confirm; workbook rules always ask. Guidance approvals do not offer turn-wide approval.
 
@@ -128,15 +128,17 @@ After any interrupt the user is on the "Rules" page with the drafts as they were
 
 ## Edge cases
 
-- Saving with the "This file" tab while the workbook cannot be identified saves the user rules and conventions, shows "Rules saved", and silently drops whatever was typed under "This file".
+- Without workbook identity, "This file" is disabled; user rules and conventions remain editable.
 - Rules longer than the soft limit are accepted from both the page and the tool. The only consequences are the counter's warning style, the warning line in the tool result, and a larger prompt.
 - Clearing a box and saving removes that kind of rule; Pi is then told "(No rules set.)".
 - If user rules and workbook rules contradict each other, Pi is told to ask the user rather than pick one. Neither kind takes precedence.
 - Pi appends with a line break and no bullet; rules written by Pi and by the user can look different in the editor.
-- If Pi changes a rule while the Rules page is open, the page still shows the old text. Saving the page then writes the old text back over Pi's change, for both kinds of rule and for conventions, even if the user only edited one tab.
+- If Pi changes a rule while the page is open, an untouched scope is preserved on Save; a scope changed on both sides requires explicit replacement.
 - `/rules` typed while the Settings overlay is closed opens it; there is no way to type it while the overlay is open.
 
 ## Open questions and verification
+
+The original observations below are historical where they describe missing refresh, all-scope overwrites, unsavable input or Save/Cancel returning to Settings. Merged #788/#793 fix those paths; #804 adds the consent/Undo policy above. This pass observed focus inside Rules and disabled unidentified-file input in real Excel on the web, but did not rerun every guidance interaction.
 
 - Confirmed in Excel on the web (RULES checklist): every way in opening the page on "All my files" with focus in the text box; the hint, placeholder and "0 / 2,000 chars" counter; "This file" on an unidentified workbook ("Workbook: Current workbook", "Can't identify this workbook right now — try saving the file first.", a box that still accepts typing and counts to 4,000); "Rules saved" with the overlay going back to the "Settings" page; Cancel with no changes going back silently; the first Escape only leaving the text box; "Discard changes?" on Escape and on ×, "Keep editing" and Escape keeping the drafts, "Discard" after × closing the overlay; an unsaved convention triggering the question from "All my files"; the counter's warning style past 2,000 with Save still allowed; a blank box clearing the stored rules; Pi's `instructions` tool card "Remember user rules" with "Updated user rules (10/2000 chars):".
 - **Saving the page overwrites changes made while it was open.** Confirmed in Excel on the web (RULES-24): with the page open, Pi's `instructions` tool reported "Updated user rules (10/2000 chars):"; the page still showed an empty box, and Save wrote the empty value back, so the stored rule was gone. A value written straight into storage while the page was open was overwritten the same way. Save writes all three drafts read when the page opened (`src/commands/builtins/settings-pages/rules-page.ts:1035-1057`). Looks like a bug.

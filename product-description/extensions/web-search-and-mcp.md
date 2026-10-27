@@ -27,7 +27,7 @@ stateDiagram-v2
     page --> [*] : × or backdrop
 ```
 
-The page has no busy phase; each control saves at once and the page re-renders. Changes are meant to apply to Pi from the next request. In Excel on the web, changes that alter Pi's toolset (turning `mcp` on through its setting) reached Pi only after the taskpane reloaded; see [rules](../guidance/rules.md#open-questions-and-verification).
+The page has no busy phase; controls save and refresh runtime capabilities for subsequent requests without reloading. The earlier stale-toolset observation is historical; see [rules](../guidance/rules.md#open-questions-and-verification).
 
 ### The page
 
@@ -36,7 +36,7 @@ From the top:
 - **"External tools"** / "Allow Pi to search the web and call external services". On by default. Off removes `web_search`, `fetch_page` and `mcp` from every tab whatever the settings below; the toast is "External tools disabled".
 - **"Web search"** section, with one card "Jina Search (default)" (or the chosen provider) and a badge: "Off" when web search is disabled in every scope, "Connected" when a key is saved, otherwise "No API key". Expanding the card shows:
   - "Provider": "Jina Search (default)", "Firecrawl", "Serper.dev", "Tavily", "Brave Search". Changing it toasts "Web search provider set to {provider}". Each provider keeps its own key.
-  - "API key": a password box prefilled with the masked saved key, then "Validate", "Save" and "Clear". Validate shows "✓ {message}" or "✗ {message}"; with an empty box and no saved key, "No API key to validate.". Save with an empty box says "Enter an API key first."; otherwise "Saved {key label}", or a warning such as "Jina keys usually start with "jina_" — double-check the value." with "Key saved anyway — use Validate to test it.". Clear toasts "Cleared {key label}".
+  - "API key": an empty password box with the saved mask as its placeholder, then "Validate", "Save" and "Clear". Validate uses the typed key or the stored key. Empty Save says "Enter an API key first." and preserves the stored key; the mask is never saved as a replacement credential. Clear removes the saved key explicitly.
   - "Availability": "Session", "Workbook ({label})", "Session + workbook ({label})", "Session only" or "Off in all scopes".
   - "Scope controls": "Enable for this session" and "Enable for workbook ({label})" (or "Workbook scope unavailable" for an unsaved workbook). Web search is on if either is on. A workbook never configured counts as on; the session toggle starts off, except when the workbook cannot be identified (never saved, or opened signed out through a link on Excel on the web): then the workbook toggle is disabled and the session toggle starts on, so "Availability" reads "Session" (confirmed).
 - **"Extension connections"**: connections registered by [extensions](the-extensions-hub.md), or "Installed extensions haven't registered any connections."
@@ -49,7 +49,7 @@ Any failure while saving shows "Extensions: {error}".
 
 "+ Add server" opens a form with "Server name", "https://server-url/rpc" and "Bearer token (optional)", and "Add". Errors come back as "Extensions: {error}", for example "Extensions: MCP server name cannot be empty." or "Extensions: MCP server URL cannot be empty."; the form folds away but keeps what was typed, and "+ Add server" shows it again (confirmed). Success toasts "Added MCP server" and clears the form. Only HTTP(S) servers are supported.
 
-Each server card shows "URL", "Token" (masked, or "(none)"), an "Enabled" toggle, "Test" and "Remove". "Test" connects, lists the server's tools and reports "{name}: reachable ({count} tools, direct)" (or "proxy"), or "{name}: {error}" (confirmed in Excel on the web: "everything: reachable (16 tools, direct)" for a local MCP test server; a disabled server tests as "everything: disabled"). "Remove" deletes at once without asking: "Removed MCP server: {name}".
+Each server card shows "URL", "Token" (masked, or "(none)"), an "Enabled" toggle, "Test" and "Remove". "Test" connects and lists tools, reporting reachability, disabled state or a specific error. Remove deletes the configuration immediately, without confirmation. MCP also has its own session/workbook scope controls; server reachability alone does not enable it for Pi.
 
 As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-04), each expanded server also has "Remembered tools": grants with a Revoke button per tool, or "None". The hint says "Allowed in Auto; Confirm still asks every time". Grants persist locally, scoped to server id, exact endpoint URL and tool name; changing the endpoint does not reuse consent. Revoke affects subsequent calls, not a call already sent.
 
@@ -125,11 +125,12 @@ The first time the taskpane starts with a provider connected, a bar under the he
 
 - A supported model shows "Native search: {provider}" and "Uses your connected model provider. The key below is an optional fallback." Unsupported/no-key setup shows "Add a search key to let Pi search. Search is unavailable until a native provider or search key is connected."
 - Clearing the active provider's key while a Jina key exists makes searches fall back to Jina silently, apart from the warning line on the card, which then quotes "Web search API key is missing…" (confirmed with a mocked provider).
-- An MCP server can be added, enabled and tested successfully while Pi still cannot use it, because the `mcp` tool is not in Pi's toolset (confirmed: "everything: reachable (16 tools, direct)" with no `mcp` tool).
-- The bundled "mcp-gateway" skill tells users to "Enable **MCP Gateway** for session and/or workbook scope" (`skills/mcp-gateway/SKILL.md:32`), a control that does not exist.
+- A reachable server still requires enabled external tools and MCP scope. The scope controls let the user enable MCP independently of web search.
 - Disabling a workbook's web search on one computer does not affect another computer.
 
 ## Open questions and verification
+
+The masked-key overwrite, absent MCP scope controls and stale-runtime observations below are historical, superseded by #788/#790. MCP configuration removal still has no confirmation. #804's remembered-tool grant policy above is retained. Source inspected; no new search key or remote MCP action was submitted in this pass.
 
 - Confirmed in Excel on the web (WEB checklist): `/tools` opening "Connections" in the order External tools, Web search, Extension connections, MCP servers, Bridges; the Jina card ("Fast web search API with free tier.", "No API key"), its provider list and password box; "Saved Jina API key" and the badge turning "Connected"; "Enter an API key first.", "Cleared Jina API key", "No API key to validate."; "Web search provider set to Tavily"; "External tools disabled" / "External tools enabled"; MCP add, "Added MCP server", the card (URL, "(none)" token, Enabled, Test, Remove), "pdtest: Failed to fetch" for an unreachable server, and "Removed MCP server: pdtest" with no confirmation; a real search turn ending in the tool error and the setup card.
 - SE-07 acceptance: real Excel on the web with GPT-6 Luna returned an official Bank of England source through ChatGPT/Codex native search with no separate search key. An unsupported Mistral/no-key control had no `web_search` tool. The bundled search skill now describes native-first search and explicitly requires a key for third-party fallback. Other native routes were inspected but not live-verified with provider credentials in this pass.

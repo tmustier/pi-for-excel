@@ -2,7 +2,7 @@
 
 ## Summary
 
-`/experimental` opens the "Experimental features" page of the [Settings overlay](../setup/settings.md). The Settings root lists it as "Experimental features" / "Early previews and feature flags". The page holds five on/off flags, all off by default, in two sections. "Experimental features" ("Features in development, may evolve rapidly.") has "Dark mode" and "Extension widget API v2". "Advanced / Security controls" ("Power-user toggles for extension trust, permissions, and rollback behavior.") has "Remote extension URLs", "Extension permission gates" and "Extension sandbox rollback". The same flags can be set by typing `/experimental on|off|toggle <feature>`, and the command also sets the tmux and Python bridge URLs and tokens. Flags are stored per computer (in the browser's local storage for the add-in) and apply to every tab and workbook. `/experimental` is not busy-allowed; see [the command menu](../commands/the-command-menu.md) for what happens when it is typed during a turn.
+`/experimental` opens the "Experimental features" page of [Settings](../setup/settings.md). Three flags, all off by default, cover Extension widget API v2, Remote extension URLs and Extension sandbox rollback. Theme is a normal Settings preference; capability permissions are always enforced. `/experimental on|off|toggle <feature>` changes flags; other subcommands configure bridge URLs/tokens. Preferences are local to this browser origin and shared across tabs/workbooks. It can open while busy; see [the command menu](../commands/the-command-menu.md).
 
 At this commit there is no flag for the tmux bridge, the Python / LibreOffice bridge, direct Office.js execution, the Files write/delete gate or debug. Those capabilities are either always present or controlled elsewhere; [Not flags](#not-flags) says where.
 
@@ -26,7 +26,7 @@ stateDiagram-v2
     toast --> [*]
 ```
 
-There is no busy phase and no confirmation. A switch saves its flag immediately and shows "{title}: Enabled" or "{title}: Disabled". The typed form shows "{title}: enabled" or "{title}: disabled" (lower case). Feature names accept the slug or an alias, ignoring case. An unknown name gives "Unknown feature: {feature}. Available: dark-mode, remote-extension-urls, extension-permissions, extension-sandbox-rollback, extension-widget-v2". `/experimental help`, or an action with no feature, shows the usage line from `experimental.usage.full` with the list of features. `/experimental on mcp` redirects with "External tools (including MCP) are managed in /tools, not /experimental.".
+There is no busy phase and no confirmation. A switch saves immediately and shows "{title}: Enabled" or "{title}: Disabled". Typed forms use lower-case "enabled"/"disabled". Feature names accept slugs or aliases, ignoring case. An unknown name lists remote-extension-urls, extension-sandbox-rollback and extension-widget-v2. `/experimental help` lists supported features. MCP belongs to `/tools`; permissions are always enforced, not a feature switch.
 
 Opening the page or reading a value changes nothing. Each change takes effect immediately for every tab; the descriptions below say when the user notices.
 
@@ -34,7 +34,7 @@ Opening the page or reading a value changes nothing. Each change takes effect im
 
 ### Dark mode
 
-`dark-mode`. "Enable Office/theme-driven dark mode for the task pane UI." When on, the taskpane follows Office's theme and falls back to the operating system's light or dark preference when Office does not report one. It updates live when the flag or the theme changes (confirmed in the standalone taskpane with a dark system preference, which turned it dark and back to light live; Excel on the web in the orb reports a white Office theme, so the taskpane stayed light there). When off, the taskpane is always light. See [language and theme](../ui/language-and-theme.md).
+The former flag is removed. Theme now offers Follow Office (default), Light and Dark in Settings; without a usable Office theme, Follow Office uses light. See [language and theme](../ui/language-and-theme.md). This heading remains for historical links, not as an available flag.
 
 ### Extension widget API v2
 
@@ -42,11 +42,11 @@ Opening the page or reading a value changes nothing. Each change takes effect im
 
 ### Remote extension URLs
 
-`remote-extension-urls`. "Allow loading extensions from remote http(s) URLs." Warning: "Unsafe: remote extension code can read workbook data and credentials." When off, an extension installed from an http(s) address loads anyway, because URL installs run in the sandbox, which does not check the flag (confirmed in Excel on the web; see [Open questions](#open-questions-and-verification)). Only one loaded in the taskpane (with "Extension sandbox rollback" on; read from code) fails with "Remote extension URL imports are disabled by default. Set localStorage['pi.allowRemoteExtensionUrls']='1' to opt in (unsafe)." on its card.
+`remote-extension-urls`. "Allow loading extensions from remote http(s) URLs." Off by default. Installation, host loading and sandbox activation enforce the opt-in before fetching/activating remote code; sandboxing does not bypass it. Enabling it is not a grant of every capability.
 
 ### Extension permission gates
 
-`extension-permissions`. "Enforce per-extension capability permissions when extensions activate." Only when this is on do the "Permissions" switches on a plugin card limit what the extension can do. A denied capability makes the extension's call fail with an error naming the capability. When off (the default), every extension can use every capability.
+This former flag has been removed. Plugin capability permissions are always enforced; denial names the missing capability and points to its Settings permission. This heading is retained for older links, not as an available switch.
 
 ### Extension sandbox rollback
 
@@ -66,7 +66,7 @@ How the bridges themselves behave is out of scope.
 
 - **tmux bridge, Python / LibreOffice bridge.** Pi always has its `tmux`, `python_run`, `python_transform_range` and `libreoffice_convert` tools. tmux needs a reachable bridge. Python falls back to in-browser Python when no bridge is reachable. Using the local bridge first asks "Allow local Python / LibreOffice execution?" with "Allow bridge", remembered per bridge URL.
 - **Direct Office.js execution.** `execute_office_js` is always available. In Auto mode plain Excel API code runs without asking; risky code, or any code in Confirm mode, asks "Allow direct Office.js execution?" with "Allow once". Owned by [Confirm mode and approvals](../workbook/confirm-mode-and-approvals.md).
-- **Files write/delete.** No gate. Pi can write and delete workspace files without asking; see [the Files workspace](../files/the-files-workspace.md).
+- **Files write/delete.** Both modes ask before overwriting/deleting files Pi did not create in this chat; new files and changes to its own files do not ask. See [the Files workspace](../files/the-files-workspace.md).
 - **Debug.** A separate command, `/debug [on|off|toggle|status]` ("Toggle debug UI (usage breakdown, extra diagnostics)"), with the toasts "Debug enabled", "Debug disabled", "Debug is enabled" / "Debug is disabled" and "Usage: /debug [on|off|toggle|status]". When on, the [status bar](../ui/the-status-bar.md)'s context meter shows a usage breakdown and extra diagnostics are kept. Stored per computer.
 
 ## Modifiers
@@ -77,7 +77,7 @@ How the bridges themselves behave is out of scope.
 | Thinking level | No effect. | No effect. |
 | Execution mode | No effect on the flags. Approvals for bridges and Office.js are described above. | No effect. |
 | Files in the workspace, or an overlay open | The page is part of the Settings overlay. | — |
-| Tab state (new, restored, another tab busy) | Flags are the same for every tab. | `/experimental` cannot be run while the active tab is busy. The page can still be reached through Settings, and a change applies at once; a running turn is not interrupted. |
+| Tab state (new, restored, another tab busy) | Flags are the same for every tab. | The page can open while busy; changes do not themselves stop a turn. |
 | Host (desktop or web) | Dark mode depends on whether the host reports an Office theme. | No effect. |
 
 ## Cancel and interrupt
@@ -111,7 +111,7 @@ How the bridges themselves behave is out of scope.
 
 **Notifications.** A toast for each change.
 
-**Settings and preferences.** The extension flags change what the [Extensions hub](the-extensions-hub.md) promises; dark mode changes the theme.
+**Settings and preferences.** Extension flags change the [Extensions hub](the-extensions-hub.md); Theme is a separate Settings preference.
 
 **Host differences.** See the Host row and [host differences](../cross-cutting/host-differences.md).
 
@@ -122,11 +122,13 @@ How the bridges themselves behave is out of scope.
 ## Edge cases
 
 - The footer tip does not mention `python-bridge-url` or `python-bridge-token`; only the usage text does.
-- Turning on "Extension permission gates" can break extensions that were working, because the restricted defaults for code and URL installs suddenly apply.
+- Capability restrictions always apply; there is no permission-gates switch to turn off.
 - Turning on "Extension sandbox rollback" moves Pi-written extensions into the taskpane with full access.
-- A flag flipped while an extension is loaded affects it only when it is next loaded (enabled, reloaded or the taskpane restarted), except dark mode, which is live.
+- Extension rollout flags affect the next activation (enabled, reloaded or restarted); Theme updates live through Settings, not through a flag.
 
 ## Open questions and verification
+
+Merged #790 removes the permission-gates flag and closes the sandbox remote-source bypass. #802 moves Theme out of experiments, leaving three extension flags; #805 allows local settings commands while busy. Earlier five-flag, dark-mode and busy-refusal observations below are historical, not the current contract. Source inspected, not a live extension-install acceptance pass.
 
 - Confirmed in Excel on the web (EXP checklist): the page's two sections, five rows, warnings, "Ready" and the footer tip, word for word; "Dark mode: Enabled" / "Dark mode: Disabled" from the switch with the taskpane staying light under Office's light theme; the typed forms "Dark mode: enabled" / "disabled", the "Unknown feature: foo. Available: …" toast, the `/tools` redirect for `mcp`, the full usage text for `help`, "Python bridge URL: https://localhost:3340", "Tmux bridge token is not set. Example: /experimental tmux-bridge-token <token>"; "Can't run /experimental while Pi is busy"; Escape going back to the Settings root and then closing.
 - The task brief's flag list (tmux bridge, Python/LibreOffice bridge, Office.js execution, files write/delete gate, debug) does not match this commit. Those are not experimental flags; see [Not flags](#not-flags). `src/experiments/flags.ts:36-86` defines exactly five (confirmed on the page).
@@ -134,4 +136,4 @@ How the bridges themselves behave is out of scope.
 - The page's "flag-only" readiness text ("Currently flag-only — this capability is planned but not wired yet.") cannot appear: every flag is marked wired (every row showed "Ready").
 - Dark mode under a real dark Office theme (EXP-03 ran in the standalone taskpane), the widget v2, permission and sandbox flags' effect on an installed extension, and the tmux status toast were not tried.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).
