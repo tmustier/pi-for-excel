@@ -177,14 +177,22 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
   });
 });
 
-void test("copy fallback selects the full command in Chromium", async () => {
+void test("copy command still copies when the async clipboard is refused", async () => {
   await withBrowserPage("src/ui-gallery.html", async (page) => {
+    // Excel on the web frames the taskpane without clipboard-write permission.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) } });
+      document.documentElement.dataset.copied = "";
+      document.addEventListener("copy", () => {
+        document.documentElement.dataset.copied += document.getSelection()?.toString() ?? "";
+      }, true);
+    });
     const row = page.locator(".pi-command-copy").filter({ hasText: "npx pi-for-excel-proxy" });
     await row.waitFor({ state: "visible", timeout: 10_000 });
     await row.getByRole("button", { name: "Copy command" }).click();
 
-    await page.waitForFunction(() => window.getSelection()?.toString() === "npx pi-for-excel-proxy");
-    assert.equal(await page.evaluate(() => window.getSelection()?.toString()), "npx pi-for-excel-proxy");
+    await row.getByRole("button", { name: "Copied" }).waitFor({ state: "visible", timeout: 3_000 });
+    assert.equal(await page.evaluate(() => document.documentElement.dataset.copied), "npx pi-for-excel-proxy");
   });
 });
 
@@ -446,8 +454,6 @@ void test("recently closed tabs and experimental settings are reachable by comma
     const closeButtons = page.getByRole("button", { name: "Close tab" });
     await closeButtons.first().waitFor({ state: "visible" });
     assert.equal(await closeButtons.count(), 2);
-    // An inactive tab's × appears on hover.
-    await page.locator(".pi-session-tab").first().hover();
     await closeButtons.first().click();
     await page.waitForFunction(() => document.querySelectorAll('.pi-session-tab__close').length === 0);
 
