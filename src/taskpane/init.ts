@@ -925,6 +925,7 @@ export async function initTaskpane(opts: {
           onWriteCommitted: (event) => {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
+            autoContext.noteOwnStructureChange();
           },
         },
         {
@@ -964,6 +965,7 @@ export async function initTaskpane(opts: {
 
     const initialModel = getActiveRuntime()?.agent.state.model
       ?? modelRefreshOwner.snapshot().defaultModel;
+    const autoContext = createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId });
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
@@ -982,7 +984,8 @@ export async function initTaskpane(opts: {
       convertToLlm: createConvertToLlm({
         getContextWindow: () => runtimeAgent?.state.model.contextWindow,
       }),
-      ...createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId }),
+      prepareRequest: autoContext.prepareRequest,
+      transformContext: autoContext.transformContext,
       streamFn,
     });
 

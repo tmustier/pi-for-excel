@@ -47,27 +47,16 @@ export interface AutoContextSources {
   readSelection?: () => Promise<SelectionContext>;
 }
 
-const MAX_REQUEST_REMINDER_CHARS = 300;
-
-/** The text of the user's latest prompt, shortened, for the selection note. */
-function latestRequestText(messages: readonly AgentMessage[]): string | null {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i];
-    if (message?.role !== "user" && message?.role !== "user-with-attachments") continue;
-    const content = message.content;
-    const raw = typeof content === "string"
-      ? content
-      : content.flatMap((block) => (block.type === "text" ? [block.text] : [])).join(" ");
-    const text = raw.replace(/\s+/g, " ").trim();
-    if (text.length === 0) return null;
-    return text.length > MAX_REQUEST_REMINDER_CHARS ? `${text.slice(0, MAX_REQUEST_REMINDER_CHARS - 1)}…` : text;
-  }
-  return null;
-}
-
 export interface AutoContext {
   prepareRequest: PrepareRequest;
   transformContext: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
+  /**
+   * This runtime's own mutation changed the workbook structure. The tool
+   * result already says what changed, so the new blueprint waits for the
+   * next turn instead of arriving after the tool result as fresh input (which
+   * made a model repeat the change).
+   */
+  noteOwnStructureChange: () => void;
 }
 
 const WORKBOOK_ID_TIMEOUT_MS = 1200;
@@ -141,11 +130,15 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
   const loadSelection = sources.readSelection ?? readSelectionContext;
   // Each runtime (chat tab) reads the shared edit log from its own cursor.
   let changeCursor = sources.changeTracker.cursor();
+  let ownStructureChangePending = false;
 
   async function collectNotes(messages: readonly AgentMessage[]): Promise<AutoContextMessage[]> {
     const notes: AutoContextMessage[] = [];
     const compacted = messages.some((message) => message.role === "compactionSummary");
     const workbookId = await attempt("workbook identity", loadWorkbookId, WORKBOOK_ID_TIMEOUT_MS);
+    const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
+    const deferStructure = midTurn && ownStructureChangePending;
+    if (!midTurn) ownStructureChangePending = false;
 
     const blueprint = await attempt("workbook blueprint", () => loadBlueprint(workbookId), BLUEPRINT_TIMEOUT_MS);
     if (blueprint && blueprint.trim().length > 0) {
@@ -154,7 +147,7 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
       let reason: string | null = null;
       if (!last) reason = compacted ? "re-sent after the conversation was compacted" : "initial";
       else if (last.workbookId !== workbookId) reason = "workbook switched";
-      else if (last.key !== key) reason = "structure changed";
+      else if (last.key !== key && !deferStructure) reason = "structure changed";
       if (reason) {
         notes.push(note("workbook", [
           `Workbook structure (${reason}). Sizes are as of this note; a new note follows when sheets, tables, names, rows or columns change.`,
@@ -215,17 +208,22 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
     const text = selection?.text
       ?? "Current selection: unavailable (Excel did not answer in time).";
     // This note is the last user-role message, after tool results mid-turn.
-    // Some models answered it as if it were the request; say what it is and
-    // restate the request it belongs to.
-    const request = latestRequestText(messages);
-    const reminder = request
-      ? `(Background from Excel, not a message from the user: do not reply to it. Carry on with the user's request: "${request}")`
-      : "(Background from Excel, not a message from the user: do not reply to it. Carry on with the user's latest request.)";
+    // Some models answered it as if it were the request, so it says what it
+    // is. It must not restate the request: after a successful tool call that
+    // read as "do it again" and looped a mutation.
+    const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
+    const reminder = midTurn
+      ? "(Background from Excel, not a message from the user and not a new request. Continue from the tool results above; do not repeat steps that already succeeded.)"
+      : "(Background from Excel, not a message from the user.)";
     return [
       ...messages,
       { role: "user", content: [{ type: "text", text: `${AUTO_CONTEXT_PREFIX} ${text}\n\n${reminder}` }], timestamp: Date.now() },
     ];
   };
 
-  return { prepareRequest, transformContext };
+  return {
+    prepareRequest,
+    transformContext,
+    noteOwnStructureChange: () => { ownStructureChangePending = true; },
+  };
 }
