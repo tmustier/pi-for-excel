@@ -1,8 +1,10 @@
 # Welcome and login
 
+Setup choices, no-provider sends and subscription billing notices revised for SE-01/02/06 in [PR #811](https://github.com/tmustier/pi-for-excel/pull/811). This revision is for that PR's behavior and merges only after the code.
+
 ## Summary
 
-Logging in connects Pi to a [provider](../foundations/models-and-providers.md) so that it has a model to answer with. The user meets it in three places that share one design: the *welcome overlay* that greets a taskpane with no provider ("Pi for Excel", "Connect an AI provider to get started", "Select provider"), Settings → "Model providers" (reached with `/login`, see [settings](settings.md)), and the *connection dialog* "Connect {label}" that a turn opens when its model's provider has no credential. Each provider is a row; expanding it offers "Login with {label}" for providers that support OAuth and an API-key field with "Save" for all. The welcome overlay appears only when the taskpane opens with no provider connected, on every host; it is not available on demand. Logging in does not need the tab to be idle, but the connection dialog only exists inside a turn. Nothing here sends anything to a model.
+Logging in connects Pi to a [provider](../foundations/models-and-providers.md) so that it has a model to answer with. The user meets it in three places: the welcome overlay ("Pi for Excel", "Connect an AI provider to get started", "Select provider"), Settings → "Model providers" (reached with `/login`, see [settings](settings.md)), and the provider-specific connection dialog when an existing turn loses its credential. Rows explain their setup needs before expanding. The welcome overlay opens at startup with no provider and reopens on a no-provider send or model-control click. Logging in does not need the tab to be idle. Nothing here sends anything to a model.
 
 ## The simple case
 
@@ -33,14 +35,14 @@ stateDiagram-v2
 
 ### Arriving at the welcome overlay
 
-The welcome overlay is decided once, while the taskpane opens. Pi first restores stored logins (waiting about six seconds); if no provider is connected after that, the overlay is shown over the empty tab. If a slow restore connects a provider later, the overlay closes by itself. Disconnecting the last provider later does not bring it back; it returns only the next time the taskpane opens with no provider.
+At startup Pi first restores stored logins (waiting about six seconds); if no provider is connected after that, the welcome overlay is shown over the empty tab. If a slow restore connects a provider later, the overlay closes by itself. With no provider connected, the model control reads "Connect a provider". Clicking it, or trying to send a message, reopens the welcome choices. The unsent draft and attachment chips remain; no turn starts and no provider-specific key dialog guesses which service the user meant.
 
 Before it appears, Pi prepares the proxy so that OAuth can work before the user ever sees Settings: if no proxy URL is stored it stores the default ("https://localhost:3003"), and if the proxy is off but a local proxy answers at that URL, Pi turns it on. See [the proxy](the-proxy.md).
 
 The card offers:
 
 - **"English" and "中文"**, which switch the language and reload the taskpane at once. See [language and theme](../ui/language-and-theme.md).
-- **The provider rows** under "Select provider", in the order listed in [models and providers](../foundations/models-and-providers.md#connecting-a-provider). OAuth providers carry a short description ("Claude Pro/Max", "Plus/Pro subscription", "Gemini via Google account", "Gemini/Claude/GPT-OSS"); the two Google and OpenAI API rows say "API key".
+- **The provider rows** explain prerequisites before a click. No-setup options come first: OpenAI (API), Google Gemini (API), DeepSeek, Mistral, Groq and xAI / Grok, each saying "Paste an API key: no setup". Sign-in providers follow, saying "Sign in: needs the helper app on this computer (or paste an API key)" alongside their subscription descriptions. Amazon Bedrock is last, saying "Needs AWS credentials and setup". The same rows appear in Settings; see [models and providers](../foundations/models-and-providers.md#connecting-a-provider).
 - **"Use a custom OpenAI-compatible gateway"**, which closes the overlay and opens Settings on the gateway page ([custom gateways](custom-gateways.md)). If Settings cannot open, the toast says "Cannot open custom gateway settings".
 - **"Having login trouble? Configure local proxy"**, a toggle that reveals the proxy panel (described below) and becomes "Hide proxy settings".
 
@@ -58,6 +60,8 @@ Nothing is stored when:
 - **The user cancels an OAuth step**: "Cancel" in the proxy gate, "Cancel" or Escape in the login prompt. The row returns to "Login with {label}" with no message. A browser window that was already opened stays open.
 
 ### Committing a credential
+
+**Claude Pro/Max billing notice.** Starting a session on an Anthropic subscription model, or switching to one, adds one warning-styled transcript notice: "Anthropic subscription auth is active. Third-party harness usage draws from extra usage and is billed per token, not your Claude plan limits. Manage extra usage at https://claude.ai/settings/usage." It also says "Turn this warning off in Settings → Anthropic subscription warning." It stays a single notice when the session reloads or changes model again. API-key authentication does not trigger it. The setting is on by default, applies across sessions on this computer, and turning it off hides the notice. It is interface history only: Pi never sends it in the system prompt or model context.
 
 **API key.** "Save" (or Enter in the field) stores the key as typed, after the checks above. The button says "Testing…" while it is stored, but Pi does not contact the provider; a wrong key is accepted and fails on the first turn. If storage fails, the error is "Failed to save key: {msg}".
 
@@ -148,7 +152,7 @@ After a cancelled login the user is back on the expanded row with the key field 
 
 ## Edge cases
 
-- Dismissing the welcome overlay leaves a working taskpane with no provider: the status bar names a fallback OpenAI model, "Select model" lists nothing ("No matching models"), and the first message opens "Connect OpenAI (API)", whatever provider the user meant to use.
+- Dismissing the welcome overlay leaves the composer usable but not connected. "Connect a provider" and a send both return to the welcome choices without losing the draft.
 - No disclosure bar is shown while no provider is connected, and connecting from the welcome overlay does not bring it in during that session.
 - The welcome overlay can close itself without any click if a stored login finishes restoring after it appeared.
 - A second "Login with {label}" started before the first one's prompt appears starts a second flow; whichever prompt opens last replaces the other.
