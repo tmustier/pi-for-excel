@@ -529,7 +529,12 @@ export interface VerifyOptions {
   sentEmptyCount: number;
   /** Tables overlapping the target before the write (`WriteTargetInspection.tableNames`). */
   tablesBefore: string[] | null;
+  /** Approximate serialized size of what was sent; long text makes a full read-back exceed Excel's response limit. */
+  sentChars: number;
 }
+
+/** Above this many sent characters a full read-back (values and formulas) risks Excel's response payload limit. */
+const FULL_VERIFY_CHAR_LIMIT = 1_500_000;
 
 /**
  * Read back what Excel now holds and compare it with what was sent.
@@ -581,7 +586,7 @@ export async function verifyWrittenRange(
   const tablesAfter = options.tablesBefore ? target.getTables(false) : null;
   tablesAfter?.load("items/name");
 
-  if (cellCount(block) <= FULL_VERIFY_CELL_LIMIT) {
+  if (cellCount(block) <= FULL_VERIFY_CELL_LIMIT && options.sentChars <= FULL_VERIFY_CHAR_LIMIT) {
     target.load("values,formulas");
     await context.sync();
     const values = toCellGrid(target.values);

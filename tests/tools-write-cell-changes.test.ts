@@ -343,6 +343,16 @@ function writtenRowCount(host: FakeExcelHost, sheet: string, rows: number): numb
   return [...Array(rows).keys()].filter((index) => host.sheet(sheet).value(`A${index + 1}`) !== "").length;
 }
 
+void test("a write of long text under the cell limit is verified in part, not read back in one oversized call", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("long-text", { start_cell: "Big!A1", values: bigRows(15_000) });
+    assert.equal(result.isError, undefined, text(result));
+    assert.equal(result.details.verification, "sampled");
+    assert.match(text(result), /Verification is partial/u);
+  });
+});
+
 void test("Stop before the first chunk writes nothing and says so", async () => {
   const host = new FakeExcelHost(["Big"]);
   const stop = new AbortController();
@@ -403,13 +413,64 @@ void test("a chunk Excel never confirmed is reported as unknown, not as unwritte
 void test("a timeout while reading the target says nothing was written, without calling the outcome unknown", async () => {
   const host = new FakeExcelHost();
   host.failSync = { at: 1, error: Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }) };
+  host.failSync.error.message = "Excel did not answer within 60 s. The outcome is unknown: the request may or may not have been applied.";
   await withFakeExcel(host, async () => {
     const result = await createWriteCellsTool(noBackups).execute("timeout-inspect", { start_cell: "Sheet1!H7", values: [["x"]] });
 
     assert.equal(result.isError, true);
-    assert.match(text(result), /nothing was written to Sheet1!H7\. Excel did not answer \(.*\) before the change was sent/u);
+    assert.match(text(result), /nothing was written to Sheet1!H7\. Excel did not answer before the change was sent, so nothing was written\./u);
     assert.doesNotMatch(text(result), /unknown/u);
     assert.equal(host.sheet("Sheet1").value("H7"), "");
+  });
+});
+
+void test("after an Excel.run timeout mid-write, the abandoned run writes nothing more than the result reports", async () => {
+  const host = new FakeExcelHost(["Big"]);
+  await withFakeExcel(host, async () => {
+    // As #792's excelRun does: race the whole Excel.run against a timeout. The run itself goes on.
+    const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
+    Reflect.set(globalThis, "Excel", {
+      run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
+        fakeRun.run(callback),
+        new Promise((_, reject) => { setTimeout(() => {
+          reject(Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }));
+        }, 30); }),
+      ]),
+    });
+    // The third sync (the second chunk) is held past the timeout, then lands.
+    host.delaySync = { at: 3, ms: 80 };
+    const result = await createWriteCellsTool(noBackups).execute("timeout-abandoned", { start_cell: "Big!A1", values: bigRows(15_000) });
+    const reported = text(result);
+    await new Promise((resolve) => { setTimeout(resolve, 200); });
+    const landed = writtenRowCount(host, "Big", 15_000);
+
+    const written = /Partly written\*\* — Big!A1:A(\d+)/u.exec(reported);
+    const uncertain = /rows (\d+)–(\d+) \(Big!A\d+:A\d+\) may or may not have been written/u.exec(reported);
+    assert.ok(written?.[1] && uncertain?.[2], reported);
+    // Everything that landed, even after the result was returned, is within what the result allowed for.
+    assert.ok(landed <= Number(uncertain[2]), `landed ${landed} rows; result: ${reported}`);
+    assert.ok(landed >= Number(written[1]));
+  });
+});
+
+void test("fill_formula that times out while inspecting never fills afterwards", async () => {
+  const host = new FakeExcelHost();
+  await withFakeExcel(host, async () => {
+    const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
+    Reflect.set(globalThis, "Excel", {
+      run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
+        fakeRun.run(callback),
+        new Promise((_, reject) => { setTimeout(() => {
+          reject(Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }));
+        }, 30); }),
+      ]),
+    });
+    host.delaySync = { at: 1, ms: 80 }; // the first read is held past the timeout
+    const result = await createFillFormulaTool().execute("fill-timeout", { range: "Sheet1!B1:B3", formula: "=A1" });
+    await new Promise((resolve) => { setTimeout(resolve, 200); });
+
+    assert.match(text(result), /nothing was written to Sheet1!B1:B3/u);
+    assert.equal(host.sheet("Sheet1").formula("B3"), "");
   });
 });
 

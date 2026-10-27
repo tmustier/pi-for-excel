@@ -190,10 +190,15 @@ export function createWriteCellsTool(
       const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
 
       // Filled in as the Excel batch progresses, so a failure can say what already happened.
-      const progress: { inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number } = {
+      // `abandoned`: the caller stopped waiting (e.g. excelRun's timeout). Excel.run cannot be
+      // cancelled, so the batch checks this before each chunk and writes nothing more.
+      const progress: {
+        inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number; abandoned: boolean;
+      } = {
         inspection: null,
         writtenRows: 0,
         inFlightRows: 0,
+        abandoned: false,
       };
 
       let outcome: WriteOutcome;
@@ -211,6 +216,7 @@ export function createWriteCellsTool(
           // Stop is honored between chunks, never inside one, so the result can
           // say exactly which rows landed.
           for (const chunk of chunkRowsForWrite(padded)) {
+            if (progress.abandoned) throw new Error("write_cells stopped writing: the caller gave up on this Excel batch.");
             if (signal?.aborted) return { kind: "stopped", inspection: inspected };
             sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
             progress.inFlightRows = chunk.rows.length;
@@ -229,6 +235,7 @@ export function createWriteCellsTool(
               sentFormulas,
               sentEmptyCount,
               tablesBefore: inspected.tableNames,
+              sentChars: JSON.stringify(padded).length,
             });
             return { kind: "written", inspection: inspected, verification, verifyError: null, stopped: false };
           } catch (verifyError) {
@@ -237,6 +244,10 @@ export function createWriteCellsTool(
           }
         });
       } catch (error) {
+        // Snapshot before any await: an abandoned run may still finish its in-flight chunk.
+        progress.abandoned = true;
+        const writtenRows = progress.writtenRows;
+        const inFlightRows = progress.inFlightRows;
         const parsed = parseExcelError(error);
         // A batch Excel refused did not apply. One it never answered (timeout,
         // Stop, or a failure that is not an Excel answer) may have.
@@ -247,15 +258,15 @@ export function createWriteCellsTool(
             failure: await describeExcelFailure(
               parsed,
               { range: params.start_cell },
-              progress.writtenRows === 0 && progress.inFlightRows === 0,
+              writtenRows === 0 && inFlightRows === 0,
             ),
           },
           params,
           toolCallId,
           block,
           inspection: progress.inspection,
-          writtenRows: progress.writtenRows,
-          uncertainRows: inFlightUnknown ? progress.inFlightRows : 0,
+          writtenRows,
+          uncertainRows: inFlightUnknown ? inFlightRows : 0,
           dependencies: resolvedDependencies,
           finalizeDependencies: mutationFinalizeDependencies,
         });

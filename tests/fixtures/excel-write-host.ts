@@ -474,6 +474,8 @@ export class FakeExcelHost {
   failWrite: { at: number; error: Error } | null = null;
   /** Fail the Nth sync (1-based) with this error before it does anything, e.g. a read Excel never answered. */
   failSync: { at: number; error: Error } | null = null;
+  /** Hold the Nth sync (1-based) for `ms` before it runs, like Excel being slow to answer. */
+  delaySync: { at: number; ms: number } | null = null;
   /** Called after each sync that applied at least one write (1-based count of such syncs). */
   afterWriteSync: ((writeSyncs: number) => void) | null = null;
   private writeSyncs = 0;
@@ -519,6 +521,12 @@ export class FakeExcelHost {
     },
     sync: (): Promise<void> => {
       this.syncCount += 1;
+      if (this.delaySync?.at === this.syncCount) {
+        const { ms } = this.delaySync;
+        this.delaySync = null;
+        this.syncCount -= 1;
+        return new Promise((resolve) => { setTimeout(resolve, ms); }).then(() => this.context.sync());
+      }
       if (this.failSync?.at === this.syncCount) {
         this.queued = [];
         this.pendingLoadedCells = 0;

@@ -185,7 +185,9 @@ export async function describeExcelFailure(
   if (error.outcomeUnknown && nothingSent) {
     return {
       code,
-      reason: `Excel did not answer (${message}) before the change was sent. Retry once Excel responds.`,
+      // Not the raw timeout message: it says the outcome is unknown, which is not true here.
+      reason: "Excel did not answer before the change was sent, so nothing was written. " +
+        "Retry once Excel responds; if it keeps happening, ask the user to reload the Excel page.",
       maybeApplied: false,
     };
   }
