@@ -12,7 +12,11 @@ Type a question and press Enter or click Send. The draft clears, its user messag
 
 When Pi finishes, the working line and Stop disappear. The answer stands in the transcript, the idle placeholder resumes, and the composer is ready for another message. Completed messages are saved with the session.
 
-## While the turn runs
+### Sent
+
+The accepted user message becomes conversation history immediately. A pending pre-send compaction keeps its prompt visible in the queue until delivery.
+
+## Pressing Enter
 
 - **Enter steers**, as does the visible Send button. A steer is delivered after the current response and its tool batch; it does not interrupt or abort them.
 - **Alt+Enter** queues a follow-up on Windows/Linux; **Option+Enter** does so on Mac. It is delivered when Pi would otherwise finish.
@@ -38,7 +42,7 @@ The line says what Pi is doing, not just that it is alive:
 
 Playful phrases are restricted to thinking; the hint no longer rotates. A queued/busy activity label takes precedence over model/thinking labels, including during mid-turn compaction. Stop is disabled after cancellation is requested, until the work settles. A tool already submitted to Excel may still finish.
 
-## Preparing and streaming
+## Streaming
 
 Before each model response Pi reads [auto-context](auto-context.md), including workbook structure, selection and recent changes. It can compact older history before sending or between responses. A credential wait may open the provider connection dialog; connecting resumes the waiting turn. Cancelling that connection can fail the turn.
 
@@ -54,7 +58,7 @@ The transcript follows new content unless the user deliberately scrolls up. Retu
 
 Transient provider failures are retried visibly and cancellably. Retry-After is honoured up to 60 seconds, usage-limit errors fail without waiting, and already-read partial answers are preserved and supplied back as continuation context. See [provider errors and offline](../cross-cutting/provider-errors-and-offline.md).
 
-## Persistence, safety and host scope
+## Interactions with other systems
 
 Completed messages and stopped/failed responses are saved. Closing the taskpane can lose an answer still streaming. A plain answer changes no cells; completed mutations retain their [automatic backups](../workbook/backups-and-revert.md), and neither failure nor Stop undoes them.
 
@@ -62,6 +66,10 @@ Tabs stream independently. Switching tabs changes which transcript and working a
 
 UI labels and platform-specific hints are translated. Send and Stop have accessible button names. The composer and response semantics are shared by desktop and web hosts; proxy requirements and workbook batch cancellation differ by host.
 
-## Verification
+## Edge cases
+
+A fast response can finish before any thinking phrase appears. Empty model text can finish normally. Cancelling does not recall a workbook batch already submitted; inspect its result before repeating a mutation.
+
+## Open questions and verification
 
 PR #803's composer browser tests exercise Enter, Alt+Enter, visible Send, Stop/Stopping and inline Retry. Real Excel-web turns with GPT-6 Luna steered input values to 4 and 7, kept the SUM formula at 11, delivered a follow-up and a visible Send, and stopped a real turn. Failure and Retry-After acceptance used substituted HTTP failures followed by real GPT-6 Luna responses. A short held-provider recording captures keyboard and cancelling states without depending on model latency.
