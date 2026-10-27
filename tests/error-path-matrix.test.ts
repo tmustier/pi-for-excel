@@ -29,7 +29,7 @@ async function withFailingStructureHost<T>(failure: Error & { code: string }, ac
     },
   };
   const previous = Reflect.get(globalThis, "Excel");
-  Reflect.set(globalThis, "Excel", { run: <R>(callback: (ctx: unknown) => Promise<R>): Promise<R> => callback(context) });
+  Reflect.set(globalThis, "Excel", { run: <R>(callback: (ctx: unknown) => Promise<R>): Promise<R> => callback(Object.create(context)) });
   try {
     return await action();
   } finally {

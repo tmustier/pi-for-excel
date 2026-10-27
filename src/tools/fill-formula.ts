@@ -7,10 +7,11 @@
  * failing on the read-back after the change was applied.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { FillFormulaDetails } from "./tool-details.js";
-import { excelRun, getRange, qualifiedAddress, colToLetter } from "../excel/helpers.js";
+import { getRange, qualifiedAddress, colToLetter } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { getWorkbookRecoveryLog, MAX_RECOVERY_CELLS } from "../workbook/recovery-log.js";
@@ -101,13 +102,12 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
       }
 
       const sent: SentGrid = () => ({ kind: "formula", formula: params.formula });
-      // `abandoned`: the caller stopped waiting (excelRun's timeout); the batch must not start the fill after that.
-      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean; abandoned: boolean } =
-        { inspection: null, filled: false, fillInFlight: false, abandoned: false };
+      const progress: { inspection: WriteTargetInspection | null; filled: boolean; fillInFlight: boolean } =
+        { inspection: null, filled: false, fillInFlight: false };
 
       let outcome: FillOutcome;
       try {
-        outcome = await excelRun<FillOutcome>(async (context) => {
+        outcome = await runMutation<FillOutcome>(async (context) => {
           const { sheet, range } = getRange(context, params.range);
           range.load("address");
           await context.sync();
@@ -121,7 +121,6 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           if (inspection.occupiedCount > 0 && !params.allow_overwrite) return { kind: "occupied", inspection, block };
           if (inspection.occupiedCount > 0 && !inspection.before) return { kind: "too_large_to_back_up", inspection, block };
           if (signal?.aborted) return { kind: "stopped", inspection, block };
-          if (progress.abandoned) throw new Error("fill_formula did not fill: the caller gave up on this Excel batch.");
 
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
@@ -159,8 +158,7 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
           }
         });
       } catch (error) {
-        // Snapshot before any await: an abandoned run may still finish its in-flight fill.
-        progress.abandoned = true;
+        // Snapshot before any await: an abandoned run (runMutation) may still finish its in-flight fill.
         const filled = progress.filled;
         const fillInFlight = progress.fillInFlight;
         const parsed = parseExcelError(error);

@@ -2,10 +2,11 @@
  * charts — list, create, update, delete, and capture Excel charts.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
+import { parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -480,7 +481,7 @@ function formatChartList(items: ChartListItemDetails[], sheetName: string | unde
 }
 
 async function executeList(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const sheets: Excel.Worksheet[] = [];
 
     if (params.sheet) {
@@ -524,7 +525,7 @@ async function executeList(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const chartSheet = resolveCreateChartSheet(context, params);
     const source = resolveRange(context, requireSourceRange(params), chartSheet);
     const chartType = toExcelChartType(requireChartType(params));
@@ -584,7 +585,7 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     const chart = target.chart;
     let sourceForAddress: ResolvedRange | null = null;
@@ -633,7 +634,7 @@ async function executeUpdate(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     target.sheet.load("name");
     target.chart.load("name");
@@ -663,7 +664,7 @@ async function executeDelete(params: Params): Promise<ChartsExecutionResult> {
 }
 
 async function executeGetImage(params: Params): Promise<ChartsExecutionResult> {
-  return excelRun(async (context) => {
+  return runMutation(async (context) => {
     const target = await findChartByName(context, requireName(params), params.sheet);
     target.sheet.load("name");
     target.chart.load("name,width,height");

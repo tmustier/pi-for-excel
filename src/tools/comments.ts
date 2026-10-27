@@ -5,10 +5,11 @@
  * Handles threaded replies via the Excel CommentReply API.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, isCellInRange, qualifiedAddress } from "../excel/helpers.js";
 import {
   getWorkbookChangeAuditLog,
   type AppendWorkbookChangeAuditEntryArgs,
@@ -274,7 +275,7 @@ async function dispatchAction(params: Params): Promise<CommentsDispatchResult> {
 // ── Action implementations ───────────────────────────────────────────
 
 async function executeRead(ref: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     range.load("address");
     sheet.load("name");
@@ -368,7 +369,7 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
 }
 
 async function executeAdd(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -386,7 +387,7 @@ async function executeAdd(ref: string, content: string): Promise<CommentsDispatc
 }
 
 async function executeUpdate(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -405,7 +406,7 @@ async function executeUpdate(ref: string, content: string): Promise<CommentsDisp
 }
 
 async function executeReply(ref: string, content: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -424,7 +425,7 @@ async function executeReply(ref: string, content: string): Promise<CommentsDispa
 }
 
 async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");
@@ -447,7 +448,7 @@ async function executeDelete(ref: string): Promise<CommentsDispatchResult> {
 }
 
 async function executeSetResolved(ref: string, resolved: boolean): Promise<CommentsDispatchResult> {
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
     sheet.load("name");
     range.load("address");

@@ -6,9 +6,10 @@
  * - Cell value rules (greater/less/equal/between)
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
-import { excelRun, getRange, qualifiedAddress } from "../excel/helpers.js";
+import { getRange, qualifiedAddress } from "../excel/helpers.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import { captureConditionalFormatState } from "../workbook/recovery-states.js";
 import { getWorkbookRecoveryLog } from "../workbook/recovery-log.js";
@@ -170,7 +171,7 @@ async function clearFormats(
 ): Promise<AgentToolResult<ConditionalFormatDetails>> {
   const checkpointState = await captureConditionalFormatState(params.range);
 
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address,rowCount,columnCount");
@@ -248,7 +249,7 @@ async function addFormat(
 
   const checkpointState = await captureConditionalFormatState(params.range);
 
-  const result = await excelRun(async (context) => {
+  const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, params.range);
     sheet.load("name");
     range.load("address,rowCount,columnCount");

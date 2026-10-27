@@ -12,13 +12,11 @@
  * - Failures are tool errors (`isError: true`) with a specific reason.
  */
 
+import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { WriteCellsDetails } from "./tool-details.js";
-import {
-  excelRun, getRange, qualifiedAddress, parseCell,
-  colToLetter, parseRangeRef,
-} from "../excel/helpers.js";
+import { getRange, qualifiedAddress, parseCell, colToLetter, parseRangeRef } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
 import {
@@ -190,20 +188,15 @@ export function createWriteCellsTool(
       const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
 
       // Filled in as the Excel batch progresses, so a failure can say what already happened.
-      // `abandoned`: the caller stopped waiting (e.g. excelRun's timeout). Excel.run cannot be
-      // cancelled, so the batch checks this before each chunk and writes nothing more.
-      const progress: {
-        inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number; abandoned: boolean;
-      } = {
+      const progress: { inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number } = {
         inspection: null,
         writtenRows: 0,
         inFlightRows: 0,
-        abandoned: false,
       };
 
       let outcome: WriteOutcome;
       try {
-        outcome = await excelRun<WriteOutcome>(async (context) => {
+        outcome = await runMutation<WriteOutcome>(async (context) => {
           const { sheet } = getRange(context, params.start_cell);
           const inspected = await inspectWriteTarget(context, sheet, block, sent);
           progress.inspection = inspected;
@@ -216,7 +209,6 @@ export function createWriteCellsTool(
           // Stop is honored between chunks, never inside one, so the result can
           // say exactly which rows landed.
           for (const chunk of chunkRowsForWrite(padded)) {
-            if (progress.abandoned) throw new Error("write_cells stopped writing: the caller gave up on this Excel batch.");
             if (signal?.aborted) return { kind: "stopped", inspection: inspected };
             sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
             progress.inFlightRows = chunk.rows.length;
@@ -244,8 +236,7 @@ export function createWriteCellsTool(
           }
         });
       } catch (error) {
-        // Snapshot before any await: an abandoned run may still finish its in-flight chunk.
-        progress.abandoned = true;
+        // Snapshot before any await: an abandoned run (runMutation) may still finish its in-flight chunk.
         const writtenRows = progress.writtenRows;
         const inFlightRows = progress.inFlightRows;
         const parsed = parseExcelError(error);
