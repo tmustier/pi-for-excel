@@ -61,6 +61,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install recording tools
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
 
