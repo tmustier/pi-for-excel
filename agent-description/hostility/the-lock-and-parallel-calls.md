@@ -2,31 +2,31 @@
 
 ## Summary
 
-All tool calls from one model call start together. Mutating calls are serialized by the per-taskpane workbook lock, across every tab. Read calls are not serialized at all. This document covers what that means for the agent: reads that race writes, writes that wait behind other tabs, and Confirm-mode approvals that cancel each other.
+Tool calls in a model response start in parallel, but workbook mutations serialize through one taskpane coordinator. Within one runtime, a read waits for mutations registered before it. It does not wait for later calls or another runtime's writes, so this is not snapshot isolation.
 
 ## Parallel calls in one batch
 
-The agent loop runs a batch's calls in parallel, and the request sets `parallel_tool_calls: true`. Results come back in call order. The agent is not told that order of *execution* is not guaranteed.
-
-- **Read beside write.** `write_cells Calc!Z1 = "new"` and `read_range Calc!Z1` issued together: the read returned `old` (confirmed). The read ran before the write took the lock. See [B-14](../bug-triage.md#b-14-a-read-in-the-same-batch-as-a-write-can-see-the-old-value).
-- **Write beside write.** Serialized in the order they reach the lock, which is call order in practice.
+- Write followed by read: the read waits for the earlier mutation to settle and then reads Excel.
+- Read followed by write: the read need not wait and can see the old value.
+- Write beside write: mutations serialize in lock-acquisition order.
+- Results retain call order even when execution completes in another order.
 
 ## Other tabs
 
-Another tab's mutation holds the lock. This tab's mutations wait, with no time limit and no note in the result about the wait. Reads do not wait, so they can observe another tab's half-finished multi-batch change. The agent is never told another tab exists.
+Mutations share the taskpane write lock. Reads in another runtime can overlap a multi-batch write and observe an intermediate state. Separate taskpanes do not share this in-memory lock. A stopped waiter checks cancellation before applying anything.
 
 ## Racing approvals
 
-In Confirm mode each mutating call asks for approval *before* taking the lock, so all mutating calls in a batch ask at once. All approval dialogs share one overlay id. Opening the second closes the first, which resolves as declined. Calling the dialog twice: the first resolved `false` without a click (confirmed). The agent receives `Mutation cancelled by user (Confirm mode).` for every call but the last. By its prompt, it should treat that as the user's refusal. In a real Confirm-mode turn (GPT-6 Luna) asked for two formatting changes and one write, the model sent all three at once; one dialog appeared, for the write; both format calls were declined without the user seeing them, and the agent reported them as cancelled (confirmed). See [B-09](../bug-triage.md#b-09-parallel-confirm-mode-approvals-decline-each-other).
+Confirm approvals queue rather than replacing one another. Each identifies its tab/action, is asked before lock acquisition and has a cancellation signal. Stop withdraws outstanding requests. Decline is an explicit user action, not a side effect of another dialog opening. A pending approval does not hold the write lock.
 
 ## Classification quirks
 
-- `execute_office_js` always takes the lock, even for pure reads, and so waits behind other tabs.
-- `workbook_history` `delete` and `clear` never take it.
+- `execute_office_js` takes the write lock even for code that only reads.
+- Recovery `delete` and `clear` do not need a workbook mutation lock, but always ask approval because they destroy recovery data.
+- Checked-write preflight can refuse a blocked target before showing a mutation approval.
 
 ## Open questions and verification
 
-- Confirmed: LOCK-02, LOCK-05, LOCK-06.
-- Read from code: cross-tab waiting; no lock timeout.
+Read from merged wrapper/coordinator and approval queue at `1f51cf8`. Cross-runtime and remote co-authoring are deliberately not serialized by this guarantee. Historical old-value and dialog-replacement observations remain in verification logs.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8`.

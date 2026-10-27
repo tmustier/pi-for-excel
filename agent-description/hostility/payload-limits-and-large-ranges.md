@@ -2,42 +2,35 @@
 
 ## Summary
 
-Excel caps the size of each request to it and each response from it (about 5 MB on the web). Pi's tools load whole ranges, often with three grids per cell, so large sheets hit the cap. The agent is not told the cap exists, gets Office's raw message when it hits it, and is sometimes told a write failed when it succeeded. The numbers are in [limits](../foundations/limits.md#excel).
+Excel's per-batch payload ceiling still exists. Pi avoids loading whole requested grids for common reads and checked writes: reads page, searches and sheet previews use bounded scans, and writes/fills chunk both submission and verification. The exact limits belong to [limits](../foundations/limits.md).
 
 ## What the agent receives
 
-```
-The response payload size has exceeded the limit. Please refer to the documentation: "https://docs.microsoft.com/office/dev/add-ins/concepts/resource-limits-and-performance-optimization#excel-add-ins".
-```
-
-wrapped by the tool. It gives no size, no safe chunk and no hint whether anything was changed.
+A read page names the actual address read, the requested extent and the next page. A wide request may also need column paging. Response overflow reduces page rows rather than immediately returning the host's raw error. A write result separates applied, unattempted and unknown-outcome rows, and states the verification scope.
 
 ## Per tool (all confirmed on a 200,001 × 5 sheet)
 
-| Tool | Outcome |
+The heading is retained for historical links; current behavior below is code-reviewed unless a live observation is explicitly stated.
+
+| Tool | Current behavior |
 | --- | --- |
-| `read_range` 10,000 × 5 | Succeeds; truncated to 1,117 rows. |
-| `read_range` 50,000 × 5, whole sheet, any `A:A` | Payload error, nothing returned. |
-| `search_workbook` without `sheet` | Payload error for every query. |
-| `get_workbook_overview {sheet: "Big"}` | Payload error. |
-| `get_workbook_overview` | Succeeds (loads sizes only). |
-| `fill_formula` 50,000 rows | Succeeds, no backup. |
-| `fill_formula` 200,000 rows | Payload error **after filling** (false failure). |
-| `write_cells` 30,000 × 3 | Succeeds, no backup. |
-| `write_cells` 60,000 × 4 | Payload error **after writing** (false failure). |
-| Auto-context selection, whole column | Silently omitted. |
-| Auto-context selection, 5,000 rows | Sent: 311,761 characters on every model call. |
+| `read_range` | At most 500 rows / 2,500 cells per page; whole-line addresses clipped to used data. |
+| `search_workbook` | Scans bounded blocks; no need to return a whole used grid. |
+| Sheet overview | Uses a bounded preview rather than loading the full sheet. |
+| `write_cells`, `fill_formula` | Chunked writes and bounded read-back; no single huge verification response. Occupied targets exceeding the 20,000-cell backup cap are refused rather than overwritten without protection. |
+| Large empty targets | May be written without a full backup; report the size reason and sampled versus whole-range checks. |
+| Selection | Exact dimensions with bounded head/tail sample, even for a whole column. |
 
 ## How the agent copes
 
-In a real turn ("how many rows on Big have Region = North, total Qty?"), the agent read a 6-row sample and then wrote its own `execute_office_js` aggregation over `C2:D200001`. It returned the right answer (66,667 rows, total 33,300,338). Agents can work around the cap, but only by using the escape hatch, and only when they guess the cap exists.
+Follow the returned continuation address for detail. Prefer search, workbook functions or Python for whole-sheet aggregation; do not add a long page of numbers mentally. Python bridge input limits are checked before sending and include a row estimate.
 
 ## Proposed fixes
 
-[B-02](../bug-triage.md#b-02-large-writes-and-fills-report-failure-after-the-change-is-applied), [B-04](../bug-triage.md#b-04-the-selection-context-has-no-size-limit-and-disappears-for-whole-column-selections), [B-05](../bug-triage.md#b-05-large-sheets-break-reads-search-and-sheet-overviews-with-a-raw-payload-error). Add one prompt sentence: "On large sheets read at most ~10,000 rows × 5 columns per call and never whole columns."
+Paging, bounded sampling, chunked writes and truthful unknown outcomes are merged, not planned. Host limits can still affect a single unusually large cell or unsupported operation.
 
 ## Open questions and verification
 
-- Desktop limits not measured.
+In Excel on the web at `1f51cf8`, a request for J1:J800 returned J1:J500, next address J501:J800 and page sum 125,250. Selecting J:J produced a 1,274-character context sample with exact 1,048,576-row dimensions, first 15 and last 5 used rows. Desktop ceilings were not measured.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8`.

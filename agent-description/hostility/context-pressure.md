@@ -6,13 +6,13 @@ Three mechanisms shrink what the agent sees as a session grows. Truncation cuts 
 
 ## Truncation
 
-Applied when a call finishes. A 10,000 × 5 compact read kept rows 1–1,117 and ended:
+Applied when a call finishes. Historical `ec453df` example, before read paging: a 10,000 × 5 compact read kept rows 1–1,117 and ended:
 
 ```
 [Output truncated: showing first 1,121 of 10,004 lines (50.0KB limit); limits: 2,000 lines / 50.0KB]
 ```
 
-The `**Formulas:**` and `⚠️ **Errors:**` lines after the grid were cut. CSV output has no row numbers to show where the cut fell. See [B-15](../bug-triage.md#b-15-truncation-drops-the-summaries-that-matter-and-csv-has-no-row-numbers).
+Current reads page before generic truncation, with state, formulas/errors and continuation information before the grid. CSV remains raw data, with a prose address/extent outside it. A single very large value can still hit generic truncation.
 
 ## History shaping
 
@@ -36,11 +36,11 @@ The preview does not name the call's arguments. The last line refers to a chat h
 
 Near the context limit (or on `/compact`), older messages are serialized and summarized by the same model into Goal, Constraints, Progress, Key Decisions, Next Steps and Critical Context sections, "Preserve exact identifiers (sheet names, cell addresses, …)". The agent then sees a user message beginning "The conversation history before this point was compacted into the following summary:". Tool results are labelled "(error)" in the serialization only when `isError` is set.
 
-Observed (second pass, GPT-6 Luna, 272k window). `/compact` on a 14k-token session showed "Nothing to compact": the most recent 20,000 tokens are always kept, so a session must be larger than that before anything is summarized. On a 63k-token session it showed "Summarized 21 messages" and the meter went from 62,934 to only 58,752 tokens, because the kept tail cannot start with a tool result and so kept one 22k-token read whole. The summary's Goal was the request before last, which had already been answered, listed under "In Progress", with Next Steps to call `read_range` on both ranges again. The "Critical Context" kept the two cancelled Confirm-mode format calls and the Stop-orphaned J write, but dropped the protected-sheet exchange and the co-authoring writes. On "continue" the agent repeated its last answer rather than redoing the reads ([B-24](../bug-triage.md#b-24-compaction-summarizes-finished-work-as-still-to-do-and-frees-little)). Workbook tools' failures are not set that way, so a failed write is summarized like a success (read from code; [B-10](../bug-triage.md#b-10-excel-failures-arrive-as-generic-text-in-results-marked-successful)).
+The summarizer labels user requests answered or not answered, and includes a later final reply when the cut falls inside that turn. Answered work belongs under Done, not Next Steps. Answered tool results over 8,000 characters in the kept tail become model-facing compacted previews; full output stays in cards. Results belonging to the current unanswered request remain whole. Short sessions under the keep-recent floor can still report "Nothing to compact". Checked mutation errors now set `isError`; some read errors remain text-shaped.
 
 ## The auto-context is outside all three
 
-The auto-context note is never truncated, shaped or compacted, because it is rebuilt each call. A large selection therefore cannot be reduced by any of these mechanisms. With a 5,000-row selection, "Reply with just OK." used 32% of a 500k window ([B-04](../bug-triage.md#b-04-the-selection-context-has-no-size-limit-and-disappears-for-whole-column-selections)).
+Durable structure, Files and edit notes are in saved history and can be compacted. Current selection remains transient but has a fixed sample budget; whole-column dimensions do not imply whole-column cell data. Missing current structure/Files notes are reintroduced after compaction.
 
 ## Open questions and verification
 
@@ -49,4 +49,4 @@ The auto-context note is never truncated, shaped or compacted, because it is reb
 - In the real runtime, truncated results also say `full output saved to Files workspace: .tool-output/<timestamp>-read_range-<call id>.txt` (confirmed; the probe harness has no saver).
 - Read from code: shaping text.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (code review; old truncation example labelled historical).

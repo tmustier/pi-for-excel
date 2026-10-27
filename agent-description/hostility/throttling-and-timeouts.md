@@ -2,15 +2,17 @@
 
 ## Summary
 
-Excel batches are sent with no timeout and cannot be cancelled. If Excel is slow, throttled or never answers, the tool call waits as long as Excel does. A mutation holds the workbook lock for that whole time, so every other mutation in every tab waits too. The second pass loaded Excel on the web with bursts from the taskpane. It never returned a throttling error: overload showed up first as delay, then, after a burst of heavy formula writes, as a host that stopped answering altogether. Every later call hung, a real turn hung with it, and Stop did not end the turn ([B-20](../bug-triage.md#b-20-excel-calls-have-no-timeout-and-a-hung-host-hangs-the-turn-past-stop)).
+Each Excel run has a 60-second timeout. On timeout the tool ends and releases its lock, but the host batch cannot be cancelled and may finish later. The outcome is unknown: read back before retrying a mutation. Repeated timeouts explicitly tell the agent to stop calling workbook tools and ask the user to reload Excel. Stop has separate bounded grace rules; see [Stop](stop.md).
 
 ## What the agent receives
 
-Nothing until Excel answers. If Excel answers with a throttling error, it arrives as an error-shaped result with Office's message (read from code; never seen). The one timeout in the auto-context pipeline is the per-part limit (1.2–2.5 s), and when it hits, that part is silently left out.
+The tool result on timeout says Excel did not answer, the request may or may not have been applied, and the affected range must be read back. Explicit throttling errors retain Office's reason. Auto-context uses shorter per-source deadlines and does not wait through cell-edit mode.
 
-Python tools have their own `timeout_ms`; Excel tools have none.
+Python tools have their own `timeout_ms`; Excel runs use the shared 60-second bound. An operation containing several runs can take longer overall.
 
 ## Observed durations (web)
+
+The following measurements and bursts are historical observations at `ec453df`, before paging, chunking and timeouts merged; they are not current limits.
 
 | Call | Time |
 | --- | --- |
@@ -33,11 +35,11 @@ Python tools have their own `timeout_ms`; Excel tools have none.
 
 ## Proposed fix
 
-[B-20](../bug-triage.md#b-20-excel-calls-have-no-timeout-and-a-hung-host-hangs-the-turn-past-stop).
+Merged: bounded Excel runs, outcome-unknown errors and bounded Stop. Host batches can still finish late; this is not cancellation at the Excel server.
 
 ## Open questions and verification
 
 - Confirmed: TIME-01, TIME-02 (bursts above), STOP-03.
 - No throttling error code was ever returned on the web; desktop behaviour was not observed.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (code review; historical measurements labelled above).

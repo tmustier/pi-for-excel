@@ -2,47 +2,40 @@
 
 ## Summary
 
-While the user is typing in a cell or the formula bar and has not pressed Enter, Tab or Escape, Excel on the web refuses every Office.js batch. Every tool that touches Excel fails at once, and auto-context loses the selection. It is the most common hostility in normal use, because users keep working while Pi runs.
+Excel may reject requests while the user types in a cell. Requested workbook tools wait with backoff for up to 60 seconds, with the activity "Waiting for you to finish editing a cell", then proceed once editing ends. Auto-context does not hold the model request for this wait; it reports unreadable selection instead.
 
 ## What the agent receives
 
-Every Excel batch fails in 3–12 ms with (confirmed):
-
-```
-Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again.
-```
-
-wrapped by the tool: `Error reading "Dates!A1:B2": …`, `Error writing cells: …`, `Error executing Office.js: …`. Each is an [error-shaped result](../foundations/the-tool-contract.md#error-shaped-results). The auto-context note for the next model call simply has no selection context. It does not say why. Change-tracker registration also fails if the taskpane starts while a cell is being edited (confirmed: `onChanged.add` threw), and nothing retries it.
+If the user leaves edit mode in time, the normal tool result. If not, a precise error says the user is typing, how long Pi waited, whether an earlier step reached Excel, and to ask the user to finish before retrying. It does not claim nothing changed when an earlier sync succeeded.
 
 ## What the agent does
 
-In a real turn ("read Big!A1:E30, then Dates!A1:D4, then write the sum into Calc!D1"), the user started typing after the first read. The second read failed, and the agent ended the turn without writing: "Reading Dates!A1:D4 failed because Excel is in cell-editing mode. Stopped; Calc!D1 was not changed. Press Enter or Tab to finish editing, then I can continue." That is a sensible reaction to what it was told, but the task is lost: the user has to notice, press Enter, and ask again.
+The tool waits rather than immediately abandoning the task. After the bounded failure the model can ask the user to finish editing. A Stop during the wait cancels it, preventing delayed execution after the user later presses Enter.
 
 ## By phase of a tool call
 
 | Phase | Effect |
 | --- | --- |
-| Forms the call | The agent cannot know edit mode is on; nothing in its context says so. |
-| Rejected at once | Not applicable; Pi checks nothing before calling Excel. |
-| Touches Excel | Fails immediately. Nothing changes in the workbook. |
-| While running | A multi-batch tool (`write_cells`: pre-read, write, read-back) can succeed on early batches and fail on later ones. If the write landed and the read-back failed, the result is a false failure (read from code). |
-| The result | The edit-mode error string. |
+| Forms the call | Fresh selection can report edit mode. |
+| Rejected at once | Non-workbook validation can still reject. |
+| Touches Excel | Retry starts at 250 ms and backs off to 2 seconds, within the 60-second budget. |
+| While running | Retry only if no earlier sync succeeded. A partially applied operation is never replayed automatically. |
+| Result | Success after editing ends, explicit edit-mode failure, or cancellation. |
 
 ## Per tool
 
-Every Excel-touching tool behaves the same way. `instructions`, `conventions`, `skills`, `files`, `workbook_history list`, `web_search` and `python_run` are unaffected.
+Workbook tools using the shared Excel wrapper follow this rule. Tools that do not touch Excel do not wait. A multi-step operation can still have earlier work applied before a later step encounters edit mode; inspect its result before retrying.
 
 ## Host differences
 
-Desktop Excel is documented to queue add-in requests until edit mode ends rather than fail them. Excel for Mac does not: a read during edit mode failed after about half a second with the same "Excel is in cell-editing mode…" error as on the web (confirmed in Excel for Mac, EDIT-05). Windows has not been checked.
+The retry handles Excel's edit-mode rejection on web and desktop. A host may itself queue requests; its individual run still has a timeout. Windows native behavior was not exercised here.
 
 ## Proposed fix
 
-See [B-06](../bug-triage.md#b-06-cell-edit-mode-fails-every-call-at-once-and-ends-the-task): retry in `excelRun` with backoff for up to about 30 s on `InvalidOperationInCellEditMode`, then return a result that says the user is editing and nothing changed. Have the auto-context say so as well.
+The shared bounded wait is merged; this heading remains for historical links, not as a planned feature.
 
 ## Open questions and verification
 
-- Confirmed on Excel on the web: EDIT-01 to EDIT-04 and one real turn.
-- Desktop behavior not observed.
+Code reviewed in `src/excel/helpers.ts` at `1f51cf8`. Historical immediate-failure timings belong to the old verification pass; real platform timing is not re-measured here.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8`.
