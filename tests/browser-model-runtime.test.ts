@@ -108,6 +108,41 @@ void test("Office streaming preserves OpenRouter's registry transport without un
   }
 });
 
+void test("Office streaming sends every Copilot API through the configured proxy", async (t) => {
+  const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
+  Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
+  t.after(() => {
+    if (originalDocument) Object.defineProperty(globalThis, "document", originalDocument);
+    else Reflect.deleteProperty(globalThis, "document");
+  });
+  const runtime = createRuntime();
+  const stream = createOfficeStreamFn(() => Promise.resolve("https://localhost:3003"), runtime.models);
+  for (const [id, path, plan] of [
+    ["gpt-5.4-nano", "/responses", "individual"],
+    ["claude-haiku-4.5", "/v1/messages?beta=true", "individual"],
+    ["gpt-6-luna", "/responses", "individual"],
+    ["gemini-3.8-flash", "/chat/completions", "individual"],
+    ["gpt-5.4-nano", "/responses", "business"],
+    ["gpt-5.4-nano", "/responses", "enterprise"],
+  ] as const) {
+    const model = runtime.models.getModel("github-copilot", id);
+    assert.ok(model);
+    const baseUrl = `https://api.${plan}.githubcopilot.com`;
+    let requested = "";
+    const events = await stream({ ...model, baseUrl }, { messages: [{ role: "user", content: "test", timestamp: 0 }] }, {
+      apiKey: "synthetic-copilot-token", maxTokens: 32,
+      fetch: (url) => {
+        requested = typeof url === "string" ? url : url instanceof URL ? url.href : url.url;
+        return Promise.resolve(new Response("test endpoint", { status: 400 }));
+      },
+    });
+    await events.result();
+    const request = new URL(requested);
+    assert.equal(request.origin, "https://localhost:3003");
+    assert.equal(request.searchParams.get("url"), `${baseUrl}${path}`);
+  }
+});
+
 void test("Office continuation after Stop returns an aborted result without dispatching a request", async () => {
   const runtime = createRuntime();
   const model = runtime.models.getModel("openrouter", "openai/gpt-5.6-sol");

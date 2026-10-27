@@ -275,6 +275,14 @@ void test("the error banner names the real failure", () => {
     describeTurnFailure({ ...base, messages: failed("Request cancelled: invalid tool schema") }),
     "LLM error: Request cancelled: invalid tool schema",
   );
+  assert.match(
+    describeTurnFailure({ ...base, messages: failed("400 model_not_supported").map((message) => ({ ...message, provider: "github-copilot" })) }) ?? "",
+    /Copilot plan.*GPT-5\.4 nano/u,
+  );
+  assert.equal(
+    describeTurnFailure({ ...base, messages: failed("400 model_not_supported") }),
+    "LLM error: 400 model_not_supported",
+  );
   assert.equal(
     describeTurnFailure({ ...base, messages: failed("Provider is not configured: anthropic"), missingCredentialsFor: "anthropic" }),
     "API key required for anthropic.",
