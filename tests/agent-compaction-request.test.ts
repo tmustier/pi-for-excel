@@ -32,14 +32,7 @@ function user(content: string, timestamp: number): AgentMessage {
 }
 
 void test("compact sends user memory cues to the summarizing model", async () => {
-  const priorDocument = Reflect.get(globalThis, "document") as unknown;
-  const body = new ElementStub();
-  Reflect.set(globalThis, "document", {
-    body,
-    createElement: () => new ElementStub(),
-    querySelector: () => null,
-  });
-
+  const restoreDocument = stubDocument();
   try {
     const faux = fauxProvider({ models: [{ id: "compact-request", contextWindow: 32_768, maxTokens: 4_096 }] });
     faux.setResponses([fauxAssistantMessage("A concise summary")]);
@@ -75,8 +68,7 @@ void test("compact sends user memory cues to the summarizing model", async () =>
     assert.match(requestText, /Memory to persist/u);
     assert.match(requestText, /report in EUR/u);
   } finally {
-    if (priorDocument === undefined) Reflect.deleteProperty(globalThis, "document");
-    else Reflect.set(globalThis, "document", priorDocument);
+    restoreDocument();
   }
 });
 
