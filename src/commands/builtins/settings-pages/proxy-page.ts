@@ -73,6 +73,7 @@ export function createProxyPage(): SettingsShellPage {
     id: "proxy",
     parentId: "root",
     title: () => t("settings.section.proxy"),
+    subtitle: () => t("settings.section.proxy.page_subtitle"),
     render: (ctx) => {
       const settingsStore: SettingsAccess = getAppStorage().settings;
 
