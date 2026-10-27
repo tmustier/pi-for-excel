@@ -74,6 +74,7 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 
 ## Sheet overview (`get_workbook_overview {sheet}`)
 - **No used-range values:** the preview reads only its first 5 rows × 20 columns (as displayed), so a 200k-row sheet previews like a small one.
+- **Labels follow the used range:** the preview's row numbers and column letters start where the used range starts, and `Headers` is the first row of the used range (not row 1), named when it is not row 1: `Headers (row 5): Region, Q1, Q2`. Same in the workbook-level overview.
 - **Sheet state:** the same notes as `read_range` for the used range, plus frozen panes. The workbook-level tool result appends a `### Current state` section (calculation mode when not Automatic, protected sheets), read fresh per call. These stay out of `buildOverview()`: that text is the cached auto-context blueprint, which only refreshes on structure changes, and protection or calculation-mode changes are not structure changes.
 
 ## Dependency ranges (`trace_dependencies`)
