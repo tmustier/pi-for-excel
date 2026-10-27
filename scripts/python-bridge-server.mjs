@@ -107,12 +107,14 @@ const PYTHON_WRAPPER_CODE = [
   "import sys",
   "import traceback",
   "",
-  "raw_input = os.environ.get('PI_INPUT_JSON', '')",
+  // Code and input arrive on stdin: an environment variable is capped at 128 KB on Linux (E2BIG).
+  "payload = json.loads(sys.stdin.buffer.read().decode('utf-8') or '{}')",
+  "raw_input = payload.get('input_json') or ''",
   "input_data = None",
   "if raw_input:",
   "    input_data = json.loads(raw_input)",
   "",
-  "user_code = os.environ.get('PI_USER_CODE', '')",
+  "user_code = payload.get('code') or ''",
   "scope = {'__name__': '__main__', 'input_data': input_data}",
   "",
   "try:",
@@ -484,7 +486,7 @@ function probeLibreOfficeBinary() {
 }
 
 /**
- * @param {{ command: string; args: string[]; timeoutMs: number; env?: NodeJS.ProcessEnv }} options
+ * @param {{ command: string; args: string[]; timeoutMs: number; env?: NodeJS.ProcessEnv; stdin?: string }} options
  */
 async function runCommandCapture(options) {
   let timedOut = false;
@@ -492,9 +494,15 @@ async function runCommandCapture(options) {
 
   const result = await new Promise((resolve, reject) => {
     const child = spawn(options.command, options.args, {
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.stdin !== undefined ? "pipe" : "ignore", "pipe", "pipe"],
       env: options.env,
     });
+
+    if (options.stdin !== undefined && child.stdin) {
+      // The process may exit before reading everything; its exit code reports why.
+      child.stdin.on("error", () => {});
+      child.stdin.end(options.stdin, "utf8");
+    }
 
     let stdout = "";
     let stderr = "";
@@ -592,17 +600,12 @@ function splitPythonResult(stdout) {
  * @param {{ command: string }} pythonInfo
  */
 async function runPython(request, pythonInfo) {
-  const env = {
-    ...process.env,
-    PI_USER_CODE: request.code,
-    PI_INPUT_JSON: request.input_json || "",
-  };
-
   const result = await runCommandCapture({
     command: pythonInfo.command,
     args: ["-I", "-c", PYTHON_WRAPPER_CODE],
     timeoutMs: request.timeout_ms,
-    env,
+    env: process.env,
+    stdin: JSON.stringify({ code: request.code, input_json: request.input_json || "" }),
   });
 
   if (result.code !== 0) {
