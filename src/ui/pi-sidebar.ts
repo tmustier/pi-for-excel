@@ -67,6 +67,8 @@ export interface SessionTabView {
   isActive: boolean;
   isBusy: boolean;
   lockState: SessionTabLockState;
+  /** Run ended in this background tab while the user was elsewhere. */
+  attention: "none" | "finished" | "failed";
 }
 
 function getHorizontalArrowDirection(event: KeyboardEvent): -1 | 1 | null {
@@ -922,7 +924,19 @@ export class PiSidebar extends LitElement {
                     }}
                     @keydown=${(event: KeyboardEvent) => this._onSessionTabKeyDown(tab.runtimeId, event)}
                     title=${tab.title}
-                    aria-label=${t("sidebar.tabs.open", { title: tab.title })}
+                    aria-label=${[
+                      t("sidebar.tabs.open", { title: tab.title }),
+                      // The button's label replaces its content, so the state
+                      // markers below must be named here too.
+                      tab.isBusy
+                        ? t("sidebar.tabs.busy")
+                        : tab.attention === "failed"
+                          ? t("sidebar.tabs.failed")
+                          : tab.attention === "finished"
+                            ? t("sidebar.tabs.unseen")
+                            : null,
+                      tab.lockState === "waiting_for_lock" ? t("sidebar.tabs.lock") : null,
+                    ].filter((part) => part !== null).join(", ")}
                     aria-haspopup="menu"
                     aria-current=${tab.isActive ? "page" : "false"}
                   >
@@ -932,7 +946,11 @@ export class PiSidebar extends LitElement {
                       : nothing}
                     ${tab.isBusy
                       ? html`<span class="pi-session-tab__busy" role="img" aria-label=${t("sidebar.tabs.busy")} title=${t("sidebar.tabs.busy")}></span>`
-                      : nothing}
+                      : tab.attention === "failed"
+                        ? html`<span class="pi-session-tab__marker pi-session-tab__marker--failed" role="img" aria-label=${t("sidebar.tabs.failed")} title=${t("sidebar.tabs.failed")}></span>`
+                        : tab.attention === "finished"
+                          ? html`<span class="pi-session-tab__marker pi-session-tab__marker--finished" role="img" aria-label=${t("sidebar.tabs.unseen")} title=${t("sidebar.tabs.unseen")}></span>`
+                          : nothing}
                   </button>
                   ${canCloseTabs
                     ? html`

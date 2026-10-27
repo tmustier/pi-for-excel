@@ -19,6 +19,23 @@ import type { TabState } from "./tab-state.js";
 
 export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
 
+/** How a run ended, as far as the user needs to know. */
+export type RuntimeRunOutcome = "finished" | "failed";
+
+/**
+ * Marker for a background tab whose run ended while the user was elsewhere.
+ * Cleared when the tab becomes active.
+ */
+export type RuntimeAttention = "none" | RuntimeRunOutcome;
+
+export interface RuntimeRunSettledEvent {
+  runtimeId: string;
+  title: string;
+  outcome: RuntimeRunOutcome;
+  /** Whether the tab was the active one when its run ended. */
+  wasActive: boolean;
+}
+
 export interface SessionRuntime {
   runtimeId: string;
   agent: Agent;
@@ -53,6 +70,7 @@ export interface RuntimeTabSnapshot {
   isStreaming: boolean;
   isBusy: boolean;
   lockState: RuntimeLockState;
+  attention: RuntimeAttention;
 }
 
 export interface RuntimeLifecycleSnapshot {
@@ -101,6 +119,10 @@ export class SessionRuntimeManager {
   private readonly runtimeDefaultTabNumbers = new Map<string, number>();
   private readonly runtimeListeners = new Map<string, RuntimeListeners>();
   private readonly listeners = new Set<RuntimeSnapshotListener>();
+  private readonly getRunOutcome: (runtime: SessionRuntime) => RuntimeRunOutcome | null;
+  private readonly onRunSettled: (event: RuntimeRunSettledEvent) => void;
+  private readonly wasBusy = new Map<string, boolean>();
+  private readonly attention = new Map<string, RuntimeRunOutcome>();
 
   private activeRuntimeId: string | null = null;
   private nextDefaultTabNumber = 1;
@@ -111,9 +133,21 @@ export class SessionRuntimeManager {
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
     warnCapabilityRefresh?: (error: unknown) => void;
+    /** Classify a run that just ended; `null` (e.g. the user stopped it) leaves no trace. */
+    getRunOutcome?: (runtime: SessionRuntime) => RuntimeRunOutcome | null;
+    /** Called once per run, when the tab goes from busy to idle. */
+    onRunSettled?: (event: RuntimeRunSettledEvent) => void;
   }) {
     this.createSessionRuntime = opts.createRuntime;
     this.warnCapabilityRefresh = opts.warnCapabilityRefresh ?? (() => {});
+    this.getRunOutcome = opts.getRunOutcome
+      ?? ((runtime) => (runtime.agent.state.errorMessage ? "failed" : "finished"));
+    this.onRunSettled = opts.onRunSettled ?? (() => {});
+  }
+
+  /** Re-read runtime state, e.g. when an action queue finishes outside an agent event. */
+  notifyRuntimeChanged(): void {
+    this.emit();
   }
 
   async createRuntime(opts: CreateRuntimeOptions): Promise<SessionRuntime> {
@@ -214,6 +248,7 @@ export class SessionRuntimeManager {
     if (!next) return null;
 
     this.activeRuntimeId = runtimeId;
+    this.attention.delete(runtimeId);
     this.emit();
     return next;
   }
@@ -235,6 +270,8 @@ export class SessionRuntimeManager {
     listeners?.unsubscribePersistence();
     listeners?.unsubscribeTab();
     this.runtimeListeners.delete(runtimeId);
+    this.wasBusy.delete(runtimeId);
+    this.attention.delete(runtimeId);
 
     runtime.dispose();
 
@@ -378,23 +415,19 @@ export class SessionRuntimeManager {
   }
 
   snapshotTabs(): RuntimeTabSnapshot[] {
-    return this.listRuntimes().map((runtime, index) => {
-      const tabNumber = this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1);
-      return {
-        runtimeId: runtime.runtimeId,
-        sessionId: runtime.persistence.getSessionId(),
-        tabNumber,
-        title: resolveTabTitle({
-          hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
-          sessionTitle: runtime.persistence.getSessionTitle(),
-          defaultTabNumber: tabNumber,
-        }),
-        isActive: runtime.runtimeId === this.activeRuntimeId,
-        isStreaming: runtime.agent.state.isStreaming,
-        isBusy: isRuntimeBusy(runtime),
-        lockState: runtime.lockState,
-      };
-    });
+    return this.listRuntimes().map((runtime, index) => ({
+      runtimeId: runtime.runtimeId,
+      title: resolveTabTitle({
+        hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
+        sessionTitle: runtime.persistence.getSessionTitle(),
+        defaultTabNumber: this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1),
+      }),
+      isActive: runtime.runtimeId === this.activeRuntimeId,
+      isStreaming: runtime.agent.state.isStreaming,
+      isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+      lockState: runtime.lockState,
+      attention: this.attention.get(runtime.runtimeId) ?? "none",
+    }));
   }
 
   subscribe(listener: RuntimeSnapshotListener): () => void {
@@ -431,10 +464,37 @@ export class SessionRuntimeManager {
     this.emit();
   }
 
+  /** Find runs that ended since the last emit and mark background tabs. */
+  private collectSettledRuns(): Array<{ runtimeId: string; outcome: RuntimeRunOutcome; wasActive: boolean }> {
+    const settled: Array<{ runtimeId: string; outcome: RuntimeRunOutcome; wasActive: boolean }> = [];
+    for (const runtime of this.runtimes.values()) {
+      const busy = runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
+      const wasBusy = this.wasBusy.get(runtime.runtimeId) ?? false;
+      this.wasBusy.set(runtime.runtimeId, busy);
+      if (busy) {
+        this.attention.delete(runtime.runtimeId);
+        continue;
+      }
+      if (!wasBusy) continue;
+
+      const outcome = this.getRunOutcome(runtime);
+      if (!outcome) continue;
+      const wasActive = runtime.runtimeId === this.activeRuntimeId;
+      if (!wasActive) this.attention.set(runtime.runtimeId, outcome);
+      settled.push({ runtimeId: runtime.runtimeId, outcome, wasActive });
+    }
+    return settled;
+  }
+
   private emit(): void {
+    const settled = this.collectSettledRuns();
     const snapshot = this.snapshot();
     for (const listener of this.listeners) {
       listener(snapshot);
+    }
+    for (const run of settled) {
+      const title = snapshot.tabs.find((tab) => tab.runtimeId === run.runtimeId)?.title ?? "";
+      this.onRunSettled({ ...run, title });
     }
   }
 }
