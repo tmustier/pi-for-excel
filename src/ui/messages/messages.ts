@@ -25,17 +25,13 @@ import { customElement, property } from "lit/decorators.js";
 
 import { t } from "../../language/index.js";
 import type { UserMessageWithAttachments } from "../../messages/attachments.js";
-import { describeToolGroup } from "../tool-grouping.js";
 import { getToolRenderer, renderTool } from "./tool-renderer-registry.js";
 import {
   getThinkingDurationMs,
   isDisclosureExpanded,
-  isToolGroupExpanded,
   setDisclosureExpanded,
   subscribeDisclosure,
   thinkingKey,
-  toolCardKey,
-  toolGroupKey,
 } from "./transcript-state.js";
 import "./attachment-tile.js";
 import "./markdown-block.js";
@@ -89,58 +85,20 @@ export class UserMessage extends LitElement {
 
 interface RenderItem {
   template: TemplateResult;
-  toolCall?: ToolCall;
-  groupable?: boolean;
+  group?: ToolCall;
 }
 
-/**
- * Wrap runs of two or more consecutive finished calls of the same tool in a
- * collapsible group. Rendered by Lit like everything else, so re-renders and
- * tab switches never meet DOM nodes moved behind Lit's back.
- */
-function groupToolRuns(message: AssistantMessageType, items: readonly RenderItem[]): TemplateResult[] {
-  const parts: TemplateResult[] = [];
-  let index = 0;
-  while (index < items.length) {
-    const item = items[index];
-    if (!item) break;
-    const leader = item.toolCall;
-    let end = index + 1;
-    if (leader && item.groupable) {
-      while (end < items.length) {
-        const next = items[end];
-        if (!next?.groupable || next.toolCall?.name !== leader.name) break;
-        end++;
-      }
-    }
-
-    const run = items.slice(index, end);
-    if (!leader || run.length < 2) {
-      parts.push(item.template);
-      index++;
-      continue;
-    }
-
-    const key = toolGroupKey(message, leader.id);
-    const expanded = isToolGroupExpanded(key, run.length);
-    parts.push(html`
-      <div class=${expanded ? "pi-tool-group" : "pi-tool-group pi-tool-group--collapsed"}>
-        <button
-          type="button"
-          class="pi-tool-group__header"
-          aria-expanded=${expanded ? "true" : "false"}
-          @click=${() => setDisclosureExpanded(key, !expanded)}
-        >
-          <span class="pi-tool-group__chevron">▸</span>
-          <span class="pi-tool-group__label">${describeToolGroup(leader.name, run.length)}</span>
-        </button>
-        ${run.map((member) => member.template)}
-      </div>
-    `);
-    index = end;
-  }
-  return parts;
-}
+const TOOL_GROUP_LABEL_KEYS: Record<string, string> = {
+  fill_formula: "tool-group.fill_formula",
+  write_cells: "tool-group.write_cells",
+  read_range: "tool-group.read_range",
+  format_cells: "tool-group.format_cells",
+  conditional_format: "tool-group.conditional_format",
+  view_settings: "tool-group.view_settings",
+  charts: "tool-group.charts",
+  execute_office_js: "tool-group.script",
+  execute_wps_js: "tool-group.script",
+};
 
 @customElement("assistant-message")
 export class AssistantMessage extends LitElement {
@@ -212,10 +170,9 @@ export class AssistantMessage extends LitElement {
         const finished = result ? !result.isError : !aborted && !pending && !this.isStreaming;
 
         items.push({
-          toolCall: chunk,
           // Only finished calls with a tool card join a group; a running or
           // failed call (or a fallback JSON render) breaks the run.
-          groupable: finished && getToolRenderer(chunk.name) !== undefined,
+          ...(finished && getToolRenderer(chunk.name) ? { group: chunk } : {}),
           template: html`
             <tool-message
               .tool=${tool}
@@ -224,14 +181,50 @@ export class AssistantMessage extends LitElement {
               .pending=${pending}
               .aborted=${aborted}
               .isStreaming=${this.isStreaming}
-              .disclosureKey=${toolCardKey(message, chunk.id)}
+              .disclosureKey=${`tool:${message.timestamp}:${chunk.id}`}
             ></tool-message>
           `,
         });
       }
     }
 
-    const orderedParts = groupToolRuns(message, items);
+    // Keep groups in Lit's render tree: moving its nodes after rendering
+    // breaks part ownership when switching tabs or finishing a tool.
+    const orderedParts: TemplateResult[] = [];
+    let end = 0;
+    for (const [index, item] of items.entries()) {
+      if (index < end) continue;
+      const leader = item.group;
+      end = index + 1;
+      if (leader) {
+        while (items[end]?.group?.name === leader.name) end++;
+      }
+      const count = end - index;
+      if (!leader || count < 2) {
+        orderedParts.push(item.template);
+        continue;
+      }
+
+      const key = `group:${message.timestamp}:${leader.id}`;
+      const expanded = isDisclosureExpanded(key, count < 3);
+      const labelKey = TOOL_GROUP_LABEL_KEYS[leader.name];
+      orderedParts.push(html`
+        <div class=${expanded ? "pi-tool-group" : "pi-tool-group pi-tool-group--collapsed"}>
+          <button
+            type="button"
+            class="pi-tool-group__header"
+            aria-expanded=${expanded ? "true" : "false"}
+            @click=${() => setDisclosureExpanded(key, !expanded)}
+          >
+            <span class="pi-tool-group__chevron">▸</span>
+            <span class="pi-tool-group__label">${labelKey
+              ? t(labelKey, { count })
+              : t("tool-group.other", { count, tool: leader.name })}</span>
+          </button>
+          ${items.slice(index, end).map((member) => member.template)}
+        </div>
+      `);
+    }
 
     return html`
       <div>

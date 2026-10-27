@@ -336,12 +336,8 @@ export class PiSidebar extends LitElement {
     if (changed.has("agent")) this._setupSubscription();
   }
 
-  override firstUpdated() {
-    this._ensureMessageEnhancements();
-  }
-
   override updated(_changed: PropertyValues<this>) {
-    this._ensureMessageEnhancements();
+    this._setupAutoScroll();
     this._updateSessionTabOverflow();
 
     if (this._isStreaming !== this._wasStreaming) {
@@ -376,12 +372,8 @@ export class PiSidebar extends LitElement {
     this._unsubscribe = agent.subscribe((ev: AgentEvent) => {
       switch (ev.type) {
         case "message_start":
-          this._hasMessages = hasRenderableMessages(agent.state.messages);
-          this._isStreaming = agent.state.isStreaming;
-          this.requestUpdate();
-          break;
         case "message_end":
-          if (ev.message.role === "assistant") {
+          if (ev.type === "message_end" && ev.message.role === "assistant") {
             endOpenThinking(ev.message, Date.now());
             this._streamingContainer?.setMessage(null, true);
           }
@@ -405,13 +397,12 @@ export class PiSidebar extends LitElement {
           // waits for the batch's toolResult message, as before.
           const raw: unknown = ev.result;
           if (!Value.Check(liveToolResultSchema, raw)) break;
-          const result = raw;
           this._liveToolResults.set(ev.toolCallId, {
             role: "toolResult",
             toolCallId: ev.toolCallId,
             toolName: ev.toolName,
-            content: result.content ?? [],
-            ...(result.details === undefined ? {} : { details: result.details }),
+            content: raw.content ?? [],
+            ...(raw.details === undefined ? {} : { details: raw.details }),
             isError: ev.isError,
             timestamp: Date.now(),
           });
@@ -444,10 +435,6 @@ export class PiSidebar extends LitElement {
         }
       }
     });
-  }
-
-  private _ensureMessageEnhancements() {
-    this._setupAutoScroll();
   }
 
   private _scrollToBottom(container: HTMLElement): void {
@@ -744,20 +731,14 @@ export class PiSidebar extends LitElement {
     this._detachTabContextMenuDocumentListener();
   }
 
-  private _buildToolResultsMap(): Map<string, ToolResultMessage> {
-    const map = new Map<string, ToolResultMessage>(this._liveToolResults);
-    if (!this.agent) return map;
-    for (const msg of this.agent.state.messages) {
-      if (msg.role === "toolResult") map.set(msg.toolCallId, msg);
-    }
-    return map;
-  }
-
   override render() {
     const agent = this.agent;
     if (!agent) return html``;
     const state = agent.state;
-    const toolResultsById = this._buildToolResultsMap();
+    const toolResultsById = new Map(this._liveToolResults);
+    for (const message of state.messages) {
+      if (message.role === "toolResult") toolResultsById.set(message.toolCallId, message);
+    }
 
     // Derive from agent state directly — _hasMessages may lag behind after
     // batch operations like replaceMessages() that don't fire per-message events.

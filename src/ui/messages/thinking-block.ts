@@ -28,18 +28,6 @@ import { t } from "../../language/index.js";
 import { isDisclosureExpanded, setDisclosureExpanded, subscribeDisclosure } from "./transcript-state.js";
 import "./markdown-block.js";
 
-function formatThinkingDuration(elapsedMs: number): string {
-  const totalSeconds = Math.max(1, Math.round(elapsedMs / 1000));
-  const minutes = Math.floor(totalSeconds / 60);
-  const seconds = totalSeconds % 60;
-
-  if (minutes <= 0) {
-    return `${totalSeconds}s`;
-  }
-
-  return `${minutes}m ${seconds}s`;
-}
-
 @customElement("thinking-block")
 export class ThinkingBlock extends LitElement {
   @property() content = "";
@@ -74,11 +62,14 @@ export class ThinkingBlock extends LitElement {
       ? "pi-thinking-chevron pi-thinking-chevron--open"
       : "pi-thinking-chevron";
 
-    const label = this.isStreaming
-      ? t("messages.thinking")
-      : this.durationMs !== undefined
-        ? t("messages.thoughtFor", { duration: formatThinkingDuration(this.durationMs) })
-        : t("compat.thought");
+    let label = t("compat.thought");
+    if (this.isStreaming) {
+      label = t("messages.thinking");
+    } else if (this.durationMs !== undefined) {
+      const seconds = Math.max(1, Math.round(this.durationMs / 1000));
+      const duration = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+      label = t("messages.thoughtFor", { duration });
+    }
 
     return html`
       <div class="thinking-block">
