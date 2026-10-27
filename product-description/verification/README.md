@@ -68,6 +68,7 @@ Second pass: 27 October 2026, on the `integration-fixes` branch (all open fix PR
 | [sessions-and-commands](integration-fixes/sessions-and-commands.md) | 129 | 129 | 0 | 0 |
 | [foundations-and-turn](integration-fixes/foundations-and-turn.md) | 147 | 144 | 3 | 0 |
 | [workbook](integration-fixes/workbook.md) | 115 | 115 | 0 | 0 |
+| [guidance-files-extensions](integration-fixes/guidance-files-extensions.md) | 156 | 152 | 1 | 3 |
 | [ui-and-cross-cutting](integration-fixes/ui-and-cross-cutting.md) | 118 | 113 | 1 | 4 |
 
 Desktop rows were run in Excel for Mac on e48d83c and 8099cd6. Still blocked: KEYS-19 (needs Windows), PERSIST-12 and HOST-09 (need a OneDrive sign-in in Excel), MULTI-10 (rerun with a separate login pending).
