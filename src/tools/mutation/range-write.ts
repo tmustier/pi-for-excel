@@ -389,6 +389,12 @@ export interface WriteVerification {
   sampleRows: Array<{ rowOffset: number; values: CellScalar[][]; formulas: CellScalar[][] }>;
 }
 
+/** A completed write is either verified, unreadable, or stopped before read-back. */
+export type WriteReadBack =
+  | { stopped: true; verification: null; verifyError: null }
+  | { stopped: false; verification: WriteVerification; verifyError: null }
+  | { stopped: false; verification: null; verifyError: string };
+
 function preview(value: CellScalar): string {
   if (value === null || value === undefined || value === "") return "(empty)";
   if (typeof value === "string") return JSON.stringify(value.length > 40 ? `${value.slice(0, 39)}…` : value);

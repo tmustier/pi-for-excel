@@ -106,12 +106,6 @@ export function parseExcelError(error: unknown): ExcelErrorInfo {
   };
 }
 
-function targetSheetName(target: ExcelFailureTarget): string | undefined {
-  if (target.sheet) return target.sheet;
-  if (target.range?.includes("!")) return parseRangeRef(target.range).sheet;
-  return undefined;
-}
-
 async function describeProtection(sheetName: string | undefined): Promise<string | null> {
   try {
     return await excelRun(async (context) => {
@@ -149,19 +143,6 @@ async function describeProtection(sheetName: string | undefined): Promise<string
   }
 }
 
-async function listSheetNames(): Promise<string[] | null> {
-  try {
-    return await excelRun(async (context) => {
-      const sheets = context.workbook.worksheets;
-      sheets.load("items/name");
-      await context.sync();
-      return sheets.items.map((sheet) => sheet.name);
-    });
-  } catch {
-    return null;
-  }
-}
-
 /** Describe why an Excel call failed. Never throws; probes are best-effort. */
 export async function describeExcelFailure(
   error: ExcelErrorInfo,
@@ -170,7 +151,7 @@ export async function describeExcelFailure(
   nothingSent = false,
 ): Promise<ExcelFailure> {
   const { code, location, message } = error;
-  const sheetName = targetSheetName(target);
+  const sheetName = target.sheet || (target.range?.includes("!") ? parseRangeRef(target.range).sheet : undefined);
 
   if (code === "AccessDenied") {
     const protection = await describeProtection(sheetName);
@@ -219,7 +200,17 @@ export async function describeExcelFailure(
   }
 
   if (code === "ItemNotFound" && location.startsWith("WorksheetCollection")) {
-    const names = await listSheetNames();
+    let names: string[] | null = null;
+    try {
+      names = await excelRun(async (context) => {
+        const sheets = context.workbook.worksheets;
+        sheets.load("items/name");
+        await context.sync();
+        return sheets.items.map((sheet) => sheet.name);
+      });
+    } catch {
+      // Listing sheets is best-effort; retain the original failure if Excel refuses it.
+    }
     const sheetLabel = sheetName ? `Sheet "${sheetName}"` : "The sheet";
     return {
       code,
