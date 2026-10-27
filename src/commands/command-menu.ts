@@ -174,13 +174,11 @@ function renderMenu(): void {
       runCommand(command);
     });
 
-    item.addEventListener("mouseenter", () => {
-      // Re-rendering replaces the row under the pointer, which fires another
-      // mouseenter: without this guard the menu re-renders continuously and
-      // a press and release land on different rows, so no click fires.
-      if (selectedIndex === index) return;
-      selectedIndex = index;
-      renderMenu();
+    // Only a moving pointer moves the highlight (a menu that opens under a
+    // resting pointer keeps its first row), and it never re-renders rows,
+    // which would swallow the click.
+    item.addEventListener("mousemove", () => {
+      if (selectedIndex !== index) selectIndex(index);
     });
 
     menuEl.appendChild(item);
@@ -203,17 +201,30 @@ function selectIndex(index: number): void {
   }
 }
 
-  textarea.setAttribute("aria-controls", "pi-command-menu");
+/**
+ * Listens on the composer element, not its textarea: the composer renders a
+ * fresh textarea for each tab (see `PiInput.loadDraft`).
+ */
+export function wireCommandMenu(composer: HTMLElement): void {
+  // The textarea in use names the menu it controls (#793), whichever tab's it is.
+  composer.addEventListener("focusin", (event) => {
+    if (event.target instanceof HTMLTextAreaElement) event.target.setAttribute("aria-controls", "pi-command-menu");
+  });
 
-  // Like any popover, a press outside the menu and the composer closes it.
+  // Like any popover, a press outside the menu and the composer closes it (#793).
   document.addEventListener("pointerdown", (event) => {
     if (!isCommandMenuVisible()) return;
     const target = event.target;
-    if (target instanceof Node && (menuEl?.contains(target) || textarea.contains(target))) return;
+    if (target instanceof Node && (menuEl?.contains(target) || composer.contains(target))) return;
     hideCommandMenu();
   }, true);
 
-  textarea.addEventListener("input", () => {
+  composer.addEventListener("input", (event) => {
+    const textarea = event.target;
+    if (!(textarea instanceof HTMLTextAreaElement)) return;
+    const anchor = textarea.closest<HTMLElement>(".pi-input-card")
+      ?? textarea.closest<HTMLElement>(".bg-card")
+      ?? textarea;
     const value = textarea.value;
     if (value.startsWith("/") && !value.includes("\n")) {
       const filter = value.slice(1); // strip the `/`

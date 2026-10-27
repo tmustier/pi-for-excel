@@ -2,7 +2,7 @@
  * Welcome/login overlay shown when no providers are configured.
  */
 
-import { t, getLanguage } from "../language/index.js";
+import { t, initLanguage, getLanguage } from "../language/index.js";
 
 import type { ModelRefreshOwner } from "../models/model-refresh-owner.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
@@ -18,8 +18,9 @@ import {
   resolveConfiguredProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
+import { getErrorMessage } from "../utils/errors.js";
 import { checkProxyOnce } from "./proxy-status.js";
-import { readTaskpaneProxySettings } from "./settings.js";
+import { needsRemoteProxyWarning, readTaskpaneProxySettings, saveTaskpaneProxyUrl } from "./settings.js";
 
 function createElement<K extends keyof HTMLElementTagNameMap>(
   tagName: K,
@@ -190,7 +191,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
           try {
             await getAppStorage().settings.set("language", lang);
           } catch {
-            showToast(t("welcome.language.saveFailed"));
+            showToast(t("welcome.language.saveFailed"), { variant: "error" });
             return;
           }
           initLanguage(lang);
@@ -266,9 +267,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
 
       try {
         await storage.settings.set("proxy.enabled", proxyEnabledEl.checked);
-        await storage.settings.set("proxy.url", proxyUrlEl.value.trim());
-        showToast(t("welcome.toast.proxy_saved"));
-        void checkProxyOnce(storage.settings, { force: true });
+        proxyUrlEl.value = await saveTaskpaneProxyUrl(storage.settings, proxyUrl);
       } catch {
         showToast(t("welcome.toast.proxy_failed"));
         return;
@@ -278,7 +277,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       if (needsRemoteProxyWarning({ enabled: proxyEnabledEl.checked, url: proxyUrl })) {
         showToast(t("init.securityWarning"), { variant: "error" });
       }
-      void checkProxyOnce(storage.settings);
+      void checkProxyOnce(storage.settings, { force: true });
     };
 
     proxyEnabledEl.addEventListener("change", () => {

@@ -25,6 +25,14 @@ function isTopmostEscapeClaim(overlay: HTMLElement): boolean {
 }
 
 /**
+ * True while a dialog overlay (settings, pickers, confirmations, welcome) is
+ * open. Every such overlay registers through `installOverlayEscapeClose`.
+ */
+export function isDialogOverlayOpen(): boolean {
+  return typeof document !== "undefined" && document.querySelector("[data-claims-escape='true']") !== null;
+}
+
+/**
  * Escape closes the topmost overlay. From a text field, the first Escape only
  * steps out of the field to `stepOutTarget` (the dialog card), so a half-filled
  * form is not dismissed by reflex; the next Escape closes. Focus never drops

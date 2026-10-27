@@ -816,7 +816,10 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     const iface = document.querySelector<PiSidebar>("pi-sidebar");
     iface?.requestUpdate();
 
-    showToast(t("export.toast.compact.summarized", { count: out.summarizedCount }), { id: COMPACT_TOAST_ID });
+    showToast(t("export.toast.compact.summarized", {
+      count: out.summarizedCount,
+      plural: out.summarizedCount === 1 ? "" : "s",
+    }), { id: COMPACT_TOAST_ID });
   } catch (e) {
     if (e instanceof CompactionStoppedError) {
       showToast(t("export.toast.compact.stopped"));

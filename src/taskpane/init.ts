@@ -122,11 +122,10 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { TOOL_APPROVAL_OVERLAY_ID } from "../ui/overlay-ids.js";
-import { dismissToast, showActionToast, showToast } from "../ui/toast.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { dismissToast, showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBannerController } from "../ui/proxy-banner.js";
-import { requestTextInputDialog } from "../ui/text-input-dialog.js";
 import { announce } from "../ui/announcer.js";
 import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
@@ -215,6 +214,7 @@ import {
   SessionRuntimeManager,
   isRuntimeBusy,
   type CreateRuntimeOptions,
+  type OpenSessionTarget,
   type RuntimeRunOutcome,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
@@ -232,9 +232,9 @@ const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
 
 const RUN_ERROR_BANNER_ID = "run-error";
 
-/** The last run's error, as a closable banner in the notice area under the tabs. */
-function showErrorBanner(errorRoot: HTMLElement, message: string): void {
-  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss: () => {} });
+/** A tab's run error, as a closable banner in the notice area under the tabs. */
+function showErrorBanner(errorRoot: HTMLElement, message: string, onDismiss: () => void): void {
+  const shown = showBanner({ id: RUN_ERROR_BANNER_ID, tone: "error", message, onDismiss });
   if (!shown) {
     // Before the sidebar exists there is no notice area; use the page-level slot.
     render(renderError(message), errorRoot);
@@ -810,10 +810,26 @@ export async function initTaskpane(opts: {
     focusChatInputSoon();
   });
 
+  // The notice area shows the active tab's run error (the binding passes it
+  // on every tab change). Closing the banner clears that tab's error.
+  let shownRunError: string | null = null;
+  const renderRunError = (message: string | null): void => {
+    if (message === shownRunError) return;
+    shownRunError = message;
+    if (message === null) {
+      clearErrorBanner(errorRoot);
+      return;
+    }
+    showErrorBanner(errorRoot, message, () => {
+      shownRunError = null;
+      runtimeManager.getActiveRuntime()?.tab.setError(null);
+    });
+  };
+
   bindRuntimeSidebar({
     runtimeManager,
     sidebar,
-    renderError: (message) => renderErrorBanner(errorRoot, message),
+    renderError: renderRunError,
   });
 
   let lastReconciledModelSignature = "";
@@ -992,8 +1008,7 @@ export async function initTaskpane(opts: {
     onStop?: () => void;
   }): Promise<boolean> => {
     announce(t("announce.approval", { title: args.title }));
-    return requestConfirmationDialog({
-      overlayId: TOOL_APPROVAL_OVERLAY_ID,
+    return requestApproval({
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
@@ -1272,7 +1287,7 @@ export async function initTaskpane(opts: {
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      showErrorBanner(errorRoot, t("runtime.error.apiKeyRequired", { provider }));
+      missingCredentialsFor = provider;
       return undefined;
     };
 
@@ -1281,10 +1296,11 @@ export async function initTaskpane(opts: {
     let savePersistence: () => Promise<void> = () => Promise.resolve();
     const actionQueue = createActionQueue({
       agent,
-      sidebar,
+      tab,
       // The queue's last update comes after it stops running; re-read busy
       // state then so the tab's idle transition (and markers) is not missed.
       queueDisplay: {
+        ...queueDisplay,
         setActionQueue: (items) => {
           queueDisplay.setActionQueue(items);
           runtimeManager.notifyRuntimeChanged();
@@ -1374,41 +1390,11 @@ export async function initTaskpane(opts: {
       // unloads mid-turn cannot leave its now-missing provider selected.
       window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
 
-      const wasUserAbort = abortedAgents.has(agent);
-      abortedAgents.delete(agent);
-
       // Classify from the run's own result, not from how it was stopped: a
       // stop leaves no mark, an error is "failed", anything else "finished".
       const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
       const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
       runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
-
-      if (!isActiveRuntime) return;
-
-      const errorMessage = agent.state.errorMessage;
-      if (errorMessage) {
-        const isAbort = wasUserAbort || /abort/i.test(errorMessage) || /cancel/i.test(errorMessage);
-        if (!isAbort) {
-          const err = errorMessage;
-          if (findTrailingContextOverflowError(agent.state)) {
-            showErrorBanner(
-              errorRoot,
-              autoCompactEnabled
-                ? t("runtime.error.contextOverflowAuto")
-                : t("runtime.error.contextOverflow"),
-            );
-          } else if (isLikelyCorsErrorMessage(err)) {
-            showErrorBanner(
-              errorRoot,
-              t("runtime.error.cors", { url: DEFAULT_PROXY_URL, guide: PROXY_HELPER_DOCS_URL }),
-            );
-          } else {
-            showErrorBanner(errorRoot, t("init.llmError", { error: err }));
-          }
-        }
-      } else {
-        clearErrorBanner(errorRoot);
-      }
     });
 
     return {
@@ -1592,9 +1578,16 @@ export async function initTaskpane(opts: {
         return "missing";
       }
 
-      await openSessionInNewTab(sessionData);
+      const opened = await openSavedSession(sessionData, {
+        kind: "new_tab",
+        ...(item.tabNumber !== undefined ? { tabNumber: item.tabNumber } : {}),
+      });
+      if (!opened) return "failed";
       dismissToast(`closed-tab:${item.id}`);
-      showToast(t("init.reopened", { title: formatSessionTitle(item.title) }));
+
+      showToast(opened.outcome === "focused"
+        ? t("init.alreadyOpen", { title: opened.title })
+        : t("init.reopened", { title: opened.title }));
       return "reopened";
     } catch {
       showToast(t("init.couldNotReopenSession"));
@@ -1747,7 +1740,7 @@ export async function initTaskpane(opts: {
 
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
-      showActionToast({
+      const toast = showActionToast({
         id: `closed-tab:${closedItem.id}`,
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
@@ -1781,6 +1774,7 @@ export async function initTaskpane(opts: {
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
 
+    // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
     const nextTitleRaw = await requestTextInputDialog({
       title: t("init.renameTab.title"),
       message: t("init.renameTab.message"),
@@ -2294,7 +2288,7 @@ export async function initTaskpane(opts: {
     const proxyBanner = createProxyBannerController({
       isProxyEnabled: async () => (await readTaskpaneProxySettings(settings)).enabled,
     });
-    void proxyBanner.update(getProxyState());
+    void proxyBanner.update(getProxyState(), isProxyBlockedByBrowser());
 
     document.addEventListener("pi:proxy-state-changed", (event: Event) => {
       if (!(event instanceof CustomEvent)) return;
@@ -2302,7 +2296,7 @@ export async function initTaskpane(opts: {
       if (!isTaskpaneInitPayloadShape(detail)) return;
       const state = detail.state;
       if (state === "detected" || state === "not-detected" || state === "unknown") {
-        void proxyBanner.update(state);
+        void proxyBanner.update(state, isProxyBlockedByBrowser());
       }
     });
   }

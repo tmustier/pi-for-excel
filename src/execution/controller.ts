@@ -22,6 +22,14 @@ export interface ExecutionModeController {
 
 export interface CreateExecutionModeControllerOptions {
   settings: ExecutionModeStore;
+  /** Tells other taskpanes the mode changed. Default: a BroadcastChannel when available. */
+  channel?: Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null;
+}
+
+const EXECUTION_MODE_CHANNEL = "pi-execution-mode";
+
+function defaultChannel(): Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null {
+  return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(EXECUTION_MODE_CHANNEL);
 }
 
 export async function createExecutionModeController(

@@ -94,7 +94,7 @@ function renderToast(opts: {
   duration: number;
   variant: ToastVariant;
   action?: { label: string; onAction: () => void };
-}): void {
+}): ToastEntry | null {
   const host = ensureRegion();
 
   // A toast with the same id replaces the earlier one (e.g. "Compacting…"
@@ -105,7 +105,7 @@ function renderToast(opts: {
   if (duplicate && !opts.action) {
     duplicate.remainingMs = opts.duration;
     startTimer(duplicate);
-    return;
+    return duplicate;
   }
 
   const root = document.createElement("div");
@@ -165,8 +165,7 @@ function renderToast(opts: {
     if (!victim) break;
     removeEntry(victim);
   }
-
-  return toastGeneration;
+  return entry;
 }
 
 export function showToast(message: string, duration?: number): void;
@@ -183,24 +182,30 @@ export function showToast(message: string, durationOrOptions?: number | ToastOpt
   });
 }
 
-export function showActionToast(opts: ActionToastOptions): void {
-  if (typeof document === "undefined") return;
-  renderToast({
+export interface ActionToastHandle {
+  /** Hides the toast if it is still on screen. */
+  dismiss: () => void;
+  /** True until the toast times out, is dismissed, or is pushed out of the stack. */
+  isShowing: () => boolean;
+}
+
+/**
+ * Shows a toast with an action button. The handle hides it once its action
+ * no longer applies.
+ */
+export function showActionToast(opts: ActionToastOptions): ActionToastHandle {
+  if (typeof document === "undefined") return { dismiss: () => {}, isShowing: () => false };
+  const entry = renderToast({
     id: opts.id,
     message: opts.message,
     duration: opts.duration ?? ACTION_TOAST_DEFAULT_MS,
     variant: "info",
     action: { label: opts.actionLabel, onAction: opts.onAction },
   });
-
-  const isShowing = (): boolean =>
-    generation === toastGeneration && toastElements !== null && toastElements.root.classList.contains("visible");
-
+  const isShowing = (): boolean => entry !== null && entries.includes(entry);
   return {
     dismiss: () => {
-      if (!isShowing() || !toastElements) return;
-      clearHideTimer();
-      hideToastElements(toastElements);
+      if (entry) removeEntry(entry);
     },
     isShowing,
   };

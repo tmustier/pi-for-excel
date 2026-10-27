@@ -187,6 +187,18 @@ void test("capability refresh requested during a pass runs again and a listener-
   assert.equal(refreshCount, 4, "a refresh requested from a snapshot listener must execute");
 });
 
+void test("a capability refresh requested before any runtime exists does not swallow later refreshes", async () => {
+  const manager = new SessionRuntimeManager({
+    createRuntime: () => Promise.reject(new Error("factory should not run")),
+  });
+  await manager.refreshCapabilities();
+
+  const first = createRuntimeHarness("first");
+  manager.registerRuntime(first.runtime, { activate: true });
+  await manager.refreshCapabilities();
+  assert.equal(first.getRefreshCount(), 1);
+});
+
 void test("a run that ends in a background tab marks it until the tab is opened; a user stop leaves no mark", () => {
   const first = createRuntimeHarness("first");
   const second = createRuntimeHarness("second");

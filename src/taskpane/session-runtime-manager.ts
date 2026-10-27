@@ -415,19 +415,24 @@ export class SessionRuntimeManager {
   }
 
   snapshotTabs(): RuntimeTabSnapshot[] {
-    return this.listRuntimes().map((runtime, index) => ({
-      runtimeId: runtime.runtimeId,
-      title: resolveTabTitle({
-        hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
-        sessionTitle: runtime.persistence.getSessionTitle(),
-        defaultTabNumber: this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1),
-      }),
-      isActive: runtime.runtimeId === this.activeRuntimeId,
-      isStreaming: runtime.agent.state.isStreaming,
-      isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
-      lockState: runtime.lockState,
-      attention: this.attention.get(runtime.runtimeId) ?? "none",
-    }));
+    return this.listRuntimes().map((runtime, index) => {
+      const tabNumber = this.runtimeDefaultTabNumbers.get(runtime.runtimeId) ?? (index + 1);
+      return {
+        runtimeId: runtime.runtimeId,
+        sessionId: runtime.persistence.getSessionId(),
+        tabNumber,
+        title: resolveTabTitle({
+          hasExplicitTitle: runtime.persistence.hasExplicitTitle(),
+          sessionTitle: runtime.persistence.getSessionTitle(),
+          defaultTabNumber: tabNumber,
+        }),
+        isActive: runtime.runtimeId === this.activeRuntimeId,
+        isStreaming: runtime.agent.state.isStreaming,
+        isBusy: isRuntimeBusy(runtime),
+        lockState: runtime.lockState,
+        attention: this.attention.get(runtime.runtimeId) ?? "none",
+      };
+    });
   }
 
   subscribe(listener: RuntimeSnapshotListener): () => void {
@@ -467,7 +472,7 @@ export class SessionRuntimeManager {
   private emit(): void {
     const settled = new Map<string, RuntimeRunOutcome>();
     for (const runtime of this.runtimes.values()) {
-      const busy = runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
+      const busy = isRuntimeBusy(runtime);
       const wasBusy = this.wasBusy.get(runtime.runtimeId) ?? false;
       this.wasBusy.set(runtime.runtimeId, busy);
       if (busy) {

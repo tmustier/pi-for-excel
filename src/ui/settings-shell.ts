@@ -83,8 +83,6 @@ interface MountedShell {
 export function createSettingsShell(options: SettingsShellOptions): SettingsShellController {
   let mounted: MountedShell | null = null;
   let stack: string[] = [];
-  /** Stack depth of the page the shell was opened at; Escape closes at or above it. */
-  let entryDepth = 1;
   let pageCleanups: Array<() => void> = [];
   let beforeLeave: (() => Promise<boolean>) | null = null;
   let transitionInFlight = false;

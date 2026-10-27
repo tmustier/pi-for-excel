@@ -101,7 +101,8 @@ export async function checkProxyOnce(
   const newState: ProxyState = reachable ? "detected" : "not-detected";
   const newBlocked = !reachable && isLoopbackBlockedByFramePolicy(proxyUrl);
 
-  if (newState !== currentState || opts.force === true) {
+  if (newState !== currentState || newBlocked !== blockedByBrowser || opts.force === true) {
+    blockedByBrowser = newBlocked;
     currentState = newState;
     dispatchProxyStateChanged(newState);
   }
