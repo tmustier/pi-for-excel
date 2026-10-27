@@ -1615,11 +1615,6 @@ export async function initTaskpane(opts: {
         showToast(t("init.cantCloseLastTab"));
         return false;
       }
-      if (current.lockState === "holding_lock") {
-        showToast(t("init.waitForChangesBeforeClose"));
-        return false;
-      }
-
       runtime.actionQueue.stop();
     }
 
