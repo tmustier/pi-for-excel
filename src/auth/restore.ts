@@ -15,9 +15,9 @@ import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js"
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import { originalFetch } from "./cors-proxy.js";
-import { clearOAuthCredentials, loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";
+import { loadOAuthCredentials } from "./oauth-storage.js";
+import { createOAuthRefresher } from "./oauth-refresh.js";
 import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
-import { isOpenAICodexCredentialRefreshRequired } from "./openai-codex-browser-oauth.js";
 import { mapToApiProvider, BROWSER_OAUTH_PROVIDERS } from "./provider-map.js";
 import { getOAuthProvider } from "./oauth-provider-registry.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -129,21 +129,16 @@ async function restoreFromPiAuth(
   }
 }
 
-async function clearBrowserOAuthProvider(
-  providerKeys: ProviderKeysStore,
-  settings: SettingsStore,
-  providerId: string,
-): Promise<void> {
-  await clearOAuthCredentials(settings, providerId).catch(() => {});
-  await providerKeys.delete(mapToApiProvider(providerId)).catch(() => {});
-}
-
 async function restoreFromBrowserOAuthStorage(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
   getOAuthProvider: GetOAuthProvider,
   restoredProviders: Set<string>,
 ): Promise<void> {
+  // Startup refresh goes through the same guarded path as on-demand refresh,
+  // so two taskpanes opening together cannot both rotate one grant.
+  const refresher = createOAuthRefresher({ settings, providerKeys, getOAuthProvider });
+
   for (const providerId of BROWSER_OAUTH_PROVIDERS) {
     const apiProvider = mapToApiProvider(providerId);
     if (restoredProviders.has(apiProvider)) continue;
@@ -155,33 +150,26 @@ async function restoreFromBrowserOAuthStorage(
       const provider = getOAuthProvider(providerId);
       if (!provider) continue;
 
-      if (Date.now() >= credentials.expires) {
-        try {
-          const refreshed = await provider.refreshToken(credentials);
-          await saveOAuthCredentials(settings, providerId, refreshed);
-          await providerKeys.set(apiProvider, provider.getApiKey(refreshed));
-          restoredProviders.add(apiProvider);
-          console.log(`[auth] ${provider.name}: token refreshed from IndexedDB`);
-        } catch (e) {
-          if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
-            await clearBrowserOAuthProvider(providerKeys, settings, providerId);
-            console.warn(`[auth] ${provider.name}: stored OAuth grant is stale; cleared credentials, please login again`);
-          } else {
-            console.warn(`[auth] ${provider.name}: refresh failed (${getErrorMessage(e)}), please login again`);
-          }
-        }
-      } else {
-        await providerKeys.set(apiProvider, provider.getApiKey(credentials));
+      const outcome = await refresher.ensureFresh(apiProvider);
+      if (outcome === "refreshed") {
+        restoredProviders.add(apiProvider);
+        console.log(`[auth] ${provider.name}: token refreshed from IndexedDB`);
+      } else if (outcome === "fresh") {
+        await providerKeys.set(apiProvider, provider.getApiKey(
+          (await loadOAuthCredentials(settings, providerId)) ?? credentials,
+        ));
         restoredProviders.add(apiProvider);
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
+      } else if (outcome === "failed") {
+        // Refresh is attempted shortly before expiry; a token that still works is used until then.
+        await providerKeys.set(apiProvider, provider.getApiKey(credentials));
+        restoredProviders.add(apiProvider);
+        console.warn(`[auth] ${provider.name}: refresh failed; it will be retried before the next request`);
+      } else if (outcome === "expired") {
+        console.warn(`[auth] ${provider.name}: refresh failed; it will be retried before the next request`);
       }
     } catch (e) {
-      if (providerId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(e)) {
-        await clearBrowserOAuthProvider(providerKeys, settings, providerId);
-        console.warn("[auth] OpenAI (ChatGPT Plus/Pro): stored OAuth grant is stale; cleared credentials, please login again");
-      } else {
-        console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
-      }
+      console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
     }
   }
 }

@@ -77,11 +77,13 @@ export interface SessionMetadata {
   id: string;
   /** User-defined title or auto-generated from first message */
   title: string;
+  /** True when the user chose the title; absent on sessions saved before this was recorded. */
+  titleChosen?: boolean;
   /** ISO 8601 UTC timestamp of creation */
   createdAt: string;
   /** ISO 8601 UTC timestamp of last modification */
   lastModified: string;
-  /** Total number of messages (user + assistant + tool results) */
+  /** Visible messages (user + assistant + tool results); hidden instructions are not counted */
   messageCount: number;
   /** Cumulative usage statistics */
   usage: {
@@ -130,6 +132,8 @@ export interface SessionData {
   id: string;
   /** User-defined title or auto-generated from first message */
   title: string;
+  /** True when the user chose the title; absent on sessions saved before this was recorded. */
+  titleChosen?: boolean;
   /** Last selected model */
   model: Model<Api>;
   /** Last selected thinking level */

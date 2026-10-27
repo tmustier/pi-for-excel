@@ -11,17 +11,18 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
 
 import { html, render } from "lit";
 import { Agent } from "@earendil-works/pi-agent-core";
-import { getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
+import { clampThinkingLevel, getCurrentSystemMessage, toToolDeclaration } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../storage/local/app-storage.js";
 import type { SessionData } from "../storage/local/types.js";
 
 import { createOfficeStreamFn } from "../auth/stream-proxy.js";
 import {
   DEFAULT_PROXY_URL,
-  isLoopbackProxyUrl,
   validateOfficeProxyUrl,
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
+import { createOAuthRefresher } from "../auth/oauth-refresh.js";
+import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
 import { onCellEditWait } from "../excel/helpers.js";
 import { ChangeTracker, type PiWriteWindow } from "../context/change-tracker.js";
@@ -121,7 +122,8 @@ import {
   moveCursorToEnd,
 } from "../ui/input-focus.js";
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
-import { showActionToast, showToast } from "../ui/toast.js";
+import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBanner } from "../ui/proxy-banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
@@ -135,6 +137,7 @@ import { openModelSelectorDialog } from "../ui/model-selector-dialog.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { createWorkbookCoordinator, getSessionLockState } from "../workbook/coordinator.js";
 import { formatWorkbookLabel, type WorkbookContext } from "../workbook/context.js";
+import { createRecoveryScopeResolver } from "../workbook/recovery-scope.js";
 import {
   getManualFullWorkbookBackupStore,
   ManualFullWorkbookBackupStore,
@@ -167,7 +170,14 @@ import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcut
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
 import { maybeStartBackgroundVerificationBridge } from "./background-verification-bridge.js";
-import { RecentlyClosedStack, type RecentlyClosedItem } from "./recently-closed.js";
+import {
+  RecentlyClosedStack,
+  loadRecentlyClosed,
+  saveRecentlyClosed,
+  type RecentlyClosedItem,
+} from "./recently-closed.js";
+import { createWorkbookIdentityFollower } from "./workbook-identity-follower.js";
+import { moveSessionToWorkbook } from "../workbook/session-association.js";
 import { setupSessionPersistence } from "./sessions.js";
 import {
   loadWorkbookTabLayout,
@@ -193,12 +203,15 @@ import {
 import { showWelcomeLogin } from "./welcome-login.js";
 import {
   ensureDefaultProxyUrl,
+  needsRemoteProxyWarning,
   readTaskpaneLanguage,
   readTaskpaneProxySettings,
 } from "./settings.js";
 import {
   SessionRuntimeManager,
+  isRuntimeBusy,
   type CreateRuntimeOptions,
+  type OpenSessionTarget,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
@@ -268,13 +281,8 @@ export async function initTaskpane(opts: {
   const autoCompactEnabled = await readAutoCompactionEnabled(settings);
 
   // 1c. Security warning: remote proxies can see your prompts + credentials.
-  const initialProxySettings = await readTaskpaneProxySettings(settings);
-  if (
-    initialProxySettings.enabled &&
-    initialProxySettings.url !== null &&
-    initialProxySettings.url.length > 0 &&
-    !isLoopbackProxyUrl(initialProxySettings.url)
-  ) {
+  // The proxy pages warn again when a remote URL is saved or enabled.
+  if (needsRemoteProxyWarning(await readTaskpaneProxySettings(settings))) {
     showToast(t("init.securityWarning"));
   }
 
@@ -313,6 +321,8 @@ export async function initTaskpane(opts: {
       console.warn("[models] Some provider catalogues could not be refreshed:", snapshot.providerErrors);
     }
     document.dispatchEvent(new Event("pi:models-changed"));
+    // The model control tags the provider when two connected providers share models.
+    document.dispatchEvent(new CustomEvent("pi:status-update"));
   });
 
   document.addEventListener("pi:providers-changed", () => {
@@ -325,6 +335,7 @@ export async function initTaskpane(opts: {
   // 2b. Cached catalogues are published before first paint. Remote discovery
   // starts afterward; a late credential restore owns one follow-up refresh.
   const credentialRestorePromise = restoreCredentials(providerKeys, settings);
+  const oauthRefresher = createOAuthRefresher({ settings, providerKeys, getOAuthProvider });
   try {
     await awaitWithTimeout(
       "Provider lookup",
@@ -531,7 +542,46 @@ export async function initTaskpane(opts: {
     },
   });
   const draftStore = createDraftStore(settings);
-  const recentlyClosed = new RecentlyClosedStack(10);
+
+  // Per-workbook tab state (layout, recently closed) is stored under the
+  // workbook's identity. A workbook without one (never saved, or edited through
+  // an anonymous web link) uses the token Pi keeps inside the document, as
+  // recovery checkpoints do, so a reload keeps its tabs and another
+  // unidentified workbook does not see them. Without a token the state stays in
+  // memory. The standalone browser taskpane never has an identity and keeps
+  // using the shared slot.
+  const usesSharedUnidentifiedState = spreadsheetHost.kind === "browser";
+  const workbookScope = createRecoveryScopeResolver({ getWorkbookContext: resolveWorkbookContext });
+  const resolvePersistentWorkbookKey = async (
+    mode: "read" | "write",
+  ): Promise<{ workbookId: string | null } | null> => {
+    if (usesSharedUnidentifiedState) return { workbookId: await resolveWorkbookId() };
+    const scope = mode === "write" ? await workbookScope.resolveForAppend() : await workbookScope.resolveForRead();
+    return scope ? { workbookId: scope.workbookId } : null;
+  };
+
+  // Recently closed tabs are kept per workbook. If the stored list cannot be
+  // read, it is not overwritten: closes stay in memory for this taskpane only.
+  let recentlyClosedWritable = false;
+  let recentlyClosedWrites: Promise<void> = Promise.resolve();
+  const recentlyClosed = new RecentlyClosedStack(10, (items) => {
+    if (!recentlyClosedWritable) return;
+    recentlyClosedWrites = recentlyClosedWrites.then(async () => {
+      try {
+        const key = await resolvePersistentWorkbookKey("write");
+        if (key) await saveRecentlyClosed(settings, key.workbookId, items);
+      } catch (error) {
+        console.warn("[pi] Failed to persist recently closed tabs:", error);
+      }
+    });
+  });
+  try {
+    const key = await resolvePersistentWorkbookKey("read");
+    if (key) recentlyClosed.load(await loadRecentlyClosed(settings, key.workbookId));
+    recentlyClosedWritable = true;
+  } catch (error) {
+    console.warn("[pi] Failed to read recently closed tabs:", error);
+  }
 
   const getActiveRuntime = () => runtimeManager.getActiveRuntime();
   const getActiveAgent = () => getActiveRuntime()?.agent ?? null;
@@ -540,12 +590,11 @@ export async function initTaskpane(opts: {
   listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
     runtimeId: runtime.runtimeId,
     model: runtime.agent.state.model,
-    isBusy: runtime.agent.state.isStreaming || runtime.actionQueue.isBusy(),
+    isBusy: isRuntimeBusy(runtime),
     applyModel: (model, thinkingLevel) => {
       runtime.agent.state.model = model;
-      if (thinkingLevel !== undefined) {
-        runtime.agent.state.thinkingLevel = thinkingLevel;
-      }
+      // A refreshed or swapped model may support fewer thinking levels than the current one.
+      runtime.agent.state.thinkingLevel = clampThinkingLevel(model, thinkingLevel ?? runtime.agent.state.thinkingLevel);
       document.dispatchEvent(new CustomEvent("pi:status-update"));
       if (runtime.runtimeId === getActiveRuntime()?.runtimeId) {
         requestAnimationFrame(() => sidebar.requestUpdate());
@@ -662,19 +711,25 @@ export async function initTaskpane(opts: {
   };
 
   const snapshotRuntimeTabLayout = (): WorkbookTabLayout => {
-    const runtimes = runtimeManager.listRuntimes();
-    const activeRuntime = runtimeManager.getActiveRuntime();
+    const tabs = runtimeManager.snapshotTabs();
+    const tabNumbers: Record<string, number> = {};
+    for (const tab of tabs) {
+      tabNumbers[tab.sessionId] = tab.tabNumber;
+    }
 
     return {
-      sessionIds: runtimes.map((runtime) => runtime.persistence.getSessionId()),
-      activeSessionId: activeRuntime?.persistence.getSessionId() ?? null,
+      sessionIds: tabs.map((tab) => tab.sessionId),
+      activeSessionId: tabs.find((tab) => tab.isActive)?.sessionId ?? null,
+      tabNumbers,
+      nextTabNumber: runtimeManager.getNextTabNumber(),
     };
   };
 
   const tabLayoutPersistence = createTabLayoutPersistence({
     resolveWorkbookId,
-    saveLayout: async (workbookId, layout) => {
-      await saveWorkbookTabLayout(settings, workbookId, layout);
+    saveLayout: async (_workbookId, layout) => {
+      const key = await resolvePersistentWorkbookKey("write");
+      if (key) await saveWorkbookTabLayout(settings, key.workbookId, layout);
     },
     warn: (message, error) => {
       console.warn(message, error);
@@ -723,6 +778,7 @@ export async function initTaskpane(opts: {
     renderError: (message) => renderErrorBanner(errorRoot, message),
   });
 
+  let lastReconciledModelSignature = "";
   runtimeManager.subscribe((snapshot) => {
     if (snapshot.activeRuntimeId !== previousActiveRuntimeId) {
       previousActiveRuntimeId = snapshot.activeRuntimeId;
@@ -735,6 +791,16 @@ export async function initTaskpane(opts: {
 
     maybePersistTabLayout();
     document.dispatchEvent(new CustomEvent("pi:status-update"));
+
+    // A tab that registers, or restores a saved model, after the provider list
+    // was published missed that pass's reconcile (P-66, P-67): check it now.
+    const modelSignature = runtimeManager.listRuntimes()
+      .map((runtime) => `${runtime.runtimeId}:${runtime.agent.state.model.provider}/${runtime.agent.state.model.id}`)
+      .join("|");
+    if (modelSignature !== lastReconciledModelSignature) {
+      lastReconciledModelSignature = modelSignature;
+      modelRefreshOwner.reconcileRuntimes();
+    }
   });
 
   const refreshCapabilitiesForAllRuntimes = (): Promise<void> => {
@@ -1124,9 +1190,19 @@ export async function initTaskpane(opts: {
     const tab = createTabState();
     // Set when the user dismisses the connection dialog during this turn.
     let missingCredentialsFor: string | null = null;
+    // Display label when this turn's login could not be refreshed and its token has expired.
+    let expiredLoginFor: string | null = null;
 
     // API key resolution
     agent.getApiKey = async (provider: string) => {
+      // OAuth access tokens expire during long sessions; refresh before the request, not at reload.
+      if (await oauthRefresher.ensureFresh(provider) === "expired") {
+        // Sending the stale token would only surface the provider's 401, and
+        // returning no key lets pi-ai fall back to that same stored token.
+        // Throwing fails the turn; the banner tells the user to sign in again.
+        expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
+        throw new Error(`The ${provider} login has expired and could not be refreshed.`);
+      }
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
       if (resolvedAuth) return resolvedAuth.auth.apiKey;
 
@@ -1171,12 +1247,15 @@ export async function initTaskpane(opts: {
       onTurnSettled: ({ overflowAfterRecovery }) => {
         const credentials = missingCredentialsFor;
         missingCredentialsFor = null;
+        const expiredLogin = expiredLoginFor;
+        expiredLoginFor = null;
         void getConfiguredProxyUrl().then((proxyUrl) => {
           tab.setError(describeTurnFailure({
             messages: agent.state.messages,
             isContextOverflow: findTrailingContextOverflowError(agent.state) !== null,
             overflowAfterRecovery,
             missingCredentialsFor: credentials,
+            expiredLoginFor: expiredLogin,
             online: navigator.onLine,
             proxyUrl: proxyUrl ?? null,
             defaultProxyUrl: DEFAULT_PROXY_URL,
@@ -1193,7 +1272,7 @@ export async function initTaskpane(opts: {
       agent,
       sessions,
       settings,
-      models: modelRuntime.models,
+      resolveModel: (persisted) => modelRefreshOwner.resolveModel(persisted),
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
       onSaveError: (message) => {
@@ -1203,7 +1282,7 @@ export async function initTaskpane(opts: {
         showToast(t("init.sessionSavedAsCopy"), 8000);
       },
     });
-    savePersistence = () => persistence.saveSession({ force: true });
+    savePersistence = async () => { await persistence.saveSession({ force: true }); };
 
     runtimeSessionId = persistence.getSessionId();
     await refreshRuntimeCapabilities();
@@ -1273,7 +1352,12 @@ export async function initTaskpane(opts: {
   let tabLayoutReadSucceeded = false;
 
   const restorePersistedTabLayout = async (): Promise<SessionRuntime | null> => {
-    const workbookId = await resolveWorkbookId();
+    const key = await resolvePersistentWorkbookKey("read");
+    if (!key) {
+      tabLayoutReadSucceeded = true;
+      return null;
+    }
+    const workbookId = key.workbookId;
     let savedLayout: WorkbookTabLayout | null;
     try {
       savedLayout = await loadWorkbookTabLayout(settings, workbookId);
@@ -1284,16 +1368,20 @@ export async function initTaskpane(opts: {
     }
     if (!savedLayout) return null;
 
+    // Tabs keep their "Chat N" numbers across reloads, and closed tabs' numbers stay retired.
+    runtimeManager.seedNextTabNumber(savedLayout.nextTabNumber ?? 1);
     const runtimesBySessionId = new Map<string, SessionRuntime>();
     let firstRuntime: SessionRuntime | null = null;
 
     for (const sessionId of savedLayout.sessionIds) {
       // Keeping the saved id lets a blank tab keep its identity (and its
-      // unsent draft) across reloads.
+      // unsent draft) across reloads, and the saved number keeps its "Chat N" label.
+      const tabNumber = savedLayout.tabNumbers?.[sessionId];
       const runtime = await runtimeManager.createRuntime({
         activate: false,
         autoRestoreLatest: false,
         sessionId,
+        ...(tabNumber !== undefined ? { tabNumber } : {}),
       });
 
       const sessionData = await sessions.loadSession(sessionId);
@@ -1333,42 +1421,51 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const replaceActiveRuntimeSession = async (sessionData: SessionData): Promise<void> => {
-    const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) {
-      showToast(t("init.noActiveSession"));
-      return;
-    }
-
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
-    if (busy) {
-      showToast(t("init.currentTabBusy"));
-      return;
-    }
-
-    await activeRuntime.persistence.applyLoadedSession(sessionData);
-    syncRuntimeAfterSessionLoad(activeRuntime);
+  const getRuntimeTabTitle = (runtimeId: string): string => {
+    return runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title ?? t("session.untitled");
   };
 
-  const openSessionInNewTab = async (sessionData: SessionData): Promise<SessionRuntime> => {
-    const runtime = await runtimeManager.createRuntime({
-      activate: true,
-      autoRestoreLatest: false,
-    });
+  /**
+   * Opens a saved session in a tab. A session is open in at most one tab, so
+   * a session that is already open switches to its tab. Shows the refusal
+   * toast itself and returns null when nothing was opened.
+   */
+  const openSavedSession = async (
+    sessionData: SessionData,
+    target: OpenSessionTarget,
+  ): Promise<{ outcome: "opened" | "replaced" | "focused"; title: string } | null> => {
+    const result = await runtimeManager.openSession(sessionData, target);
+    if (result.outcome === "missing") {
+      showToast(t("init.noActiveSession"));
+      return null;
+    }
+    if (result.outcome === "busy") {
+      showToast(t("init.currentTabBusy"));
+      return null;
+    }
 
-    await runtime.persistence.applyLoadedSession(sessionData);
-    syncRuntimeAfterSessionLoad(runtime);
-    return runtime;
+    // An open session is not "recently closed" any more.
+    recentlyClosed.removeBySessionId(result.runtime.persistence.getSessionId());
+    if (result.outcome !== "focused") {
+      syncRuntimeAfterSessionLoad(result.runtime);
+    }
+    return { outcome: result.outcome, title: getRuntimeTabTitle(result.runtime.runtimeId) };
   };
 
   const openResumePicker = async (defaultTarget: ResumeDialogTarget = "new_tab"): Promise<void> => {
     await showResumeDialog({
       defaultTarget,
-      onOpenInNewTab: async (sessionData: SessionData) => {
-        await openSessionInNewTab(sessionData);
-      },
-      onReplaceCurrent: async (sessionData: SessionData) => {
-        await replaceActiveRuntimeSession(sessionData);
+      onOpenSession: async (sessionData: SessionData, resumeTarget: ResumeDialogTarget) => {
+        if (resumeTarget === "new_tab") {
+          return openSavedSession(sessionData, { kind: "new_tab" });
+        }
+
+        const activeRuntime = getActiveRuntime();
+        if (!activeRuntime) {
+          showToast(t("init.noActiveSession"));
+          return null;
+        }
+        return openSavedSession(sessionData, { kind: "replace", runtimeId: activeRuntime.runtimeId });
       },
       getRecentlyClosedItems: () => recentlyClosed.snapshot(),
       onReopenRecentlyClosed: async (item) => {
@@ -1383,7 +1480,15 @@ export async function initTaskpane(opts: {
 
   type ReopenRecentlyClosedResult = "reopened" | "missing" | "failed";
 
+  /** The undo toast shown for the most recent close, so reopening can retire it. */
+  let closeUndoToast: { itemId: string; toast: ActionToastHandle } | null = null;
+
   const reopenRecentlyClosedItem = async (item: RecentlyClosedItem): Promise<ReopenRecentlyClosedResult> => {
+    if (closeUndoToast?.itemId === item.id) {
+      closeUndoToast.toast.dismiss();
+      closeUndoToast = null;
+    }
+
     try {
       const sessionData = await sessions.loadSession(item.sessionId);
       if (!sessionData) {
@@ -1391,8 +1496,15 @@ export async function initTaskpane(opts: {
         return "missing";
       }
 
-      await openSessionInNewTab(sessionData);
-      showToast(t("init.reopened", { title: formatSessionTitle(item.title) }));
+      const opened = await openSavedSession(sessionData, {
+        kind: "new_tab",
+        ...(item.tabNumber !== undefined ? { tabNumber: item.tabNumber } : {}),
+      });
+      if (!opened) return "failed";
+
+      showToast(opened.outcome === "focused"
+        ? t("init.alreadyOpen", { title: opened.title })
+        : t("init.reopened", { title: opened.title }));
       return "reopened";
     } catch {
       showToast(t("init.couldNotReopenSession"));
@@ -1508,6 +1620,13 @@ export async function initTaskpane(opts: {
       });
       if (!proceed) return false;
 
+      // The tab kept running while the dialog was open; check again what closing would break.
+      const current = runtimeManager.getRuntime(runtimeId);
+      if (current !== runtime) return false;
+      if (runtimeManager.listRuntimes().length <= 1) {
+        showToast(t("init.cantCloseLastTab"));
+        return false;
+      }
       runtime.actionQueue.stop();
     }
 
@@ -1523,15 +1642,14 @@ export async function initTaskpane(opts: {
 
     await runtime.persistence.saveSession({ force: true });
 
-    const closeTitle = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.title
-      ?? formatSessionTitle(runtime.persistence.getSessionTitle());
-
+    const closingTab = runtimeManager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId);
     const closedItem: RecentlyClosedItem = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       sessionId: runtime.persistence.getSessionId(),
-      title: closeTitle,
+      title: closingTab?.title ?? formatSessionTitle(runtime.persistence.getSessionTitle()),
       closedAt: new Date().toISOString(),
       workbookId: await resolveWorkbookId(),
+      ...(closingTab ? { tabNumber: closingTab.tabNumber } : {}),
     };
 
     runtimeManager.closeRuntime(runtimeId);
@@ -1539,14 +1657,16 @@ export async function initTaskpane(opts: {
 
     const showUndoToast = optsForClose?.showUndoToast !== false;
     if (showUndoToast) {
-      showActionToast({
+      const toast = showActionToast({
         message: t("init.closedTab", { title: closedItem.title }),
         actionLabel: t("init.undo"),
         duration: 9000,
         onAction: () => {
+          closeUndoToast = null;
           void reopenRecentlyClosedById(closedItem.id);
         },
       });
+      closeUndoToast = { itemId: closedItem.id, toast };
     }
 
     return true;
@@ -1559,7 +1679,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (isRuntimeBusy(runtime)) {
       showToast(t("init.waitBeforeRenaming"));
       return;
     }
@@ -1570,10 +1690,17 @@ export async function initTaskpane(opts: {
       ? runtime.persistence.getSessionTitle().trim()
       : currentTitle;
 
-    const nextTitleRaw = window.prompt("Rename tab", defaultTitle);
+    // Office on the web replaces window.prompt with a function that throws, so ask in the taskpane.
+    const nextTitleRaw = await requestTextInputDialog({
+      title: t("init.renameTab.title"),
+      initialValue: defaultTitle,
+      confirmLabel: t("init.renameTab.confirm"),
+    });
     if (nextTitleRaw === null) {
       return;
     }
+    // The tab may have started a turn while the dialog was open.
+    if (runtimeManager.getRuntime(runtimeId) !== runtime) return;
 
     const nextTitle = nextTitleRaw.trim();
     await runtime.persistence.renameSession(nextTitle);
@@ -1628,7 +1755,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (sourceRuntime.agent.state.isStreaming || sourceRuntime.actionQueue.isBusy()) {
+    if (isRuntimeBusy(sourceRuntime)) {
       showToast(t("init.waitBeforeDuplicating"));
       return;
     }
@@ -1790,7 +1917,6 @@ export async function initTaskpane(opts: {
     }
 
     const targetRuntimeId = activeRuntime.runtimeId;
-    const currentModel = activeRuntime.agent.state.model;
 
     void (async () => {
       try {
@@ -1801,9 +1927,18 @@ export async function initTaskpane(opts: {
 
       closeStatusPopover();
 
+      // Read the model after the refresh, which can swap a tab whose provider went away.
+      const currentModel = runtimeManager.getRuntime(targetRuntimeId)?.agent.state.model
+        ?? activeRuntime.agent.state.model;
       openModelSelectorDialog({
         models: modelRuntime.models,
         currentModel,
+        // Same rule from every entry point (/model, status bar): a busy tab keeps
+        // its model, so the list says so up front instead of refusing a pick.
+        getDisabledReason: () => {
+          const runtime = runtimeManager.getRuntime(targetRuntimeId);
+          return runtime && isRuntimeBusy(runtime) ? t("modelSelector.busy") : undefined;
+        },
         onSelect: (model) => {
           void applyModelSelection(targetRuntimeId, model);
         },
@@ -1879,7 +2014,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = activeRuntime.agent.state.isStreaming || activeRuntime.actionQueue.isBusy();
+    const busy = isRuntimeBusy(activeRuntime);
     const result = executeSlashCommand({
       name,
       args,
@@ -2013,12 +2148,44 @@ export async function initTaskpane(opts: {
   // Bootstrap from persisted tab layout; fallback to legacy single-runtime restore.
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
-    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest: true });
+    // Without an identity in a real workbook there is no "latest session" of this workbook to restore.
+    const autoRestoreLatest = usesSharedUnidentifiedState || (await resolveWorkbookId()) !== null;
+    await runtimeManager.createRuntime({ activate: true, autoRestoreLatest });
+  }
+  for (const tab of runtimeManager.snapshotTabs()) {
+    recentlyClosed.removeBySessionId(tab.sessionId);
   }
 
   const startupTabLayout = snapshotRuntimeTabLayout();
   tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
   tabLayoutPersistence.persist(startupTabLayout);
+
+  // Tabs follow the workbook when Save As gives it a new identity. Only in
+  // Office, where one taskpane serves one document: there a new identity is
+  // this document under a new name. A pane that follows the active workbook
+  // (WPS) sees another workbook instead.
+  if (spreadsheetHost.kind === "office") {
+    const identityFollower = createWorkbookIdentityFollower({
+      settings,
+      resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,
+      onIdentityChanged: async ({ from, to }) => {
+        for (const tab of runtimeManager.snapshotTabs()) {
+          await moveSessionToWorkbook(settings, tab.sessionId, from, to);
+        }
+        maybePersistTabLayout();
+        if (recentlyClosedWritable) await saveRecentlyClosed(settings, to, recentlyClosed.snapshot());
+        await tabLayoutPersistence.flush();
+      },
+    });
+    const followIdentity = () => {
+      void identityFollower.checkOnce().catch((error) => {
+        console.warn("[pi] Failed to move tabs to the workbook's new identity:", error);
+      });
+    };
+    followIdentity();
+    const identityPoll = setInterval(followIdentity, 4_000);
+    window.addEventListener("beforeunload", () => clearInterval(identityPoll), { once: true });
+  }
 
   // ── Disclosure bar (onboarding banner) ──
   // Must run after runtime bootstrap so the sidebar has rendered .pi-messages.
@@ -2103,7 +2270,11 @@ export async function initTaskpane(opts: {
     onReopenLastClosed: () => {
       void reopenLastClosed();
     },
-    canUndoCloseTab: () => recentlyClosed.peekMostRecent() !== null,
+    // Ctrl/Cmd+Z reopens only the tab whose Undo toast is on screen. Recently
+    // closed now survives reloads, so a bare Ctrl+Z could otherwise bring back a
+    // tab closed days ago when the user meant to undo in Excel (CL-02).
+    // /reopen and the resume picker still reach older tabs.
+    canUndoCloseTab: () => closeUndoToast?.toast.isShowing() === true,
     onSwitchAdjacentTab: (direction: -1 | 1) => {
       const tabs = runtimeManager.snapshotTabs();
       if (tabs.length <= 1) {

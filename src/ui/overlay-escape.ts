@@ -24,6 +24,14 @@ function isTopmostEscapeClaim(overlay: HTMLElement): boolean {
   return claimingOverlays[claimingOverlays.length - 1] === overlay;
 }
 
+/**
+ * True while a dialog overlay (settings, pickers, confirmations, welcome) is
+ * open. Every such overlay registers through `installOverlayEscapeClose`.
+ */
+export function isDialogOverlayOpen(): boolean {
+  return typeof document !== "undefined" && document.querySelector("[data-claims-escape='true']") !== null;
+}
+
 export function installOverlayEscapeClose(
   overlay: HTMLElement,
   closeOverlay: () => void,

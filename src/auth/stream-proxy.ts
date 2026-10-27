@@ -8,6 +8,7 @@
  * We route requests through a user-configured local CORS proxy when enabled.
  */
 
+import { t } from "../language/index.js";
 import {
   createAssistantMessageEventStream,
   getCurrentSystemPrompt,
@@ -98,12 +99,7 @@ function shouldProxyProvider(
 function assertDirectRequestAllowed(model: Model<Api>): void {
   if (!isPlainHttpRemoteEndpoint(model.baseUrl)) return;
 
-  throw new Error(
-    `${model.provider} uses a plain http:// endpoint (${model.baseUrl}). ` +
-    "Excel blocks http:// requests from the add-in to other machines, so Pi cannot reach it directly. " +
-    "Serve the endpoint over https:// with CORS enabled, or route it through the Pi for Excel proxy " +
-    "(start the proxy with ALLOW_PRIVATE_TARGETS=1 for addresses on your network).",
-  );
+  throw new Error(t("custom-gateway.error.plainHttpBlocked", { provider: model.provider, url: model.baseUrl }));
 }
 
 type OfficeProxyTransport = "codex-websocket";

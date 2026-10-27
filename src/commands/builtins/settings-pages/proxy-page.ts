@@ -10,7 +10,8 @@ import {
   PROXY_HELPER_DOCS_URL,
   validateOfficeProxyUrl,
 } from "../../../auth/proxy-validation.js";
-import { getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
+import { checkProxyOnce, getProxyState, type ProxyState } from "../../../taskpane/proxy-status.js";
+import { needsRemoteProxyWarning, saveTaskpaneProxyUrl } from "../../../taskpane/settings.js";
 import { t } from "../../../language/index.js";
 import {
   createCallout,
@@ -20,7 +21,7 @@ import {
 } from "../../../ui/extensions-hub-components.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
 import { showToast } from "../../../ui/toast.js";
-import type { SettingsWriter } from "../../../storage/local/settings-store.js";
+import type { SettingsAccess } from "../../../storage/local/settings-store.js";
 
 function isProxyPagePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -72,8 +73,9 @@ export function createProxyPage(): SettingsShellPage {
     id: "proxy",
     parentId: "root",
     title: () => t("settings.section.proxy"),
+    subtitle: () => t("settings.section.proxy.page_subtitle"),
     render: (ctx) => {
-      const settingsStore: SettingsWriter = getAppStorage().settings;
+      const settingsStore: SettingsAccess = getAppStorage().settings;
 
       const card = document.createElement("div");
       card.className = "pi-overlay-surface pi-settings-proxy-card";
@@ -109,6 +111,24 @@ export function createProxyPage(): SettingsShellPage {
       const statusHost = document.createElement("div");
       statusHost.className = "pi-settings-proxy-status";
 
+      // Re-check right after a change instead of showing the previous URL's result until the next poll.
+      let recheckToken = 0;
+      const recheckProxy = async (): Promise<void> => {
+        const token = ++recheckToken;
+        proxyState = "unknown";
+        updateStatus();
+        const state = await checkProxyOnce(settingsStore);
+        if (token !== recheckToken) return;
+        proxyState = state;
+        updateStatus();
+      };
+
+      const warnIfRemote = (): void => {
+        if (needsRemoteProxyWarning({ enabled, url: proxyUrl })) {
+          showToast(t("init.securityWarning"), { variant: "error" });
+        }
+      };
+
       const updateStatus = (): void => {
         const status = resolveProxyCallout({
           enabled,
@@ -135,6 +155,8 @@ export function createProxyPage(): SettingsShellPage {
         }
 
         showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
+        warnIfRemote();
+        if (enabled) void recheckProxy();
       };
 
       const saveProxyUrl = async (): Promise<void> => {
@@ -160,7 +182,7 @@ export function createProxyPage(): SettingsShellPage {
         }
 
         try {
-          await settingsStore.set("proxy.url", normalizedUrl);
+          await saveTaskpaneProxyUrl(settingsStore, normalizedUrl);
         } catch {
           showToast(t("settings.toast.proxy_url_save_failed"));
           return;
@@ -170,6 +192,8 @@ export function createProxyPage(): SettingsShellPage {
         proxyUrlInput.value = normalizedUrl;
         updateStatus();
         showToast(t("settings.toast.proxy_url_saved"));
+        warnIfRemote();
+        void recheckProxy();
       };
 
       const scheduleProxyUrlSave = (): void => {

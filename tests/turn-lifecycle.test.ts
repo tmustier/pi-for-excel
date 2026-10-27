@@ -279,6 +279,10 @@ void test("the error banner names the real failure", () => {
     describeTurnFailure({ ...base, messages: failed("Provider is not configured: anthropic"), missingCredentialsFor: "anthropic" }),
     "API key required for anthropic.",
   );
+  assert.equal(
+    describeTurnFailure({ ...base, messages: failed("The anthropic login has expired and could not be refreshed."), expiredLoginFor: "Anthropic" }),
+    "Your Anthropic login has expired and could not be renewed. Sign in again in Settings.",
+  );
   assert.match(describeTurnFailure({ ...base, messages: failed("Failed to fetch"), online: false }) ?? "", /^You're offline/u);
   assert.match(
     describeTurnFailure({ ...base, messages: failed("Failed to fetch"), proxyUrl: "https://localhost:3003" }) ?? "",

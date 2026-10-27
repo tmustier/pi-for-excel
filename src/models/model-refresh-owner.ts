@@ -1,6 +1,7 @@
 import type { Api, Model, MutableModels } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 
+import { resolveCustomProviderModel } from "../auth/custom-gateways.js";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import { pickDefaultModel } from "../taskpane/default-model.js";
 import { resolveRuntimeModelSwap } from "../taskpane/runtime-model-reconcile.js";
@@ -53,6 +54,7 @@ export class ModelRefreshOwner {
   private readonly warn: (message: string, error?: unknown) => void;
 
   private currentSnapshot: ModelRefreshSnapshot;
+  private customProviders: readonly CustomProvider[] = [];
   private refreshPromise: Promise<void> | null = null;
   private requestedSync = false;
   private requestedNetwork = false;
@@ -103,6 +105,20 @@ export class ModelRefreshOwner {
   /** Refresh all currently registered providers. Concurrent calls share one provider pass. */
   refresh(allowNetwork = true): Promise<void> {
     return this.requestRefresh({ syncConfiguredProviders: false, allowNetwork });
+  }
+
+  /**
+   * Finds a persisted model in the current catalogue. A custom gateway that was
+   * renamed has a new provider name but the same endpoint and model id, so it
+   * is matched by those instead of being treated as gone.
+   */
+  resolveModel(persisted: Model<Api>): Model<Api> | undefined {
+    const direct = this.models.getModel(persisted.provider, persisted.id);
+    if (direct) return direct;
+
+    const custom = resolveCustomProviderModel([...this.customProviders], persisted);
+    if (!custom) return undefined;
+    return this.models.getModel(custom.provider, custom.id) ?? undefined;
   }
 
   /** Reconcile a runtime that was deliberately skipped while busy. */
@@ -186,6 +202,7 @@ export class ModelRefreshOwner {
 
       if (syncConfiguredProviders) {
         const customProviders = await this.loadCustomProviders();
+        this.customProviders = customProviders;
         await this.modelRuntime.syncCustomProviders(customProviders);
       }
       this.activeProviderRevision = this.modelRuntime.providerRevision;
@@ -226,7 +243,7 @@ export class ModelRefreshOwner {
     for (const runtime of this.getRuntimes()) {
       if (runtime.isBusy) continue;
 
-      const refreshedModel = this.models.getModel(runtime.model.provider, runtime.model.id);
+      const refreshedModel = this.resolveModel(runtime.model);
       if (refreshedModel && !areRuntimeModelsEquivalent(runtime.model, refreshedModel)) {
         runtime.applyModel(refreshedModel);
         continue;

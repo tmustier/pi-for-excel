@@ -7,21 +7,7 @@
 
 import { t } from "../../../language/index.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
-
-// ---------------------------------------------------------------------------
-// Platform detection
-// ---------------------------------------------------------------------------
-
-function isMacPlatform(): boolean {
-  if (typeof navigator === "undefined") return false;
-
-  // navigator.platform is deprecated but widely supported; userAgentData
-  // is the modern replacement but not available in all WebViews yet.
-  const ua = navigator.userAgent ?? "";
-  const platform = navigator.platform ?? "";
-
-  return platform.startsWith("Mac") || ua.includes("Macintosh");
-}
+import { isMacPlatform } from "../../../utils/platform.js";
 
 // ---------------------------------------------------------------------------
 // Shortcut data

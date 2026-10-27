@@ -51,7 +51,10 @@ function buildResumeListItem(session: SessionMetadata): HTMLButtonElement {
 
   const meta = document.createElement("span");
   meta.className = "pi-resume-item__meta";
-  meta.textContent = t("resume.sessionMeta", { count: session.messageCount || 0, date: formatRelativeDate(session.lastModified) });
+  const date = formatRelativeDate(session.lastModified);
+  meta.textContent = session.messageCount === 1
+    ? t("resume.sessionMetaOne", { date })
+    : t("resume.sessionMeta", { count: session.messageCount || 0, date });
 
   button.append(title, meta);
   return button;
@@ -103,25 +106,21 @@ function buildWorkbookFilterRow(opts: {
   return row;
 }
 
+/** What opening a session did, or null when it was refused (the callee shows why). */
+export type ResumeOpenResult = { outcome: "opened" | "replaced" | "focused"; title: string } | null;
+
 export async function showResumeDialog(opts: {
   defaultTarget?: ResumeDialogTarget;
-  onOpenInNewTab: (sessionData: SessionData) => Promise<void>;
-  onReplaceCurrent: (sessionData: SessionData) => Promise<void>;
-  getRecentlyClosedItems?: () => readonly ResumeRecentlyClosedItem[];
-  onReopenRecentlyClosed?: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
+  onOpenSession: (sessionData: SessionData, target: ResumeDialogTarget) => Promise<ResumeOpenResult>;
+  getRecentlyClosedItems: () => readonly ResumeRecentlyClosedItem[];
+  onReopenRecentlyClosed: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
   const storage = getAppStorage();
-  const allSessions = await storage.sessions.getAllMetadata();
+  // Blank sessions (saved when an empty tab closed) have nothing to resume.
+  const allSessions = (await storage.sessions.getAllMetadata())
+    .filter((session) => session.messageCount !== 0);
 
-  const getRecentlyClosedItems = (): ResumeRecentlyClosedItem[] => {
-    if (!opts.getRecentlyClosedItems) {
-      return [];
-    }
-
-    return [...opts.getRecentlyClosedItems()];
-  };
-
-  if (allSessions.length === 0 && getRecentlyClosedItems().length === 0) {
+  if (allSessions.length === 0 && opts.getRecentlyClosedItems().length === 0) {
     showToast(t("resume.noPreviousSessions"));
     return;
   }
@@ -267,7 +266,7 @@ export async function showResumeDialog(opts: {
   };
 
   const getVisibleRecentlyClosed = (): ResumeRecentlyClosedItem[] => {
-    const items = getRecentlyClosedItems();
+    const items = [...opts.getRecentlyClosedItems()];
     if (showAllWorkbooks || workbookId === null) {
       return items;
     }
@@ -276,22 +275,6 @@ export async function showResumeDialog(opts: {
   };
 
   let recentlyClosedById = new Map<string, ResumeRecentlyClosedItem>();
-
-  const reopenRecentlyClosedEntry = async (item: ResumeRecentlyClosedItem): Promise<boolean> => {
-    if (opts.onReopenRecentlyClosed) {
-      return opts.onReopenRecentlyClosed(item);
-    }
-
-    const sessionData = await storage.sessions.loadSession(item.sessionId);
-    if (!sessionData) {
-      showToast(t("resume.couldNotReopen"));
-      return false;
-    }
-
-    await opts.onOpenInNewTab(sessionData);
-    showToast(t("resume.toast.reopened", { title: sessionData.title || t("session.untitled") }));
-    return true;
-  };
 
   const renderLists = (): void => {
     const sessions = getVisibleSessions().slice(0, 30);
@@ -322,12 +305,15 @@ export async function showResumeDialog(opts: {
 
   renderLists();
 
+  // One open at a time: a double click must not resume the session twice.
+  let opening = false;
+
   dialog.overlay.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
     const item = target.closest<HTMLElement>(".pi-resume-item");
-    if (!item) return;
+    if (!item || opening) return;
 
     const id = item.dataset.id;
     if (!id) return;
@@ -337,64 +323,64 @@ export async function showResumeDialog(opts: {
       ? RESUME_ITEM_KIND_RECENTLY_CLOSED
       : RESUME_ITEM_KIND_SESSION;
 
+    opening = true;
+    dialog.card.setAttribute("aria-busy", "true");
     void (async () => {
-      if (kind === RESUME_ITEM_KIND_RECENTLY_CLOSED) {
-        const recentId = item.dataset.recentId;
-        if (!recentId) {
-          showToast(t("resume.sessionNotInRecentlyClosed"));
-          renderLists();
+      try {
+        if (kind === RESUME_ITEM_KIND_RECENTLY_CLOSED) {
+          const recentId = item.dataset.recentId;
+          const recentEntry = recentId ? recentlyClosedById.get(recentId) : undefined;
+          if (!recentEntry) {
+            showToast(t("resume.sessionNotInRecentlyClosed"));
+            renderLists();
+            return;
+          }
+
+          const reopened = await opts.onReopenRecentlyClosed(recentEntry);
+          if (reopened) closeOverlay();
+          else renderLists();
           return;
         }
 
-        const recentEntry = recentlyClosedById.get(recentId);
-        if (!recentEntry) {
-          showToast(t("resume.sessionNotInRecentlyClosed"));
-          renderLists();
-          return;
+        const targetMode = selectedTarget;
+
+        if (workbookId) {
+          const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
+          if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
+            const proceed = await requestConfirmationDialog({
+              title: t("resume.confirm.anotherWorkbookTitle"),
+              message: getCrossWorkbookResumeConfirmMessage(targetMode),
+              confirmLabel: t("resume.confirm.resumeAnyway"),
+              cancelLabel: t("confirm.cancel"),
+              restoreFocusOnClose: false,
+            });
+            if (!proceed) return;
+          }
         }
 
-        const reopened = await reopenRecentlyClosedEntry(recentEntry);
-        if (reopened) {
+        const sessionData = await storage.sessions.loadSession(id);
+        if (!sessionData) {
+          showToast(t("resume.sessionNotFound"));
           closeOverlay();
           return;
         }
 
-        renderLists();
-        return;
-      }
+        const opened = await opts.onOpenSession(sessionData, targetMode);
+        // A refusal (e.g. the current tab is busy) keeps the picker open with its toast.
+        if (!opened) return;
 
-      const targetMode = selectedTarget;
-
-      if (workbookId) {
-        const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
-        if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
-          const proceed = await requestConfirmationDialog({
-            title: t("resume.confirm.anotherWorkbookTitle"),
-            message: getCrossWorkbookResumeConfirmMessage(targetMode),
-            confirmLabel: t("resume.confirm.resumeAnyway"),
-            cancelLabel: t("confirm.cancel"),
-            restoreFocusOnClose: false,
-          });
-          if (!proceed) return;
-        }
-      }
-
-      const sessionData = await storage.sessions.loadSession(id);
-      if (!sessionData) {
-        showToast(t("resume.sessionNotFound"));
         closeOverlay();
-        return;
+        if (opened.outcome === "focused") {
+          showToast(t("init.alreadyOpen", { title: opened.title }));
+          return;
+        }
+        showToast(opened.outcome === "replaced"
+          ? t("resume.toast.resumedCurrent", { title: opened.title })
+          : t("resume.toast.resumedNew", { title: opened.title }));
+      } finally {
+        opening = false;
+        dialog.card.removeAttribute("aria-busy");
       }
-
-      if (targetMode === "replace_current") {
-        await opts.onReplaceCurrent(sessionData);
-      } else {
-        await opts.onOpenInNewTab(sessionData);
-      }
-
-      closeOverlay();
-      const resumedMode = targetMode === "replace_current" ? "current tab" : "new tab";
-      showToast(t("resume.toast.resumedIn", { mode: resumedMode, title: sessionData.title || t("session.untitled") }));
     })();
   });
 

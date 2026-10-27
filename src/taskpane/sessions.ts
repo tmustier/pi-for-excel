@@ -7,7 +7,8 @@
  * - session identity lifecycle (new / rename / resume)
  */
 
-import type { Models } from "@earendil-works/pi-ai";
+import type { Api, Model } from "@earendil-works/pi-ai";
+import { clampThinkingLevel } from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { SessionData, SessionMetadata } from "../storage/local/types.js";
 import type { SessionsStore } from "../storage/local/sessions-store.js";
@@ -22,19 +23,24 @@ export interface SessionPersistenceController {
   getSessionId: () => string;
   getSessionTitle: () => string;
   getSessionCreatedAt: () => string;
-  /** True when the user explicitly named the session via `/name`. */
+  /** True when the user chose the title (rename, `/name`, duplicate, fork). Persisted with the session. */
   hasExplicitTitle: () => boolean;
   startNewSession: () => void;
+  /** Sets a chosen title (empty clears it) and saves the session. */
   renameSession: (title: string) => Promise<void>;
   applyLoadedSession: (sessionData: SessionData) => Promise<void>;
   restoreLatestSession: () => Promise<boolean>;
-  saveSession: (opts?: { force?: boolean }) => Promise<void>;
+  /**
+   * Saves the session once it holds a user message, or always with `force`.
+   * Resolves false when there was nothing to save or the save failed; failures
+   * are also reported through `onSaveError`.
+   */
+  saveSession: (opts?: { force?: boolean }) => Promise<boolean>;
   subscribe: (listener: () => void) => () => void;
   dispose: () => void;
 }
 
 type SessionId = string;
-type PersistedSessionModel = SessionData["model"];
 
 type UserLikeMessage = AgentMessage & {
   role: "user" | "user-with-attachments";
@@ -42,22 +48,11 @@ type UserLikeMessage = AgentMessage & {
 };
 
 /**
- * Re-resolve a persisted model against the current registry so that
- * metadata like `contextWindow` picks up upstream changes (e.g. a dep
- * bump that raised Opus 4.6 from 200k → 1M). Falls back to the
- * persisted model if the runtime no longer has it. Custom and dynamically
- * discovered providers are already part of the same runtime catalogue.
+ * Resolves a persisted model against the current registry so metadata such as
+ * `contextWindow` picks up upstream changes, and a renamed custom gateway is
+ * found again. Returns undefined when the registry no longer has the model.
  */
-function refreshPersistedModel(
-  modelsRuntime: Models,
-  persisted: PersistedSessionModel,
-): PersistedSessionModel {
-  return modelsRuntime.getModel(persisted.provider, persisted.id) ?? persisted;
-}
-
-function hasAssistantMessage(messages: AgentMessage[]): boolean {
-  return messages.some((m) => m.role === "assistant");
-}
+export type PersistedModelResolver = (persisted: Model<Api>) => Model<Api> | undefined;
 
 function isChatUserMessage(message: AgentMessage): message is UserLikeMessage {
   if (!(message.role === "user" || message.role === "user-with-attachments")) {
@@ -78,12 +73,24 @@ function normalizeSessionId(value: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function shouldPersistSession(opts: {
-  firstAssistantSeen: boolean;
-  force?: boolean;
-}): boolean {
-  if (opts.force) return true;
-  return opts.firstAssistantSeen;
+/**
+ * Messages the user sees in the transcript. Hidden instruction (`system`)
+ * messages and internal bookkeeping roles are not counted, so a blank session
+ * has zero messages.
+ */
+export function countVisibleSessionMessages(messages: readonly AgentMessage[]): number {
+  let count = 0;
+  for (const message of messages) {
+    if (
+      message.role === "user"
+      || message.role === "user-with-attachments"
+      || message.role === "assistant"
+      || message.role === "toolResult"
+    ) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 export function getRestoreCandidateSessionIds(args: {
@@ -116,7 +123,7 @@ export async function setupSessionPersistence(opts: {
   agent: Agent;
   sessions: SessionsStore;
   settings: SettingsStore;
-  models: Models;
+  resolveModel: PersistedModelResolver;
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
   spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
@@ -144,7 +151,6 @@ export async function setupSessionPersistence(opts: {
     : crypto.randomUUID();
   let sessionTitle = "";
   let sessionCreatedAt = new Date().toISOString();
-  let firstAssistantSeen = false;
   let explicitTitle = false;
   let canWriteLatestSessionPointer = !opts.autoRestoreLatest;
   /** Stored revision this taskpane last loaded or saved; saves only go over it. */
@@ -174,21 +180,23 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
-  function saveSession(optsForSave?: { force?: boolean }): Promise<void> {
+  function saveSession(optsForSave?: { force?: boolean }): Promise<boolean> {
     const run = saveQueue.then(() => saveSessionNow(optsForSave));
-    saveQueue = run;
+    saveQueue = run.then(() => undefined);
     return run;
   }
 
-  async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<void> {
-    if (!shouldPersistSession({
-      firstAssistantSeen,
-      ...(optsForSave?.force !== undefined ? { force: optsForSave.force } : {}),
-    })) return;
+  async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<boolean> {
+    const messages = agent.state.messages;
+    // A session exists from the user's first message, so a reload during the
+    // first turn keeps it. Blank tabs are saved only on request (close, restore).
+    // Compaction moves the user's messages into the summary and archive, which still count.
+    const hasConversation = messages.some((m) =>
+      isChatUserMessage(m) || m.role === "compactionSummary" || m.role === "archivedMessages");
+    if (!optsForSave?.force && !hasConversation) return false;
 
     try {
       const now = new Date().toISOString();
-      const messages = agent.state.messages;
 
       if (!sessionTitle && messages.length > 0) {
         const firstUser = messages.find((m) => isChatUserMessage(m));
@@ -251,7 +259,8 @@ export async function setupSessionPersistence(opts: {
         title: sessionTitle,
         createdAt: sessionCreatedAt,
         lastModified: now,
-        messageCount: messages.length,
+        messageCount: countVisibleSessionMessages(messages),
+        titleChosen: explicitTitle,
         usage: {
           input: inputTokens,
           output: outputTokens,
@@ -302,9 +311,11 @@ export async function setupSessionPersistence(opts: {
 
       await updateWorkbookAssociation(savedSessionId);
       emitChange();
+      return true;
     } catch (err) {
       console.warn("[pi] Session save failed:", err);
       opts.onSaveError?.(getErrorMessage(err));
+      return false;
     }
   }
 
@@ -313,7 +324,6 @@ export async function setupSessionPersistence(opts: {
     baseRevision = undefined;
     sessionTitle = "";
     sessionCreatedAt = new Date().toISOString();
-    firstAssistantSeen = false;
     explicitTitle = false;
     canWriteLatestSessionPointer = true;
     agent.sessionId = sessionId;
@@ -324,7 +334,8 @@ export async function setupSessionPersistence(opts: {
     sessionTitle = title.trim();
     explicitTitle = sessionTitle.length > 0;
     emitChange();
-    await saveSession();
+    // A chosen title is a decision the user expects to keep, even before Pi answers.
+    await saveSession({ force: true });
   }
 
   async function applyLoadedSession(sessionData: SessionData): Promise<void> {
@@ -337,19 +348,19 @@ export async function setupSessionPersistence(opts: {
     }
 
     sessionTitle = sessionData.title || "";
-    explicitTitle = false;
+    explicitTitle = sessionData.titleChosen === true && sessionTitle.trim().length > 0;
     sessionCreatedAt = sessionData.createdAt;
     baseRevision = sessionData.revision;
-    firstAssistantSeen = hasAssistantMessage(sessionData.messages);
 
     agent.sessionId = sessionId;
     agent.state.messages = sessionData.messages;
 
     if (sessionData.model) {
-      agent.state.model = refreshPersistedModel(opts.models, sessionData.model);
+      agent.state.model = opts.resolveModel(sessionData.model) ?? sessionData.model;
     }
     if (sessionData.thinkingLevel) {
-      agent.state.thinkingLevel = sessionData.thinkingLevel;
+      // The saved model may have been swapped for one with fewer thinking levels.
+      agent.state.thinkingLevel = clampThinkingLevel(agent.state.model, sessionData.thinkingLevel);
     }
 
     await updateWorkbookAssociation(sessionId);
@@ -388,14 +399,7 @@ export async function setupSessionPersistence(opts: {
 
   const unsubscribeAgent = agent.subscribe((event) => {
     if (event.type !== "message_end") return;
-
-    if (event.message.role === "assistant") {
-      firstAssistantSeen = true;
-    }
-
-    if (firstAssistantSeen) {
-      void saveSession();
-    }
+    void saveSession();
   });
 
   if (opts.autoRestoreLatest) {

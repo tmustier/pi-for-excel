@@ -14,6 +14,7 @@ import { t } from "../language/index.js";
 import { formatDetailsShortcut, toggleDetailsExpanded } from "../ui/messages/transcript-state.js";
 
 import { doesUiClaimStreamingEscape } from "../utils/escape-guard.js";
+import { isDialogOverlayOpen } from "../ui/overlay-escape.js";
 import { blurTextEntryTarget, isTextEntryTarget } from "../utils/text-entry.js";
 import {
   handleCommandMenuKey,
@@ -227,7 +228,8 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      if (!isCreateTabShortcut(event) || !onCreateTab) return false;
+      // Tab shortcuts never act on the tabs hidden behind an open dialog.
+      if (!isCreateTabShortcut(event) || !onCreateTab || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       event.stopPropagation();
@@ -237,7 +239,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      if (!isCloseActiveTabShortcut(event) || !onCloseActiveTab) return false;
+      if (!isCloseActiveTabShortcut(event) || !onCloseActiveTab || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       event.stopPropagation();
@@ -247,7 +249,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event, keyTarget } = context;
-      if (!isUndoCloseTabShortcut(event) || !onReopenLastClosed) return false;
+      if (!isUndoCloseTabShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
 
       const shouldHandleUndoClose = shouldHandleUndoCloseTabShortcut({
         canUndoCloseTab: canUndoCloseTab?.() ?? true,
@@ -266,7 +268,7 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      if (!isReopenLastClosedShortcut(event) || !onReopenLastClosed) return false;
+      if (!isReopenLastClosedShortcut(event) || !onReopenLastClosed || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
       onReopenLastClosed();
@@ -280,7 +282,9 @@ export function installKeyboardShortcuts(opts: {
         !adjacentTabDirection
         || !onSwitchAdjacentTab
         || isTextEntryTarget(keyTarget)
-        || isInsideSessionTabs(keyTarget)
+        || isDialogOverlayOpen()
+        // A focused tab handles plain arrows itself; chords still switch here.
+        || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
       ) {
         return false;
       }

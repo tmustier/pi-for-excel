@@ -6,6 +6,7 @@ import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";
 import type { ActiveAgentProvider } from "./model.js";
+import { copyText } from "../../ui/copy-text.js";
 import { showToast } from "../../ui/toast.js";
 import { extractTextBlocks } from "../../utils/content.js";
 import { t } from "../../language/index.js";
@@ -40,8 +41,8 @@ export function createClipboardCommands(getActiveAgent: ActiveAgentProvider): Sl
 
         const text = getLastAssistantText(agent.state.messages);
         if (text) {
-          void navigator.clipboard.writeText(text).then(() => {
-            showToast(t("clipboard.copied"));
+          void copyText(text).then((outcome) => {
+            if (outcome === "copied") showToast(t("clipboard.copied"));
           });
           return;
         }
