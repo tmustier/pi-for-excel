@@ -2,6 +2,8 @@
 
 A written description of Pi for Excel from the standpoint of the agent inside it: what the model is told, what each tool call does to the workbook, and exactly what comes back, including what happens when Excel gets in the way halfway through.
 
+The current-behaviour pages follow merged main, including #786–#799 and subsequent merged product decisions. Older verification results retain their original build/date; they are not claims that every path was rerun. Unmerged proposals belong to their own documentation PRs.
+
 ## Purpose
 
 [`product-description/`](../product-description/README.md) describes Pi for Excel as the user meets it. This project describes the same product as the agent meets it. The agent is the model that receives the system prompt, the tool schemas, the auto-context notes and the tool results, and that acts on the workbook only through tool calls. From its side, Pi for Excel is a large state chart too: it moves through it with tool calls, and Excel answers with text. Most of that behavior is defined implicitly, spread across the system prompt (`src/prompt/`), the tools (`src/tools/`), the context injector (`src/taskpane/context-injection.ts`, `src/context/`), the message conversion and history shaping (`src/messages/`), compaction (`src/compaction/`, `src/commands/builtins/export.ts`) and the workbook coordinator (`src/workbook/`). There is no single place that says "when the agent calls X, this is what Excel does, this is what the agent is told, and this is what happens if the user does Y while it runs."

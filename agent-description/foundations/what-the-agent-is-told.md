@@ -4,7 +4,7 @@
 
 Everything the agent knows comes from five sources, rebuilt into every model call: the system prompt, the tool schemas, the stored conversation (shaped), the [auto-context](auto-context.md) note, and the tool results it receives. This document owns the first two and the rules about when they change. It also records what the agent is *not* told about Excel, because most of the hostility in this project is a gap between what the prompt promises and what Excel does.
 
-In the default configuration (captured from the request on 2026-10-26) the system prompt is 13,675 characters and the 26 tool schemas are 36,557 characters of JSON. Both are sent with every model call, unchanged unless one of their inputs changes.
+The active tool configuration has a stable ordered prefix, but the merged prompt/schemas include paged reads, workbook-state reporting and checked-write limitations. Exact tool counts and character sizes from the 26 October capture are historical measurements, not the size of the current contract.
 
 ## The simple case
 
@@ -51,17 +51,17 @@ The system prompt and tool list are rebuilt when the runtime's capabilities are 
 
 ## What the agent is not told
 
-Read against the hostility found in this project, the prompt and schemas are silent on:
+The original information gaps and their current handling are:
 
-- **Values are raw.** Dates arrive as serial numbers, percentages as fractions, currency without symbols; zero arrives as `0.0000e+0`. Nothing says so, and nothing says `detailed` mode shows formats. See [the workbook as the agent sees it](the-workbook-as-the-agent-sees-it.md).
-- **Size.** "Read a sample first" is the only guidance. Nothing says a whole column cannot be read, that about 10,000 rows × 5 columns is near the ceiling on the web, or that a large write can fail after applying. See [payload limits](../hostility/payload-limits-and-large-ranges.md).
-- **Merged cells, protection, filters, spills, data validation, calculation mode.** None is mentioned. The only hint is that tables with filters and PivotTables need `execute_office_js`.
-- **Verification has limits.** "write_cells auto-verifies and reports errors" is true only for the written cells, and only when calculation is automatic. See [recalculation](../hostility/recalculation.md).
+- **Raw versus displayed values.** Compact/detailed reads now show displayed text and hidden stored values where relevant; CSV is raw. Python input includes values and text. See [workbook representation](the-workbook-as-the-agent-sees-it.md).
+- **Size.** Reads page with continuation, writes chunk, and results name verification scope and uncertain outcomes; the agent must still follow continuation and obey [limits](limits.md).
+- **Workbook state.** Structured reads report merges, spills, protection, filters, validation and calculation state, with unavailable inspection named. They are snapshots, not a promise state cannot change.
+- **Verification has limits.** Checked writers name full/sampled scope and calculate written formulas in Manual mode, but do not prove all dependents elsewhere are fresh. See [recalculation](../hostility/recalculation.md).
 - **The user keeps working.** Nothing says the user may be typing in a cell, switching sheets, or editing the cells the agent just read. See [cell-edit mode](../hostility/cell-edit-mode.md) and [the user moves or edits](../hostility/the-user-moves-or-edits.md).
-- **Calls in one batch are unordered.** Nothing says a read issued alongside a write may see the old value. See [the lock and parallel calls](../hostility/the-lock-and-parallel-calls.md).
-- **Unqualified addresses follow the active sheet.** The conventions show qualified and unqualified examples side by side; the schemas say "If no sheet is specified, uses the active sheet" without saying the active sheet is the user's, at the moment of the call.
-- **Errors arrive as text.** Nothing says tool failures are reported in the text of a normal result.
-- **Older results are shaped.** Nothing says a result read six calls ago is now a 500-character preview.
+- **Parallel calls.** Same-runtime reads wait for previously registered mutations; they do not wait for other runtimes' future writes. See [the lock and parallel calls](../hostility/the-lock-and-parallel-calls.md).
+- **Explicit mutation targets.** Guarded workbook mutations require a named sheet rather than following the user's active sheet. Read calls can still resolve unqualified addresses against the active sheet and disclose that resolution. See [workbook representation](the-workbook-as-the-agent-sees-it.md).
+- **Errors.** Workbook failures are text plus `isError`, with definite-refusal versus possibly-applied wording; not every failure means nothing changed.
+- **Older results are shaped.** Eligible results from answered requests can become bounded previews; active unanswered work is retained. The model is not given the original result merely because storage still has it.
 
 ## Hostility and interrupts
 
@@ -100,6 +100,6 @@ The system prompt and schemas are fixed for the duration of a model call; none o
 
 - Confirmed: the section order, sizes and tool list, from the captured request of a real turn on 2026-10-26 (TOLD-01 to TOLD-03).
 - Read from code: when the prompt is rebuilt; the unused disclosure bundles.
-- Looks like a gap: the hazards listed under [What the agent is not told](#what-the-agent-is-not-told) ([B-11](../bug-triage.md#b-11-the-agent-cannot-see-workbook-state-that-changes-what-its-calls-do)); rule 4's confirmation round trip on explicit requests ([B-18](../bug-triage.md#b-18-overwrite-protection-forces-a-confirmation-round-trip-on-explicit-requests)).
+- The historical information gaps above have been revised against merged prompt/read/write contracts. Overwrite confirmation policy still follows the prompt; this pass does not implement proposed product calls. Exact prompt sizes and every provider serialization were not recaptured.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (source inspection).

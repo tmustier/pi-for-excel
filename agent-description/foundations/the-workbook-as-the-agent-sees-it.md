@@ -7,7 +7,7 @@ The agent sees text rather than the grid: addresses, displayed values with store
 ## Addresses
 
 - **A1 notation only.** `A1`, `A1:D10`, `Sheet2!B3`, `'My Sheet'!A1`. Sheet names are split at the last `!`; quotes are stripped and `''` unescaped. Names with spaces work with or without quotes (confirmed).
-- **Unqualified addresses use the active sheet at the moment of the batch.** The user's active sheet, not the last sheet the agent touched. After the user activated `My Sheet`, `write_cells {start_cell: "B2"}` wrote to `'My Sheet'!B2` (confirmed). The result's heading names the sheet, which is the agent's only chance to notice.
+- **Reads may resolve unqualified addresses against the active sheet and disclose that choice.** Guarded mutations instead require explicit sheet targets; an omitted sheet fails before the mutation. The historical unqualified-write observation no longer describes the contract. New-sheet creation needs no existing target sheet; chart creation can derive its sheet from a qualified source range.
 - **Results name the resolved address** fully qualified (`**Big!A1:E10000**`). `write_cells` reports `Spill!A3:A3` for a one-cell block.
 - **Whole columns and rows** (`A:A`, `1:1`) in `read_range` clip to used data and page, reporting the resolved/next address rather than loading a million cells.
 - **Multi-area addresses** (`A1:B2,D1:E2`) work only in `format_cells`. Everywhere else they are rejected.
@@ -50,7 +50,7 @@ The blueprint names the workbook, not its internal identity. A location-less wor
 | Event | Effect on what the agent sees |
 | --- | --- |
 | The user is editing a cell | Bounded edit-mode waiting/retry before the first successful sync; failure if editing persists. |
-| The user changes the selection or the active sheet | Unqualified addresses move with the active sheet. |
+| The user changes the selection or the active sheet | Unqualified reads can move with the active sheet; guarded mutations require explicit targets. |
 | The user changes data the call depends on | Values are whatever Excel holds when the batch runs. |
 | Another tab's write holds the workbook lock | Reads see the other tab's writes as they land. |
 | Excel throttles, times out or rejects the payload | No values; an error string. |
@@ -70,7 +70,7 @@ The blueprint names the workbook, not its internal identity. A location-less wor
 
 **The workbook lock and parallel calls.** Not affected.
 
-**Execution mode and approvals.** Approval messages show the tool and range as the agent wrote them, unqualified if the agent left them so.
+**Execution mode and approvals.** Guarded mutations name their target sheet; an unqualified target is refused rather than being approved against a moving active sheet.
 
 **Truncation and history shaping.** Grids are the bulk of truncated output.
 
@@ -86,6 +86,6 @@ The blueprint names the workbook, not its internal identity. A location-less wor
 
 - Confirmed on Excel on the web: the value table, coercions, unqualified-address behavior, quoted sheet names.
 - Read from code: multi-area rejection outside `format_cells`; named ranges not accepted as addresses (`Excel` `getRange` does accept some names; not tried).
-- Merged source addresses displayed values, escaping and checked conversions. Unqualified addresses still follow the active sheet, but reads now explicitly disclose that resolution; unknown sheets list available names. Old B-07/B-17 observations remain historical.
+- Merged source addresses displayed values, escaping and checked conversions. Reads disclose active-sheet resolution; mutations require explicit targets. Unknown sheets list available names. Old B-07/B-17 observations remain historical.
 
 Verified against pi-for-excel commit `1f51cf8` (source inspection and the named live percentage read).

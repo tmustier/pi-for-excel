@@ -29,7 +29,7 @@ This document owns every number that bounds what the agent can send, receive or 
 | Overview headers per sheet | 8, then "… (+N more)" |
 | Sheet preview | 5 rows |
 | Automatic backup | 20,000 cells maximum; occupied checked-write targets above the cap refused |
-| Recovery retention | per workbook default/max 120, minimum 5; global maximum 240 |
+| Recovery retention | 512 MiB compressed payload plus metadata across all workbooks; oldest first, no count/age limit or protected minimum; pages of 50 |
 
 ## Per-result truncation
 

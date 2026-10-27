@@ -42,25 +42,17 @@ The H1 is the tool's name in code for tool documents ("`read_range`", "`write_ce
 
 ## Things already established (do not re-derive, do not contradict)
 
-- Source commit for this pass: `ec453df` (the same as product-description). `origin/main` has since gained `e74e2ea`, which changes `fill_formula` on the web (2D targets filled row then column; single-cell targets no longer autofill onto themselves); documents say where that matters.
-- Every workbook tool reports Excel failures as error-shaped results (text "Error …", `isError` false). Only schema validation, a declined approval, an abort before start and unsupported-host calls are thrown errors.
-- Details never reach the model. Backup IDs, change samples and truncation metadata are details; the backup note and the "Changed cell(s): N." line are text.
-- Read calls never wait for the workbook lock, so a read in the same batch as a write can see the old value (confirmed).
-- Tool calls in one batch run in parallel (the agent loop default); the OpenAI-style request sets `parallel_tool_calls: true`.
-- Auto-context is built before every model call, placed just before the latest real user message, and never stored. The blueprint is re-sent on every call labelled "[Workbook context refresh: context missing from history]" after the first. The change list appears only in the first model call after a change (confirmed).
-- The change list reports Pi's own writes as user changes (Excel reports them with `triggerSource` "ThisLocalAddin"; user edits are "Unknown"), never tracks sheets added after the taskpane opened, and is one list for all tabs.
-- The selection context has no size cap: a 5,000-row selection on a 5-column sheet produced a 311,761-character note on every model call (context meter 3% → 32% of 500k for "Reply with just OK."). A whole-column or whole-sheet selection produces no selection context at all.
-- Values are raw: dates are serials, percentages fractions, currency plain numbers. Zero renders as `0.0000e+0`. Numbers below 1e-6 in magnitude render in exponent form.
-- Payload limit on Excel on the web: `read_range` of 10,000 × 5 succeeded; 50,000 × 5 failed; any whole-column read (`A:A`) failed even on a 4-row sheet; `search_workbook` fails for the whole workbook once any sheet's used range is too big; `get_workbook_overview` with `sheet` fails on a big sheet.
-- False failures confirmed: `fill_formula` over 200,000 rows and `write_cells` of 60,000 × 4 both reported the payload error after the change was applied, with no backup.
-- Silent successes confirmed: writes into merged areas ("Written to **Merged!B1**" with nothing written; 2×2 into a merged block landed 1 of 4); overwriting a spill child (result clean, anchor now `#SPILL!`); invalid values under data validation accepted; formulas under manual calculation "verified" as 0.
-- Cell-edit mode on the web fails every batch at once (3–12 ms); the agent stopped and asked the user to press Enter (confirmed in a real turn).
-- Protected sheets: "You cannot perform the requested operation." for `write_cells`, `format_cells`, `modify_structure` and `execute_office_js`; no mention of protection. Unlocked cells on a protected sheet are writable.
-- Unqualified addresses go to the active sheet at the moment of the batch (confirmed).
-- Concurrent Confirm-mode approvals: opening a second approval resolves the first as declined without a click (confirmed at the dialog level).
-- Truncation: 50 KB / 2,000 lines, head for workbook tools, tail for `python_run`, `tmux`, `mcp`, `execute_office_js`; `execute_office_js` additionally cuts its JSON at 8,000 characters. History shaping keeps the 6 most recent tool results whole (fewer below a 128k window, floor 2).
-- Backups are skipped above 20,000 cells; the note then says "Backup capture was skipped (workbook identity unavailable or snapshot data unsupported)" in details and "ℹ️ Backup not created for this mutation. …" in text, whatever the real reason.
-- Model used for real turns: GPT-6.1 Sol via `openai-codex`, 500k window, thinking High.
+- Follow merged main, including #786–#799 and subsequent merged product decisions. The [product goal](../product-description/goal.md#merged-fixes) records the original fixes' provenance. Unmerged proposals are not current behavior.
+- Workbook failures have readable content and reliable `isError` outcomes; details are UI metadata, not model context. See [the tool contract](foundations/the-tool-contract.md).
+- Calls in a batch can run in parallel, but same-runtime reads wait for earlier registered mutations. The lock serializes writes, not co-authors or all reads in other runtimes.
+- Structure, Files and other people's changes are durable conversation notes when changed. Selection is fresh per request and bounded, including whole-column selections. Own writes are excluded from the other-people change note; newly added sheets are tracked. See [auto-context](foundations/auto-context.md).
+- Compact and detailed reads use displayed values, with stored-value/formula and workbook-state annotations. Large reads page and bound each response; large search and overview operations avoid one unbounded values load.
+- Checked writes refuse non-anchor merged targets, spill obstacles and protected targets; large writes chunk and report verification limits. A partial failure does not imply rollback. Manual-calculation read-back is not presented as proof of recalculated correctness.
+- Workbook tools wait for cell-edit mode for up to 60 seconds; context collection does not block a model request on that wait. Reads may resolve an unqualified range against the active sheet and disclose that choice. Workbook mutations require explicit sheet targets, with the new-sheet and qualified-chart-source exceptions described in the tool pages.
+- Confirm approvals queue and are attributable to the tab/action. Stop withdraws pending approvals. Local guidance/Files/integration configuration is not a workbook mutation; its own consent policy applies.
+- Read-back, backups and Office.js execution have explicit limits. See [limits](foundations/limits.md), [backups](tools/backups.md) and the owning tool pages rather than retaining pre-fix numeric assumptions here.
+- Verification checklists keep older Result columns as historical evidence. Current expectations follow merged contracts; integration-fixes logs retain the builds they actually tested.
+- Real turns in this revision use GPT-6 Luna through the existing login. Do not refresh or replace the shared `PI_EXCEL_WEB_AUTH_JSON` grant.
 
 ## Working rules
 

@@ -16,17 +16,17 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 ## What the agent is told
 
-**System prompt.** The fixed text sent as the model's instructions: identity, rules, execution mode, active integrations, local services, available skills, tools, workspace, workflow and conventions. About 13,700 characters in the default configuration. It changes only when one of its inputs changes (rules, execution mode, integrations, skills, conventions); see [what the agent is told](foundations/what-the-agent-is-told.md).
+**System prompt.** The text sent as the model's instructions: identity, rules, execution mode, active integrations, local services, skills, tools, workspace, workflow and conventions. It changes when those inputs change; earlier character counts are measurements of older builds, not size guarantees. See [what the agent is told](foundations/what-the-agent-is-told.md).
 
-**Tool schema.** A tool's name, description and parameter schema, as sent with every model call. 26 tools are sent in the default configuration (about 36,500 characters of JSON). Every tool is sent on every call; nothing is disclosed progressively.
+**Tool schema.** A tool's name, description and parameter schema, sent with model requests. The active configuration and registry determine the set; the older 26-tool/36,500-character measurement is not a fixed contract. Stable tool order and fingerprints avoid needless prefix changes during refresh.
 
-**Auto-context.** The note Pi builds before every model call and places, as an extra user message starting `[Auto-context]`, just before the latest real user message. It can hold the *blueprint*, the *workspace files summary*, the *selection context* and the *change list*. It is never stored in the session: the next model call gets a newly built one, and the old one is gone. See [auto-context](foundations/auto-context.md).
+**Auto-context.** Workbook structure, Files and other-people edit notes stored in the conversation when changed, plus fresh bounded selection context for each model request. Durable notes survive later tool calls and session restore; unchanged structure is not appended repeatedly. See [auto-context](foundations/auto-context.md).
 
-**Blueprint.** The workbook overview inside the auto-context: workbook name, each sheet with its used-range size, its row-1 "Headers", tables and object counts, and named ranges. It is the same text `get_workbook_overview` returns without a sheet. It is cached per workbook and rebuilt only after a structural tool call by Pi.
+**Blueprint.** The bounded workbook overview in auto-context: workbook, sheets and used ranges, row-1 previews, tables, objects and named ranges. Its signature is refreshed after structure changes, including user changes; it is appended when changed, not re-sent as missing on each call.
 
-**Selection context.** The part of the auto-context that describes the user's current selection: its address, a window of the sheet around it (five rows above and below, up to 20 columns of the used range), the formulas inside the selection and any errors in the window.
+**Selection context.** Fresh per-request selection address, true dimensions and a bounded head/tail sample with row/column labels, formulas, errors and omitted counts. Whole-column selections are sampled, not loaded in full. See [limits](foundations/limits.md).
 
-**Change list.** The part of the auto-context headed `**User changes since last message:**`, listing cell addresses that changed since the list was last read. It is one list for the whole taskpane, emptied each time any model call reads it.
+**Change list.** Durable conversation notes about other people's workbook edits, consumed per runtime rather than by the first tab to request context. Pi's own writes are excluded; added sheets receive listeners too.
 
 **Rules and conventions.** The user's persistent instructions ("All my files", "This file") and formatting defaults, rendered into the system prompt. Both are empty in the default configuration.
 
@@ -36,7 +36,7 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Details.** Structured metadata attached to a tool result (`details.kind`, `changes`, `recovery`, `outputTruncation`). Details drive the tool card in the UI and are never sent to the model. A fact that is only in the details is a fact the agent does not know.
 
-**Error-shaped result.** A tool result whose text reports a failure ("Error writing cells: …", "Error reading …") but whose `isError` flag is false. Every workbook tool reports Excel failures this way; to the agent loop, the compaction summarizer and the history shaper, the call succeeded. Contrast a *thrown error*.
+**Error-shaped result.** Readable failure text in a tool result. Workbook failures now set `isError: true`; the older false flag is a historical defect, not a contract. Contrast a *thrown error*, which the loop converts to an error result.
 
 **Thrown error.** A failure raised out of the tool, which the agent loop turns into a result with `isError: true`. Only a few paths do this: schema validation, a declined Confirm-mode approval ("Mutation cancelled by user (Confirm mode)."), an abort before the call started ("Aborted"), and the unsupported-host wrapper.
 
@@ -46,13 +46,13 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **False failure.** A result that says the call failed when the change was in fact applied. The agent may retry, give up, or tell the user nothing changed.
 
-**Verification.** The read-back some mutating tools do after writing, and report as "**Verified values:**" or as a list of formula errors. It reads only the target range, once, immediately after the write.
+**Verification.** Checked read-back after a mutation, with a named full or sampled scope and explicit conversion, formula, validation and calculation limitations. It does not prove all dependent outputs or protect against a later co-author edit.
 
-**Backup note.** The sentence a mutating tool appends to its result about the automatic backup: nothing when a backup was made, otherwise "ℹ️ Backup not created …". The backup ID itself is only in the details.
+**Backup note.** A mutation's receipt naming the saved snapshot ID or stating the actual reason no backup was made. IDs are readable model content as well as UI metadata.
 
 **Truncation.** Cutting a tool result's text to the per-result limit (50 KB or 2,000 lines by default) and appending `[Output truncated: …]`. Applied once, when the call finishes. See [limits](foundations/limits.md).
 
-**History shaping.** Rewriting older tool results before each model call: every tool result older than the six most recent that is longer than 1,200 characters (or holds an image) is replaced, for the model only, by a 500-character preview headed `[Compacted tool result]`. The stored session keeps the full text. See [context pressure](hostility/context-pressure.md).
+**History shaping.** Replacing eligible large answered-request tool results with bounded model-facing previews. Active unanswered work is preserved. The stored session retains the original text. See [context pressure](hostility/context-pressure.md) for selection and compaction boundaries.
 
 **Compaction.** Replacing the older part of the history with a written summary, triggered automatically near the context limit or by `/compact`. After it, the agent sees a user message beginning "The conversation history before this point was compacted into the following summary:".
 
@@ -62,29 +62,29 @@ The vocabulary used across these documents. When a document uses one of these wo
 
 **Payload limit.** Excel's cap on the size of one request to it and one response from it (about 5 MB on Excel on the web). A batch that exceeds it fails with "The response payload size has exceeded the limit…" (or the request equivalent) and returns nothing. Operations queued before the oversized read in the same batch may already have run.
 
-**Workbook lock.** The per-taskpane queue that runs Pi's mutating tool calls one at a time, across all tabs. Read calls never wait for it. See [the lock and parallel calls](hostility/the-lock-and-parallel-calls.md).
+**Workbook lock.** The per-taskpane mutation queue across tabs. Reads wait for earlier registered mutations from their own runtime, not arbitrary other-runtime writes. It is not a co-authoring lock. See [the lock and parallel calls](hostility/the-lock-and-parallel-calls.md).
 
-**Read call, mutating call.** The coordinator's classification of a tool call, from its name and `action`. Read calls run at once; mutating calls take the workbook lock, are subject to Confirm-mode approval, and may trigger a blueprint refresh. Unknown tools count as mutating.
+**Read call, mutating call.** The coordinator's classification by name/action. Workbook mutations acquire the lock after approval when required; same-runtime reads respect earlier writes. Local configuration uses its own consent policy instead of pretending to mutate the workbook.
 
 **Structural call.** A mutating call whose impact is "structure": `modify_structure`, `execute_office_js`, chart create/delete, sheet hide/show. Only structural calls invalidate the blueprint.
 
-**Active sheet.** The sheet the user is looking at in Excel at the moment a batch runs. An *unqualified address* is resolved against it.
+**Active sheet.** The sheet the user is looking at in Excel at the moment a batch runs. Read calls can resolve an *unqualified address* against it; guarded mutations require explicit sheet targets.
 
-**Qualified address, unqualified address.** `Sheet2!B3` names its sheet; `B3` does not and lands on the active sheet. Sheet names with spaces or quotes are written `'My Sheet'!A1`; tools accept them with or without the quotes.
+**Qualified address, unqualified address.** `Sheet2!B3` names its sheet; `B3` does not. Reads can use the active sheet and disclose that resolution; guarded mutations refuse an omitted sheet. Sheet names with spaces or quotes are written `'My Sheet'!A1`; tools accept them with or without the quotes.
 
 **Used range.** The rectangle from the first to the last non-empty or formatted cell of a sheet. It need not start at A1. Tools report its size ("200001 rows × 5 cols") but not its position.
 
-**Raw value, displayed text.** What `Range.values` returns (a date as the serial 45292, 5% as 0.05, £1,234.50 as 1234.5) versus what the cell shows (`Range.text`). The structured tools send raw values; displayed text reaches the agent only through `execute_office_js`.
+**Raw value, displayed text.** What `Range.values` returns (a date as serial 45292, 5% as 0.05) versus what the cell shows (`Range.text`). Compact/detailed reads use displayed text and annotate hidden stored values; CSV and Python `values` remain raw, while Python `text` provides the display.
 
 **Merged area.** A block of cells merged into one. Only its top-left cell holds a value; the others read as empty and silently ignore writes.
 
 **Spill, spill anchor, spill child.** A dynamic-array formula (`=SEQUENCE(5)`) in its *anchor* cell fills a *spill range*; the other cells are *children*: they hold values but no formula. Writing into a child blocks the spill and turns the anchor into `#SPILL!`.
 
-**Cell-edit mode.** The state Excel is in while the user is typing in a cell or the formula bar and has not pressed Enter, Tab or Escape. On Excel on the web every batch fails at once with "Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again." See [cell-edit mode](hostility/cell-edit-mode.md).
+**Cell-edit mode.** The user is typing in a cell or the formula bar. Workbook tools wait up to 60 seconds for editing to end before a precise failure; context collection does not hold the model request for that wait. See [cell-edit mode](hostility/cell-edit-mode.md).
 
-**Calculation mode.** Automatic or Manual (or Automatic except tables). In Manual, formulas written by Pi show stale results (often 0) until something recalculates. See [recalculation](hostility/recalculation.md).
+**Calculation mode.** Automatic or Manual (or Automatic except tables). Checked writes calculate written formulas in Manual mode and disclose that dependents elsewhere can remain stale. See [recalculation](hostility/recalculation.md).
 
-**Workbook identity.** As in [product-description](../product-description/glossary.md): a hash of the workbook's address, or unknown. Backups, rules for "This file" and the blueprint cache are keyed by it; when it is unknown they share one "unknown" key.
+**Workbook identity.** As in [product-description](../product-description/glossary.md): a hash of the workbook's address, or a document token where available without a location. Location-less tab layouts are document-scoped rather than sharing one global slot; file-specific rules still require usable identity.
 
 ## Hostility
 
