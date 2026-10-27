@@ -1,5 +1,7 @@
 # Stopping
 
+CL-05 update in [PR #803](https://github.com/tmustier/pi-for-excel/pull/803): cancellation explicitly shows "Stopping…" in the working line and disables Stop until the active work settles. Send can remain beside Stop for a non-empty draft; Enter is still a steer, not a stop.
+
 ## Summary
 
 Stop ends the active tab's work early without undoing workbook changes. The composer Stop button, Escape when no surface claims it, and "Stop and close" use the same cancellation path. It covers model requests, retry waits and compaction. Other tabs keep running.
