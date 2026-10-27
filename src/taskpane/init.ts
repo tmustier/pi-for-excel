@@ -127,6 +127,7 @@ import { dismissToast, showActionToast, showToast } from "../ui/toast.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBannerController } from "../ui/proxy-banner.js";
 import { requestTextInputDialog } from "../ui/text-input-dialog.js";
+import { announce } from "../ui/announcer.js";
 import { hideBanner, mountBanner, showBanner } from "../ui/banner.js";
 import { setActiveProviders } from "../models/active-providers.js";
 import { BrowserModelRuntime } from "../models/browser-model-runtime.js";
@@ -214,7 +215,7 @@ import {
   SessionRuntimeManager,
   isRuntimeBusy,
   type CreateRuntimeOptions,
-  type OpenSessionTarget,
+  type RuntimeRunOutcome,
   type SessionRuntime,
 } from "./session-runtime-manager.js";
 import {
@@ -552,10 +553,30 @@ export async function initTaskpane(opts: {
     }
   };
 
+  // Outcome of each runtime's latest prompt run, recorded at agent_end (where a
+  // user stop is known) and read once when the tab goes idle. Runs that only
+  // executed commands have no entry and are not announced.
+  const runOutcomes = new Map<string, RuntimeRunOutcome | null>();
   const runtimeManager = new SessionRuntimeManager({
     createRuntime: buildSessionRuntime,
     warnCapabilityRefresh: (error) => {
       console.warn("[pi] Failed to refresh runtime capabilities:", error);
+    },
+    getRunOutcome: (runtime) => {
+      const outcome = runOutcomes.get(runtime.runtimeId) ?? null;
+      runOutcomes.delete(runtime.runtimeId);
+      return outcome;
+    },
+    // CC-06. A failure in the active tab is already announced by its error
+    // banner (role="alert"); everything else has no visible notification.
+    onRunSettled: ({ outcome, wasActive, title }) => {
+      if (wasActive) {
+        if (outcome === "finished") announce(t("announce.finished"));
+        return;
+      }
+      announce(outcome === "failed"
+        ? t("announce.failedInTab", { title })
+        : t("announce.finishedInTab", { title }));
     },
   });
   const draftStore = createDraftStore(settings);
@@ -970,7 +991,9 @@ export async function initTaskpane(opts: {
     source?: string;
     onStop?: () => void;
   }): Promise<boolean> => {
-    return requestApproval({
+    announce(t("announce.approval", { title: args.title }));
+    return requestConfirmationDialog({
+      overlayId: TOOL_APPROVAL_OVERLAY_ID,
       title: args.title,
       message: normalizeApprovalMessage(args.title, args.message),
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
@@ -1258,8 +1281,15 @@ export async function initTaskpane(opts: {
     let savePersistence: () => Promise<void> = () => Promise.resolve();
     const actionQueue = createActionQueue({
       agent,
-      tab,
-      queueDisplay,
+      sidebar,
+      // The queue's last update comes after it stops running; re-read busy
+      // state then so the tab's idle transition (and markers) is not missed.
+      queueDisplay: {
+        setActionQueue: (items) => {
+          queueDisplay.setActionQueue(items);
+          runtimeManager.notifyRuntimeChanged();
+        },
+      },
       autoCompactEnabled,
       runCompact: async (args, signal) => {
         const before = agent.state.messages;
@@ -1346,6 +1376,13 @@ export async function initTaskpane(opts: {
 
       const wasUserAbort = abortedAgents.has(agent);
       abortedAgents.delete(agent);
+
+      const endError = agent.state.errorMessage;
+      runOutcomes.set(runtimeId, !endError
+        ? "finished"
+        : wasUserAbort || /abort/i.test(endError) || /cancel/i.test(endError)
+          ? null
+          : "failed");
 
       if (!isActiveRuntime) return;
 

@@ -11,6 +11,9 @@
 import type { Agent, AgentState } from "@earendil-works/pi-agent-core";
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 
+import { t } from "../language/index.js";
+import { announce } from "../ui/announcer.js";
+
 /**
  * Returns the trailing assistant context-overflow error message, or null.
  *
@@ -49,6 +52,9 @@ export async function recoverFromContextOverflow(args: {
 
   const failure = findTrailingContextOverflowError(agent.state);
   if (!failure) return false;
+
+  // The working line shows compaction; screen-reader users hear it (CC-06).
+  announce(t("announce.retrying"));
 
   // Drop the failed assistant message so the retry context is clean.
   agent.state.messages = agent.state.messages.slice(0, -1);

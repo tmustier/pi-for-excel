@@ -174,6 +174,7 @@ void test("runtime tab snapshots follow create, switch, and close lifecycle", as
         isStreaming: false,
         isBusy: false,
         lockState: "idle",
+        attention: "none",
       },
       {
         runtimeId: second.runtimeId,
@@ -184,6 +185,7 @@ void test("runtime tab snapshots follow create, switch, and close lifecycle", as
         isStreaming: false,
         isBusy: false,
         lockState: "idle",
+        attention: "none",
       },
     ],
   });

@@ -189,6 +189,26 @@ pi-sidebar {
   .pi-session-tab__busy { animation: none; }
 }
 
+/* Background tab whose run ended while the user was elsewhere (cleared on
+   activation). Failed: solid destructive dot. Finished, not seen: hollow
+   brand ring, so it reads as "something new" rather than "working". */
+.pi-session-tab__marker {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--radius-full);
+  flex-shrink: 0;
+}
+
+.pi-session-tab__marker--failed {
+  background: var(--destructive);
+  box-shadow: 0 0 0 2px var(--white-alpha-90);
+}
+
+.pi-session-tab__marker--finished {
+  border: 2px solid var(--pi-green);
+  box-sizing: border-box;
+}
+
 /* Waiting for the workbook lock: same amber language as warning banners. */
 .pi-session-tab__lock {
   font-size: var(--text-xs);
