@@ -67,7 +67,7 @@ Files are stored in the browser's private storage for the add-in, on this comput
 
 ## What Pi can do with files
 
-Pi's `files` tool lists, reads, writes and deletes. Its cards read "Files list", "Read file {path}", "Write file {path}" and "Delete file {path}". Reads return 20,000 characters by default (up to 200,000), with a note when truncated. Built-in docs live under `assistant-docs/` and cannot be written, renamed or deleted. All four actions are always available and none asks for approval: the tool is not a workbook [mutation](../glossary.md#the-workbook), so it runs in Confirm mode without a dialog (confirmed in Excel on the web: a write and a delete of `scratch/pd.txt` asked nothing) and does not wait for the workbook lock.
+Pi's `files` tool lists, reads, writes and deletes. Its cards read "Files list", "Read file {path}", "Write file {path}" and "Delete file {path}". Reads return 20,000 characters by default (up to 200,000), with a note when truncated. Built-in docs live under `assistant-docs/` and cannot be written, renamed or deleted. As of [PR #804](https://github.com/tmustier/pi-for-excel/pull/804) (SE-08), Auto and Confirm use the same ownership-based consent: reads, new files, and changes to files Pi created in this chat run without asking; overwriting or deleting another file asks first. The shared approval queue supports Cancel and Stop Pi; Stop withdraws without writing. Files do not take the workbook lock. This does not add general Files Undo; guidance tools have their own Undo toasts.
 
 Pi is told to keep durable notes in `notes/` (with `notes/index.md` as the catalogue), workbook artifacts in `workbooks/{name}/`, temporary files in `scratch/`, and uploads in `imports/`. Files in `scratch/` older than 24 hours are deleted automatically the first time the workspace is used after a reload. When a tool's output is too long for the conversation, Pi saves the full text (up to 512 KB) as `.tool-output/{time}-{tool}-{id}.txt`, which shows up under "YOUR FILES".
 
@@ -79,7 +79,7 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 | --- | --- | --- |
 | Model and provider | No effect on the overlay. Whether Pi reads a file is the model's choice; images and PDFs reach Pi as encoded data it may not interpret. | No effect. |
 | Thinking level | No effect. | No effect. |
-| Execution mode | No effect. Pi's file writes and deletes never ask, in Auto or Confirm. | No effect. |
+| Execution mode | Both modes ask before Pi overwrites/deletes a file it did not create in this chat; neither asks for a new file or a change to its own file. | Same policy in both modes. |
 | Files in the workspace, or an overlay open | This is the workspace. The overlay is itself an overlay; it cannot be opened from the composer button while another overlay covers the composer. | A drop or upload during a turn is available to tool calls that start afterwards. |
 | Tab state (new, restored, another tab busy) | The workspace is the same for every tab. | A responding tab keeps running behind the overlay. |
 | Host (desktop or web) | "Connect folder" appears only where the browser offers a folder picker: Chromium-based Excel on the web, some Windows desktop builds; not on macOS desktop, Firefox or Safari. On Excel on the web it appears but always fails (cross-origin frame). "Copy content" fails on the web. "Open ↗" opens the file in a new browser window on the web; "Download" depends on the host allowing downloads. | No effect. |
@@ -107,7 +107,7 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 
 **Other tabs and sessions.** One workspace for everything on this computer; files tagged to one workbook are still visible and readable from another.
 
-**Execution mode and approvals.** None of the file actions, by the user or by Pi, asks for approval.
+**Execution mode and approvals.** Pi's writes/deletes follow the ownership policy above in both modes. The user's overlay Rename/Delete retain their own dialogs; uploads retain their current behaviour.
 
 **Models and providers.** No interaction beyond what the model chooses to read.
 
@@ -140,9 +140,9 @@ Before each request Pi is given a short summary of the workspace as part of [aut
 - **"Connect folder" is offered on Excel on the web but cannot work** (confirmed, FILES-25): the folder picker is refused in the cross-origin add-in frame. The button should probably be hidden there (`src/files/workspace.ts:88` offers it whenever `showDirectoryPicker` exists; the call at line 1017 then throws).
 - **"Copy content" fails on Excel on the web** with the clipboard permissions-policy error (confirmed, FILES-22), like every clipboard write in the add-in frame.
 - No disconnect for a connected folder: `disconnectNativeDirectory` (`src/files/workspace.ts:1041`) is never called. Read from code; could not be tried because connecting fails on the web.
-- No write/delete gate for Pi's `files` tool: `src/tools/experimental-tool-gates/wrappers.ts:451` states "`files` has no gate". A product call.
+- Historical no-gate observation: superseded by #790's ownership gate and PR #804 (SE-08), which makes Confirm follow that same ownership policy.
 - Also confirmed in Excel on the web: a drop on the transcript imports nothing (FILES-31); Pi's `files` write and delete ask nothing in Confirm mode (FILES-32); files survive a reload (FILES-33).
 - "Download" showed no toast and no visible result in the orb's Chrome; whether a file was saved could not be observed. Confirmed in Excel for Mac: "Download" and "Open ↗" in the preview do nothing at all (no file, no window, no browser tab) (FILES-24). Looks like a bug.
 - Drops were made with a synthetic drop event in the taskpane frame; a real drag from the desktop through Excel's frame was not possible in the orb (needs desktop or a visible session). The empty state was not seen because a skill file already existed.
 
-Verified against pi-for-excel commit `ec453df`.
+Historical observations above were verified against `ec453df`; SE-08 consent behaviour is revised for PR #804, superseding FILES-32's unrestricted write/delete observation.
