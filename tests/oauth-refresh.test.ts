@@ -41,6 +41,7 @@ function fakeProvider(opts: { fail?: Error } = {}) {
   const provider = {
     id: "anthropic",
     name: "Fake Anthropic",
+    login: () => Promise.reject(new Error("refresh must not start a login")),
     getApiKey: (credentials: OAuthCredentials) => `key:${credentials.access}`,
     refreshToken: async (credentials: OAuthCredentials): Promise<OAuthCredentials> => {
       refreshCalls += 1;
@@ -48,7 +49,7 @@ function fakeProvider(opts: { fail?: Error } = {}) {
       if (opts.fail) throw opts.fail;
       return { access: `access-${refreshCalls}`, refresh: `${credentials.refresh}+`, expires: NOW + 3_600_000 };
     },
-  } as unknown as BrowserOAuthProvider;
+  } satisfies BrowserOAuthProvider;
   return { provider, refreshCalls: () => refreshCalls };
 }
 

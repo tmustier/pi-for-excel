@@ -171,8 +171,10 @@ void test("renaming a custom gateway keeps its tabs and saved sessions on that g
   // Another usable provider, so a lost gateway would be swapped to OpenAI's default.
   await keys.set("openai", "test-key");
   const renamed = customProvider();
-  const beforeRename = { ...renamed.models?.[0], provider: "Gateway · Old name" };
-  let selected = beforeRename as ModelRefreshRuntime["model"];
+  const catalogModel = renamed.models[0];
+  assert.ok(catalogModel);
+  const beforeRename = { ...catalogModel, provider: "Gateway · Old name" };
+  let selected = beforeRename;
   const runtimes: ModelRefreshRuntime[] = [{
     runtimeId: "session-a",
     model: selected,
@@ -189,5 +191,5 @@ void test("renaming a custom gateway keeps its tabs and saved sessions on that g
   assert.equal(selected.provider, "Gateway · Local provider");
   assert.equal(selected.id, "plain-model");
   // A saved session restored later resolves the same way.
-  assert.equal(owner.resolveModel(beforeRename as ModelRefreshRuntime["model"])?.provider, "Gateway · Local provider");
+  assert.equal(owner.resolveModel(beforeRename)?.provider, "Gateway · Local provider");
 });
