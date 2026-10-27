@@ -25,6 +25,7 @@ import type {
   TranscriptContext,
 } from "@earendil-works/pi-ai";
 
+import { AUTO_CONTEXT_PREFIX } from "../messages/auto-context.js";
 import { isDebugEnabled } from "../debug/debug.js";
 import { selectToolBundle, type ToolBundleId } from "../context/tool-disclosure.js";
 import { modelRecencyScore } from "../models/model-ordering.js";
@@ -198,10 +199,15 @@ function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Mo
  * so the agent can complete multi-step tool loops in a single turn.
  */
 function isToolContinuation(messages: TranscriptContext["messages"]): boolean {
-  if (messages.length === 0) return false;
-  const last = messages[messages.length - 1];
-  if (!last) return false;
-  return last.role === "toolResult";
+  // The per-request selection note is always appended last; look past it.
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (!message) return false;
+    const isAutoContext = message.role === "user" && typeof message.content !== "string"
+      && message.content[0]?.type === "text" && message.content[0].text.startsWith(AUTO_CONTEXT_PREFIX);
+    if (!isAutoContext) return message.role === "toolResult";
+  }
+  return false;
 }
 
 // ---------------------------------------------------------------------------

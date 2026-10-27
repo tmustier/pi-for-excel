@@ -23,7 +23,8 @@ import {
 } from "../auth/proxy-validation.js";
 import { restoreCredentials } from "../auth/restore.js";
 import { invalidateBlueprint } from "../context/blueprint.js";
-import { ChangeTracker } from "../context/change-tracker.js";
+import { onCellEditWait } from "../excel/helpers.js";
+import { ChangeTracker, type PiWriteWindow } from "../context/change-tracker.js";
 import {
   PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT,
   PI_EXPERIMENTAL_TOOL_CONFIG_CHANGED_EVENT,
@@ -156,7 +157,7 @@ import {
   startWorkbookSaveBoundaryPolling,
 } from "../workbook/save-boundary-monitor.js";
 
-import { createContextInjector } from "./context-injection.js";
+import { createAutoContext } from "./context-injection.js";
 import { getThinkingLevels, installKeyboardShortcuts } from "./keyboard-shortcuts.js";
 import { createQueueDisplay } from "./queue-display.js";
 import { createActionQueue } from "./action-queue.js";
@@ -218,7 +219,21 @@ export async function initTaskpane(opts: {
 }): Promise<void> {
   const { appEl, errorRoot, autoResizeImages } = opts;
 
-  const changeTracker = new ChangeTracker();
+  // One workbook-level edit log; each runtime reads it from its own cursor.
+  // User structure changes (sheets, rows, columns) invalidate the blueprint.
+  const changeTracker = new ChangeTracker({
+    onStructureChange: () => invalidateBlueprint(null),
+    getPiWriteAddresses: async (toolCallIds) => {
+      const wanted = new Set(toolCallIds);
+      const written = new Map<string, string[]>();
+      for (const entry of await getWorkbookChangeAuditLog().list(200)) {
+        if (!wanted.has(entry.toolCallId)) continue;
+        const address = entry.outputAddress ?? entry.inputAddress;
+        if (address) written.set(entry.toolCallId, [...(written.get(entry.toolCallId) ?? []), address]);
+      }
+      return written;
+    },
+  });
   const spreadsheetHost = getCurrentSpreadsheetHost();
 
   // 1. Storage
@@ -337,6 +352,14 @@ export async function initTaskpane(opts: {
 
   // 5. Create and mount PiSidebar
   const sidebar = new PiSidebar();
+  // Excel rejects every batch while the user is typing in a cell; excelRun
+  // retries and this tells the user why Pi is waiting.
+  onCellEditWait((waiting) => {
+    sidebar.setHostWaitIndicator(
+      waiting ? t("working.cellEdit") : null,
+      waiting ? t("working.cellEditHint") : null,
+    );
+  });
   sidebar.emptyHints = [
     {
       label: t("hint.explain.label"),
@@ -562,7 +585,22 @@ export async function initTaskpane(opts: {
         opId: crypto.randomUUID(),
         toolName: "workbook_history",
       },
-      () => workbookRecoveryLog.restore(snapshotId),
+      async () => {
+        // Every chat tab is told about the restore ("restored from a backup").
+        const window: PiWriteWindow = {
+          toolCallId: `restore:${snapshotId}`,
+          startedAt: Date.now(),
+          settledAt: Number.POSITIVE_INFINITY,
+        };
+        changeTracker.notePiWrite(window, { kind: "restore" });
+        try {
+          const result = await workbookRecoveryLog.restore(snapshotId);
+          window.address = result.address;
+          return result;
+        } finally {
+          window.settledAt = Date.now();
+        }
+      },
     );
 
     const address = restored.result.address;
@@ -883,9 +921,11 @@ export async function initTaskpane(opts: {
           getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
         },
         {
+          onWriteStarted: (window) => changeTracker.notePiWrite(window, { kind: "runtime", runtimeId }),
           onWriteCommitted: (event) => {
             if (event.impact !== "structure") return;
             invalidateBlueprint(event.workbookId);
+            autoContext.noteOwnStructureChange();
           },
         },
         {
@@ -925,6 +965,7 @@ export async function initTaskpane(opts: {
 
     const initialModel = getActiveRuntime()?.agent.state.model
       ?? modelRefreshOwner.snapshot().defaultModel;
+    const autoContext = createAutoContext({ changeTracker, getAgent: () => runtimeAgent, runtimeId });
     const initialCapabilities = await buildRuntimeCapabilities(runtimeSessionId);
 
     const agent = new Agent({
@@ -943,7 +984,8 @@ export async function initTaskpane(opts: {
       convertToLlm: createConvertToLlm({
         getContextWindow: () => runtimeAgent?.state.model.contextWindow,
       }),
-      transformContext: createContextInjector(changeTracker),
+      prepareRequest: autoContext.prepareRequest,
+      transformContext: autoContext.transformContext,
       streamFn,
     });
 

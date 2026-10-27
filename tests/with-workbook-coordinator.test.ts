@@ -482,3 +482,73 @@ void test("Stop tells the agent whether a mutation ran", async () => {
   const first = result.content[0];
   assert.equal(first?.type === "text" ? first.text : "", "Formatted A1.\n\n⏹ Stop was pressed while this ran; the change above was already applied and stands.");
 });
+
+void test("Stop settles a write Excel never answers, so the workbook lock is released", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const coordinator = new FakeCoordinator();
+  const windows: Array<{ toolCallId: string; settledAt: number }> = [];
+  const [hung] = withWorkbookCoordinator(
+    [makeTool("write_cells", () => new Promise(() => {}))],
+    coordinator,
+    createContextProvider("url_sha256:abc"),
+    { onWriteStarted: (window) => windows.push(window) },
+  );
+  if (!hung) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = hung.execute("tc-hung", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(windows[0]?.settledAt, Number.POSITIVE_INFINITY, "write window open while the call runs");
+  controller.abort();
+  t.mock.timers.tick(10_000);
+
+  await assert.rejects(call, (error: unknown) => {
+    assert.ok(error instanceof Error);
+    assert.match(error.message, /Stopped by the user while Excel was still working.*outcome is unknown/u);
+    assert.equal(Reflect.get(error, "outcomeUnknown"), true);
+    return true;
+  });
+  assert.equal(windows[0]?.toolCallId, "tc-hung");
+  assert.ok(Number.isFinite(windows[0]?.settledAt), "write window closed");
+});
+
+void test("a write that finishes a few seconds after Stop reports its own result", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const [slow] = withWorkbookCoordinator(
+    [makeTool("write_cells", () => new Promise((resolve) => {
+      setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing Calc!K11:K20; backup fae5e5d3" }], details: { echo: "slow" } }), 6_000);
+    }))],
+    new FakeCoordinator(),
+    createContextProvider("url_sha256:abc"),
+  );
+  if (!slow) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = slow.execute("tc-slow", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(6_000);
+
+  const result = await call;
+  const first = result.content[0];
+  // #791's wrapper may append a note that the change stands; the tool's own report comes first.
+  assert.ok((first?.type === "text" ? first.text : "").startsWith("Stopped after writing Calc!K11:K20; backup fae5e5d3"));
+});
+
+void test("a tool that reports its own Stop result is not cut short by the wrapper", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const tool = Object.assign(makeTool("write_cells", () => new Promise((resolve) => {
+    setTimeout(() => resolve({ content: [{ type: "text", text: "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e" }], details: { echo: "slow" } }), 20_000);
+  })), { reportsStop: true as const });
+  const [wrapped] = withWorkbookCoordinator([tool], new FakeCoordinator(), createContextProvider("url_sha256:abc"));
+  if (!wrapped) throw new Error("Wrapped tool missing");
+
+  const controller = new AbortController();
+  const call = wrapped.execute("tc-reports", {}, controller.signal);
+  await new Promise((resolve) => setImmediate(resolve));
+  controller.abort();
+  t.mock.timers.tick(20_000);
+
+  const first = (await call).content[0];
+  assert.equal(first?.type === "text" ? first.text : "", "Stopped after writing rows 1-40 of 100; backup 5d2c0a1e");
+});

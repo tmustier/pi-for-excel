@@ -388,3 +388,17 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - **Current `conditional_format` backup scope:** captures/restores all current rule families (`custom`, `cell_value`, `contains_text`, `top_bottom`, `preset_criteria`, `data_bar`, `color_scale`, `icon_set`) including per-rule applies-to ranges.
 - **Quick affordance:** users can restore via `/history` (Backups overlay) or `/revert` (latest backup). The Backups overlay also exposes a **Full backup** button for explicit manual full-workbook capture.
 - **Rationale:** addresses #27 by shifting from cumbersome up-front approvals to versioned recovery with explicit user-controlled rollback.
+
+## Cell-edit mode (`excelRun`)
+- **Problem:** while the user types in a cell, Excel rejects every batch with `InvalidOperationInCellEditMode` (Excel on the web fails in milliseconds).
+- **Behavior:** `excelRun` retries with backoff (250 ms → 2 s) for up to 60 s and shows "Waiting for you to finish editing a cell" in the working indicator. A run is retried only if none of its `context.sync()` calls had succeeded, so a half-applied mutation is never re-run.
+- **Timeout:** throws `ExcelCellEditModeError`, whose message tells the agent what happened, whether anything reached Excel, and to ask the user to press Enter, Tab or Esc.
+- **Opt-out:** background and auto-context reads pass `waitForCellEdit: false` (they must not block a model request or show the status while Pi is idle).
+- **Stop:** pressing Stop ends any cell-edit wait (`cancelCellEditWaits()`, `ExcelWaitStoppedError`: nothing reached Excel), so a stopped batch never runs once the user leaves the cell. Known limit: the cancel is taskpane-wide, so a wait in another tab ends too.
+
+## Excel timeouts and Stop (`excelRun`, workbook coordinator)
+- **Problem:** a hung or overloaded Excel on the web (e.g. 150 parallel heavy formula writes) never answers `Excel.run`; the tool call, the workbook lock and every later call hung, and Stop could not end the turn.
+- **Timeout:** each `Excel.run` races a 60 s timeout (`EXCEL_RUN_TIMEOUT_MS`). On timeout `excelRun` throws `ExcelTimeoutError` (code `excel_timeout`): "outcome unknown; read the affected range back before retrying". After consecutive timeouts with no answer in between, the message tells the agent to stop calling workbook tools and ask the user to reload.
+- **Stop:** the coordinator wrapper gives a stopped tool call time to finish by itself (`STOP_GRACE_MS`: 500 ms for reads, 10 s for writes, so a slow write still returns its own precise result and backup id), then rejects it ("Stopped by the user … outcome unknown" for writes). Tools marked `reportsStop` (#791: write_cells, fill_formula) are not cut short: they check Stop between batches, each batch is bounded by the `excelRun` timeout, and only they know which rows landed and the backup id. Either way the call settles, so the workbook lock is released and the turn ends.
+- **Contract:** both errors carry `outcomeUnknown: true`; mutation results (#791) then report rows as "may or may not have been written".
+- **Limit:** Office.js cannot cancel a batch already sent; an abandoned batch may still apply later. Both errors say so.

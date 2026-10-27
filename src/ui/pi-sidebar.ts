@@ -180,6 +180,8 @@ export class PiSidebar extends LitElement {
   @state() private _isStreaming = false;
   @state() private _busyLabel: string | null = null;
   @state() private _busyHint: string | null = null;
+  @state() private _hostWaitLabel: string | null = null;
+  @state() private _hostWaitHint: string | null = null;
   @state() private _payloadStats: PayloadStats | null = null;
   @state() private _payloadSnapshots: PayloadSnapshot[] = [];
   @state() private _contextPillExpanded = false;
@@ -287,6 +289,16 @@ export class PiSidebar extends LitElement {
   setBusyIndicator(label: string | null, hint?: string | null): void {
     this._busyLabel = label;
     this._busyHint = hint ?? null;
+    this.requestUpdate();
+  }
+
+  /**
+   * Show a host wait (e.g. Excel is in cell-edit mode) that overrides the
+   * working indicator even while a turn is streaming. Pass `null` to clear.
+   */
+  setHostWaitIndicator(label: string | null, hint?: string | null): void {
+    this._hostWaitLabel = label;
+    this._hostWaitHint = hint ?? null;
     this.requestUpdate();
   }
 
@@ -785,9 +797,9 @@ export class PiSidebar extends LitElement {
         ${!hasMessages ? this._renderEmptyState() : ""}
       </div>
       <pi-working-indicator
-        .active=${this._isStreaming || this._busyLabel !== null}
-        .primaryText=${this._busyLabel ?? undefined}
-        .hintText=${this._busyHint ?? undefined}
+        .active=${this._isStreaming || this._busyLabel !== null || this._hostWaitLabel !== null}
+        .primaryText=${this._hostWaitLabel ?? this._busyLabel ?? undefined}
+        .hintText=${this._hostWaitLabel !== null ? (this._hostWaitHint ?? undefined) : (this._busyHint ?? undefined)}
       ></pi-working-indicator>
       <div id="pi-widget-slot" class="pi-widget-slot" style="display:none"></div>
       <div class="pi-input-area">

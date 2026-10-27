@@ -74,12 +74,32 @@ Implications:
 |---|---|---|
 | Base system prompt | Keep minimal and stable per session | Every call (provider APIs are request-based) |
 | Tool schemas | Include a deterministic tool set on every call so continuations can keep using tools (current runtime policy: full set) | Every call |
-| Workbook structural context | Inject as separate context block (not baked repeatedly into base prompt) | Session start + workbook hash/version change |
-| Per-turn auto-context (selection + recent changes) | Keep bounded and high-signal | Per user turn when non-empty |
+| Workbook structural context | Stored `autoContext` note in the transcript (not the base prompt) | First request, workbook switch, blueprint text changed, or the note was compacted away |
+| Files workspace summary | Stored `autoContext` note | First request with relevant files, signature changed, or compacted away |
+| Edits by the user or a collaborator | Stored `autoContext` note (event); Pi's own writes excluded | Before any request (including mid-turn) when the per-tab cursor has new entries |
+| Current selection | Not stored; appended as the last message, bounded (address + size, ≤ 20 sampled rows, ≤ 4,000-char table) | Every request |
 | Tool results in model-facing history | Keep fresh full detail short-term, summarize/prune older bulky outputs | On pressure/threshold |
 | Compaction | Trigger before hard limits to protect quality | Soft and hard thresholds |
 
 ---
+
+## Auto-context contract (2026-10-26)
+
+`src/taskpane/context-injection.ts` owns what Pi tells the agent without being asked. Two layers:
+
+1. **Stored notes** (`prepareRequest`, role `autoContext`, `src/messages/auto-context.ts`). Snapshots (workbook blueprint, Files summary) and events (edits by someone other than Pi) are inserted into the runtime transcript before the user's prompt, or after the latest tool results mid-turn. A snapshot is added only when it differs from the last note of its kind in the transcript, so it is sent once, stays visible for the rest of the turn and later turns, persists with the session, and becomes part of the cached prefix. Later notes are appended, never rewritten, so earlier prefixes stay valid.
+2. **Selection** (`transformContext`). Re-read for every request and appended last; never stored. Everything before it is byte-identical to the previous request's messages.
+
+Rules:
+- A source that fails or times out is logged (`[auto-context]`) and, for the selection, reported to the agent as unavailable. Never silently dropped.
+- A structure change caused by the runtime's own mutation does not add a workbook note mid-turn (the tool result already says what changed); the next turn's first request carries it. The trailing selection note says it is background and, mid-turn, "not a new request … do not repeat steps that already succeeded"; it never restates the user's request. Both together had let a model repeat a successful `insert_rows` 54 times in one turn.
+- Auto-context Excel reads use `excelRun(..., { waitForCellEdit: false })`: they must not hold up a model request while the user edits a cell.
+- Edit tracking: one workbook-level `worksheets.onChanged` listener per taskpane; each runtime (chat tab) reads the shared log from its own cursor and is told about every edit it did not make itself. Every write Pi makes is recorded as a write window: tool calls through the coordinator wrapper (with their runtime) and user restores from `/revert` or the Backups dialog. Writes are serialized by the workbook lock, so:
+  - `triggerSource: "ThisLocalAddin"` edits are matched to the latest write window covering their time (range overlap breaks ties): the runtime's own writes are left out; restores are listed as "Restored from a backup by the user", other tabs' writes as "By Pi in another chat tab", unmatched add-in edits (extensions) as "By Pi outside this chat".
+  - Once a co-author has joined, Pi's writes arrive as `"Unknown"` (and stay so after they leave). A local `"Unknown"` edit is matched the same way only when it also overlaps the range the write recorded (`outputAddress`/`inputAddress` from the change audit, or the restore's address; unknown range = any cell); otherwise it is the user's.
+  - `source: "Remote"` edits are listed under "By a co-author"; a co-author's row/column/cell insert or delete adds a warning that addresses may have moved.
+  - Structure events from anyone (sheet added/deleted/renamed/moved/shown, row/column insert/delete) invalidate the blueprint cache.
+- Agent-facing text; never routed through `t()`.
 
 ## Implementation plan (next slices)
 
@@ -127,7 +147,7 @@ Implications:
 - Keep recency window for exact details (latest N tool results untouched).
 - **Current rollout (v2):**
   - **execution-time guardrail (primary):** global tool-output truncation wrapper on all registered tools with Pi-aligned limits (**50KB UTF-8 bytes** or **2000 lines**, whichever first). For context windows **below 128k**, caps scale linearly with the window (floors: 8KB / 200 lines) — see `src/context/window-budgets.ts` (#566).
-  - **history shaping (secondary):** keep latest **6** tool results untouched (scaled down for <128k windows, e.g. **3** at 65k, floor 2); compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
+  - **history shaping (secondary):** keep latest **6** tool results untouched (scaled down for <128k windows, e.g. **3** at 65k, floor 2); the boundary moves in steps of that count, so between N and 2N−1 stay whole and already-sent results are rewritten only once every N results (prompt cache); compact older tool results when payload exceeds **1,200 chars** or contains images; include a deterministic **500-char preview** in compacted form.
   - truncated outputs include stable machine metadata (`details.outputTruncation`) and best-effort full-output persistence under Files workspace `.tool-output/...`.
 
 **Success:** lower message-context growth rate with no UX regression.

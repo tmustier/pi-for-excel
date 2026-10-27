@@ -64,6 +64,7 @@ function messageToTranscriptText(message: AgentMessage): string {
   }
 
   if (message.role === "compactionSummary") return message.summary;
+  if (message.role === "autoContext") return message.text;
   if (hasContent(message)) return summarizeContentForTranscript(message.content);
   return "";
 }
@@ -248,6 +249,10 @@ function estimateTokens(message: AgentMessage): number {
     return Math.ceil(message.summary.length / charsPerToken);
   }
 
+  if (message.role === "autoContext") {
+    return Math.ceil(message.text.length / charsPerToken);
+  }
+
   if (message.role === "user" || message.role === "user-with-attachments") {
     const content = message.content;
     if (typeof content === "string") {
@@ -327,6 +332,12 @@ function serializeConversation(messages: AgentMessage[], limits: SerializeLimits
 
   for (const msg of messages) {
     if (msg.role === "artifact") continue;
+
+    if (msg.role === "autoContext") {
+      // Workbook and Files notes are re-sent after compaction; user edits are not.
+      if (msg.kind === "changes") parts.push(`[Workbook edits by the user]: ${truncateMiddle(msg.text, limits.maxUserChars)}`);
+      continue;
+    }
 
     if (msg.role === "user" || msg.role === "user-with-attachments") {
       const raw = typeof msg.content === "string" ? msg.content : extractTextBlocks(msg.content);
