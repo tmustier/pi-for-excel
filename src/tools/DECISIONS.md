@@ -62,6 +62,12 @@ Concise record of recent tool behavior choices to avoid regressions. Update this
 - A failed mutation records an audit entry but no "backup not created" note: nothing changed.
 - **Cell-edit mode:** one reason (`cellEditModeReason` in `excel-failure.ts`), worded like `excelRun`'s `ExcelCellEditModeError` (#792) without its "what was applied" clause, because each tool states what it changed. The write tools never assume `excelRun` retries: `write_cells` counts the chunks whose sync succeeded and reports those rows as written (backed up and audited); `fill_formula` reports whether the fill sync succeeded. Other mutation tools say "part of this change may already be in the workbook" instead of "not changed" when the error says an earlier step reached Excel (`earlierStepReachedExcel`).
 
+## Deleting rows that are hidden (`modify_structure delete_rows`)
+- Before deleting, the tool finds hidden rows in the range (one probe per row, up to 500) and keeps their cells. After deleting it reads back to see which ones Excel kept, because the result differs: Excel on the web deletes only the visible rows of a filtered range (table filter or AutoFilter), and the kept rows move up, but it does delete hand-hidden rows (confirmed 2026-10-27).
+- Hidden rows deleted: "⚠️ N deleted row(s) were hidden: row … Deleted hidden data: row 3 ("South", "b")", plus the table and whether a filter is on (`details.hiddenRowsDeleted`). Not refused: a backup restores them, and the warning tells the agent how.
+- Hidden rows kept: "Deleted 1 of 2 row(s) … Excel kept 1 hidden row(s)", and no backup is saved, since a backup of all the rows would restore the kept ones twice.
+- Refused up front only when hidden rows hold data and the rows are too large to back up.
+
 ## Reads in a batch see earlier writes
 - `withWorkbookCoordinator` tracks mutations that have started and not finished. A read waits for mutations started before it (the agent loop starts a batch's calls in order); mutations never wait for reads. A read issued before a write in the same batch is not delayed.
 

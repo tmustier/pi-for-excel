@@ -123,6 +123,8 @@ export const modifyStructureDetailsSchema = Type.Object({
   kind: Type.Literal("modify_structure"),
   action: Type.Optional(Type.String()),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
+  /** delete_rows: rows that were hidden (by a filter or by hand) when they were deleted. */
+  hiddenRowsDeleted: Type.Optional(Type.Number()),
 });
 
 export type ModifyStructureDetails = Static<typeof modifyStructureDetailsSchema>;

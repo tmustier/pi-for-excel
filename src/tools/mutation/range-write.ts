@@ -151,7 +151,7 @@ export interface WriteTargetInspection {
   checkNotes: string[];
 }
 
-function excelApiSupported(version: string): boolean {
+export function excelApiSupported(version: string): boolean {
   if (typeof Office === "undefined") return true;
   return Office.context?.requirements?.isSetSupported?.("ExcelApi", version) ?? true;
 }
