@@ -63,3 +63,12 @@ Related proposals are grouped. Each line gives the proposal, then the reviewer's
 - **SE-06:** remove or flag the Claude Pro/Max login (Anthropic's terms; not verified).
 - **SE-07:** use the provider's native web search.
 - **SE-09:** files dropped on the composer attach to the message.
+
+## Decisions (27 October 2026)
+
+- Accepted as recommended: everything in the lists above, except as noted here.
+- **SE-06:** keep the Claude Pro/Max login. Like Pi in the terminal, warn once per session when an Anthropic subscription model is active (at session start or on switching to it) that third-party use draws from extra usage, with a setting to turn the warning off.
+- **SE-05:** rules stay in the browser, never in the workbook file. They follow the workbook on Save As, rename and move (held batch, #795).
+- **SE-01:** keep the local helper; label each provider row with what it needs and list no-setup options first. No hosted endpoint.
+- **CL-01:** implement with typed data (backups carry a turn id; the turn produces a change summary), not strings.
+- **WT-03, CL-03:** pending.
