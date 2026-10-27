@@ -157,7 +157,11 @@ export function createFillFormulaTool(): AgentTool<typeof schema, FillFormulaDet
         });
       } catch (error) {
         const parsed = parseExcelError(error);
-        const failure = await describeExcelFailure(parsed, { range: params.range });
+        const failure = await describeExcelFailure(
+          parsed,
+          { range: params.range },
+          !progress.filled && !progress.fillInFlight,
+        );
         // Excel never answered the fill batch (timeout, Stop, not an Excel error): it may have landed.
         const fillUnknown = progress.fillInFlight && (parsed.outcomeUnknown || parsed.code === null);
         const inspection = progress.inspection;

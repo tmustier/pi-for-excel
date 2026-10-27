@@ -242,7 +242,14 @@ export function createWriteCellsTool(
         // Stop, or a failure that is not an Excel answer) may have.
         const inFlightUnknown = parsed.outcomeUnknown || parsed.code === null;
         return interruptedWrite({
-          cause: { kind: "failed", failure: await describeExcelFailure(parsed, { range: params.start_cell }) },
+          cause: {
+            kind: "failed",
+            failure: await describeExcelFailure(
+              parsed,
+              { range: params.start_cell },
+              progress.writtenRows === 0 && progress.inFlightRows === 0,
+            ),
+          },
           params,
           toolCallId,
           block,

@@ -380,8 +380,10 @@ export interface WriteVerification {
   invalidRule: string | null;
   /** Tables Excel extended to take in the written cells, with the headers it made up. */
   tableExtensions: Array<{ name: string; address: string; newHeaders: string[] }>;
-  /** Calculation mode when it is not Automatic; written cells were calculated. */
+  /** Calculation mode when it is not Automatic. */
   manualCalculation: string | null;
+  /** Written formulas were calculated before the read-back (manual calculation only). */
+  calculatedWritten: boolean;
   /** What was checked when not every cell was read back, or why verification failed. */
   scopeNote: string | null;
   sampleRows: Array<{ rowOffset: number; values: CellScalar[][]; formulas: CellScalar[][] }>;
@@ -513,6 +515,7 @@ export function diffWrittenGrid(
     tableExtensions: [],
     invalidRule: null,
     manualCalculation: null,
+    calculatedWritten: false,
     scopeNote: null,
     sampleRows: [],
   };
@@ -520,7 +523,7 @@ export function diffWrittenGrid(
 
 export interface VerifyOptions {
   calculationMode: string | null;
-  /** Whether any formula was sent (manual calculation only matters then). */
+  /** Whether any formula was sent (written formulas are calculated under manual calculation). */
   sentFormulas: boolean;
   /** Number of cells sent "" (they are expected to be blank). */
   sentEmptyCount: number;
@@ -541,11 +544,13 @@ export async function verifyWrittenRange(
   options: VerifyOptions,
 ): Promise<WriteVerification> {
   const target = sheet.getRange(blockAddress(block));
-  // Manual calculation only matters when formulas were written.
-  const manual = options.sentFormulas && options.calculationMode !== null && options.calculationMode !== "Automatic"
+  // Under manual calculation every write leaves dependents stale; written
+  // formulas are calculated so their own read-back is current.
+  const manual = options.calculationMode !== null && options.calculationMode !== "Automatic"
     ? options.calculationMode
     : null;
-  if (manual) {
+  const calculatedWritten = manual !== null && options.sentFormulas;
+  if (calculatedWritten) {
     target.calculate();
     await context.sync();
   }
@@ -566,6 +571,7 @@ export async function verifyWrittenRange(
     invalidRule: null,
     tableExtensions: [],
     manualCalculation: manual,
+    calculatedWritten,
     scopeNote: null,
     sampleRows: [],
   };
@@ -812,8 +818,9 @@ export function formatVerificationNotes(verification: WriteVerification): string
   const lines: string[] = [];
   if (verification.manualCalculation) {
     lines.push(
-      `ℹ️ Calculation is set to ${verification.manualCalculation}. The written cells were calculated, so their values are current, ` +
-      "but other formulas that depend on them still show old results until the user recalculates (F9) or switches calculation to Automatic.",
+      `ℹ️ Calculation is set to ${verification.manualCalculation}. ` +
+      (verification.calculatedWritten ? "The written cells were calculated, so their values are current, but other formulas " : "Formulas ") +
+      "that depend on them still show old results until the user recalculates (F9) or switches calculation to Automatic.",
     );
   }
   for (const table of verification.tableExtensions) {

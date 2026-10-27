@@ -155,6 +155,24 @@ void test("write_cells calculates written formulas under manual calculation and 
   });
 });
 
+void test("under manual calculation, changing an input says its dependents are stale", async () => {
+  const host = new FakeExcelHost(["Calc"]);
+  host.sheet("Calc").set("A1", 1);
+  host.sheet("Calc").set("B1", "=A1");
+  host.calculationMode = "Manual";
+
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("manual-input", {
+      start_cell: "Calc!A1",
+      values: [[10]],
+      allow_overwrite: true,
+    });
+
+    assert.match(text(result), /Calculation is set to Manual\. Formulas that depend on them still show old results/u);
+    assert.equal(result.details.calculationMode, "Manual");
+  });
+});
+
 void test("write_cells refuses locked cells on a protected sheet and writes unlocked ones", async () => {
   const host = new FakeExcelHost(["Protected"]);
   host.sheet("Protected").protect(["B2"]);
@@ -378,6 +396,19 @@ void test("a chunk Excel never confirmed is reported as unknown, not as unwritte
     assert.match(text(result), new RegExp(`rows ${landed + 1}–\\d+ \\(Big!A${landed + 1}:A\\d+\\) may or may not have been written`, "u"));
     assert.match(text(result), /Excel did not answer/u);
     assert.doesNotMatch(text(result), /nothing was written/u);
+  });
+});
+
+void test("a timeout while reading the target says nothing was written, without calling the outcome unknown", async () => {
+  const host = new FakeExcelHost();
+  host.failSync = { at: 1, error: Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }) };
+  await withFakeExcel(host, async () => {
+    const result = await createWriteCellsTool(noBackups).execute("timeout-inspect", { start_cell: "Sheet1!H7", values: [["x"]] });
+
+    assert.equal(result.isError, true);
+    assert.match(text(result), /nothing was written to Sheet1!H7\. Excel did not answer \(.*\) before the change was sent/u);
+    assert.doesNotMatch(text(result), /unknown/u);
+    assert.equal(host.sheet("Sheet1").value("H7"), "");
   });
 });
 
