@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { createWriteCellsTool, describeOccupiedCells } from "../src/tools/write-cells.ts";
+import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+
+import { createFillFormulaTool } from "../src/tools/fill-formula.ts";
+import { describeOccupiedCells, createWriteCellsTool } from "../src/tools/write-cells.ts";
+import { findErrors } from "../src/utils/format.ts";
+import { colName, FakeExcelHost, OfficeError, withFakeExcel } from "./fixtures/excel-write-host.ts";
 
 function text<T>(result: AgentToolResult<T>): string {
   const first = result.content[0];

@@ -597,6 +597,23 @@ export async function initTaskpane(opts: {
     return result;
   };
 
+  /** Restores a backup and tells every chat tab about it ("restored from a backup", #792). */
+  const restoreNotingTabs = async (snapshotId: string) => {
+    const window: PiWriteWindow = {
+      toolCallId: `restore:${snapshotId}`,
+      startedAt: Date.now(),
+      settledAt: Number.POSITIVE_INFINITY,
+    };
+    changeTracker.notePiWrite(window, { kind: "restore" });
+    try {
+      const result = await workbookRecoveryLog.restore(snapshotId);
+      window.address = result.address;
+      return result;
+    } finally {
+      window.settledAt = Date.now();
+    }
+  };
+
   const formatBackupAge = (at: number): string => formatRelativeDate(new Date(at).toISOString());
 
   /** Every restore the user starts (/revert, the Backups page) runs here. */
@@ -618,7 +635,7 @@ export async function initTaskpane(opts: {
     })) return;
 
     const restored = await runUserWorkbookOperation(
-      "workbook_history", () => workbookRecoveryLog.restore(preview.id),
+      "workbook_history", () => restoreNotingTabs(preview.id),
     );
     const address = restored.address;
     if (restored.inverseSnapshotError) {
@@ -892,9 +909,8 @@ export async function initTaskpane(opts: {
     /** Names this tab in its approvals when another tab is on screen. */
     /** "Stop Pi" in an approval dialog: the same as the tab's Stop button. */
     const stopRuntimeTurn = (): void => {
-      if (!runtimeAgent) return;
-      abortedAgents.add(runtimeAgent);
-      runtimeAgent.abort();
+      const runtime = runtimeManager.getRuntime(runtimeId);
+      if (runtime) stopTab(runtime);
     };
 
     const approvalSource = (): { source?: string } => {
@@ -1180,6 +1196,9 @@ export async function initTaskpane(opts: {
       models: modelRuntime.models,
       initialSessionId: runtimeSessionId,
       autoRestoreLatest: optsForRuntime.autoRestoreLatest,
+      onSaveError: (message) => {
+        showToast(t("sessions.toast.saveFailed", { error: message }));
+      },
       onSavedAsCopy: () => {
         showToast(t("init.sessionSavedAsCopy"), 8000);
       },
@@ -1902,8 +1921,12 @@ export async function initTaskpane(opts: {
    */
   const stopActiveTab = (): void => {
     const activeRuntime = getActiveRuntime();
-    if (!activeRuntime) return;
-    const { texts, cancelledCommands } = activeRuntime.actionQueue.stop();
+    if (activeRuntime) stopTab(activeRuntime);
+  };
+
+  /** A tab's Stop: also used by "Stop Pi" in that tab's approval dialogs (#794). */
+  function stopTab(runtime: SessionRuntime): void {
+    const { texts, cancelledCommands } = runtime.actionQueue.stop();
     const count = texts.length;
     const plural = count === 1 ? "" : "s";
     const commands = cancelledCommands.join(", ");
@@ -1914,7 +1937,7 @@ export async function initTaskpane(opts: {
     } else if (commands) {
       showToast(t("turn.toast.stopCancelled", { commands }));
     }
-  };
+  }
 
   sidebar.onAbort = stopActiveTab;
 
