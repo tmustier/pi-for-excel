@@ -8,9 +8,9 @@ The workbook is the Excel file open in the window that owns the taskpane, and th
 
 The user asks "Put a total under the Revenue column." Pi reads the sheet first: a tool card "Read Sheet1!A1:D20" appears, runs, and completes. Reading changes nothing and needs no permission. Pi then writes: a card "Edit Sheet1!D21 — 1 changed" appears. Before the value lands in the grid, Pi has recorded what D21 held, so the change can be reverted. The grid shows the new total as soon as the card completes. (Confirmed in Excel on the web.)
 
-Pi did not ask before writing, because the execution mode is Auto by default. If the user had switched the status-bar control to "Confirm", a dialog "Allow workbook mutation in Safe mode?" would have appeared before the write and the turn would have waited for the answer (confirmed in Excel on the web).
+Pi did not ask before writing, because the execution mode is Auto by default. In Confirm, the queued approval names the tab and intended action before the write can acquire the lock.
 
-If the total is wrong, the user types `/revert` or opens Backups from the [utilities menu](../ui/the-utilities-menu.md) and clicks "Restore": D21 goes back to what it held, and a toast says "Reverted Sheet1!D21". On Excel desktop, saving the workbook clears its backups, because they are meant to cover the stretch between saves. On Excel on the web saving never clears them; reopening or reloading the taskpane does (see [Backups](#backups)).
+If the total is wrong, the user can use `/revert` or Backups from the [utilities menu](../ui/the-utilities-menu.md). Restore previews/confirmation make the overwritten state explicit. Saving and reloading do not clear automatic backups.
 
 ## What Pi can read and change
 
@@ -70,9 +70,9 @@ A mutation ends without touching the workbook when:
 
 - **The user declines an approval.** The tool call fails with "Mutation cancelled by user (Confirm mode)." The model sees the failure and the turn continues. See [confirm mode and approvals](../workbook/confirm-mode-and-approvals.md).
 - **The turn was stopped while the mutation was waiting.** When its place in the lock comes up, it fails with "Aborted" and does nothing.
-- **The tool's own check blocks it.** `write_cells` and `fill_formula` refuse to overwrite cells that hold values or formulas unless the model explicitly asked to overwrite ("⛔ Write blocked — … contains N non-empty cell(s)."). This is not a failure: the card completes with "— blocked" and the model is told to ask the user. A blocked write still went through approval and the lock.
+- **The tool's own check blocks it.** Checked writes/fills refuse occupied targets without overwrite permission, unsafe merge/spill/protection targets and occupied targets too large to back up. Refusals are errors; preflight can refuse before approval, then inspection rechecks under the lock.
 
-Reads never end this way: they cannot be declined, do not wait, and record nothing.
+Reads cannot be declined and record no mutation. They wait for earlier registered writes in their own runtime and use the bounded Excel host policy.
 
 ### The change is made
 
@@ -89,11 +89,11 @@ The tab is responding, as for any tool call; see [turns](turns.md). While this t
 
 ### Finishes
 
-The tool card shows the result: for writes, a "Changes" table of before and after values; for every built-in mutation tool, an "Explain these changes" drawer; and " — no backup" in the card header when no backup could be taken. See [writing](../workbook/writing.md). If Excel rejected the change, the card shows the error and the model sees it. A change that Excel applied partly before failing is not rolled back and has no backup.
+The tool card is the receipt: changed-cell samples, verification scope and backup status. Partial checked writes name and back up what landed. A failed read-back is not called an unapplied write; an unanswered submission may have an unknown outcome. Other partial multi-step changes remain without a guaranteed inverse. See [writing](../workbook/writing.md).
 
 ## The workbook lock
 
-Only one mutation runs at a time in a taskpane, across all its tabs. Reads are never locked: a tab can read while another tab writes.
+Only one mutation runs at a time in a taskpane, across all its tabs. Reads do not take the lock, but wait for writes registered earlier in the same runtime. Reads in another tab can observe a write in progress.
 
 When a tab's mutation must wait because another mutation is running or already waiting, the tab shows "Locking…" next to its title until its mutation starts. The wait has no time limit. Mutations run in the order they asked for the lock. Restores started by the user (from the Backups dialog or `/revert`) take the same lock and are attributed to the active tab.
 
@@ -106,9 +106,9 @@ A backup is a snapshot of what a mutation is about to change, saved by Pi so the
 - **What is captured.** Depends on the tool (see the table above): for cell writes, the values and formulas of the target range; for formatting, the format properties Pi can set; for conditional formats, the range's rules; for comments, the thread; for charts, the chart's properties; for structure, enough to undo the change, including deleted values and formulas. A backup never captures cell formatting when the mutation was a write, so reverting a write does not undo formatting that Excel's fill copied.
 - **When it is not taken.** No backup for `view_settings`, chart deletes, direct Office.js, or a mutation larger than 20,000 cells. No backup when the workbook has no identity and the host cannot store a document token (see [Unsaved and new workbooks](#unsaved-and-new-workbooks)). The tool card says " — no backup" and the result tells the model "ℹ️ Backup not created …".
 - **Where it lives.** In the add-in's browser storage on this computer, never in the workbook file. One list holds the backups of every workbook, each tagged with its workbook's identity; the user only ever sees the current workbook's.
-- **Retention.** The list keeps the 120 most recent backups across all workbooks; older ones are dropped. The Backups dialog shows at most the 40 most recent for the current workbook. The "Keep at most" setting in the Backups dialog is saved but, at this commit, does not change the cap (see [Open questions](#open-questions-and-verification)).
-- **Cleared on save.** Every 4 seconds Pi asks Excel whether the workbook has unsaved changes. When it sees the workbook go from unsaved to saved, it deletes every backup for that workbook. It also deletes them the first time it looks at a workbook identity, if the workbook reports itself saved at that moment; in practice, opening or reloading the taskpane on a saved workbook clears its backups. Hence the warning in the Backups dialog: "Backups will be cleared when this workbook is saved in Excel." If the host cannot report the saved state, backups are never cleared this way.
-- **Excel on the web.** Excel on the web reports the workbook as saved at every moment, even right after Pi or the user changes a cell, so the unsaved-to-saved transition never happens. The result is the opposite of the warning: saving (including Ctrl/Cmd+S and autosave) never clears backups, but every time the taskpane opens or reloads, all of the workbook's backups are cleared within about 4 seconds. A workbook with no path identity (see [Unsaved and new workbooks](#unsaved-and-new-workbooks)) also loses its very first backup: that backup creates the document token, the next check sees a new identity "already saved", and clears it. Backups taken after that survive until the next taskpane load. (Confirmed in Excel on the web: 16 backups cleared by a reload; the first write's backup gone within seconds; later backups still listed after 10 seconds and after Ctrl+S.)
+- **Retention.** "Keep at most" applies per workbook, from 5 to 120 (default 120), with a global cap of 240. The dialog lists the full retained set so counts and Clear all agree.
+- **Save and reload.** Neither deletes backups, on desktop or web. Only explicit deletion and retention remove them; the old save-boundary warning and clearing behavior are gone.
+- **Other taskpanes.** Storage mutations reload current entries under a shared storage lock, avoiding stale-list replacement. This is not a cross-taskpane workbook write lock.
 
 ## The execution mode
 
@@ -126,7 +126,7 @@ Pi recognizes a workbook by an identity derived from the file's location (a hash
 
 A workbook that has never been saved ("Book1") has no path-derived identity. On Excel on the web, a workbook opened through an "anyone with the link" sharing link without signing in has none either: Excel reports no location for it, so it behaves exactly like a never-saved workbook (confirmed in Excel on the web).
 
-- **Automatic backups** still work on Excel desktop and Excel on the web: the first time Pi needs one, it stores a random token inside the document's add-in settings and files the backup under that token. On Excel on the web that first backup is then cleared (see [Backups](#backups)). Reading the list never creates the token. When the workbook is saved for the first time it gets a real identity, and the token's backups are cleared at that moment, just as any save clears backups.
+- **Automatic backups** use a durable document token when no path identity is available. Saving does not delete them; a different identity can change which list is shown. Reading the list does not create a token.
 - **Manual backups** refuse: "Current workbook identity is unavailable; cannot create or restore manual full-workbook backups safely." (confirmed in Excel on the web). See [manual backups](../workbook/manual-backups.md).
 - **Workbook rules** cannot be set ("Can't identify this workbook right now — try saving the file first."). See [rules](../guidance/rules.md).
 
@@ -141,9 +141,9 @@ Pi's changes are made through Excel's add-in API, not through the grid. On Excel
 | Model and provider | No effect on what tools can do. The model decides which tools to call. Tool output is cut at a smaller size for models with a context window under 128k tokens (see [reading](../workbook/reading.md)). | Model changes are refused while the tab is busy. |
 | Thinking level | No effect. | No effect. |
 | Execution mode | Auto: mutations run as called. Confirm: each mutation waits for an approval. | Applies from the next mutation; an approval dialog already open is not affected. |
-| Files in the workspace, or an overlay open | Files are not part of the workbook. An open overlay does not pause tools, but an approval dialog replaces any other approval dialog. | No effect on tools already running. |
+| Files in the workspace, or an overlay open | Files are not part of the workbook. An open overlay does not pause tools; approvals queue. | No effect on tools already running. |
 | Tab state (new, restored, another tab busy) | No difference between new and restored tabs. Another tab's mutation makes this tab's mutation wait ("Locking…"). | Reads are never delayed by another tab. |
-| Host (desktop or web) | Excel on the web always reports the workbook as saved: saving never clears backups there, but each taskpane load does, and a workbook without a location loses its first backup (see [Backups](#backups)). Workbooks without a location occur on desktop (never saved) and on the web (opened through an anonymous link). Excel's Undo takes back Pi's changes on the web. | No effect. |
+| Host (desktop or web) | Saving and taskpane loads never clear backups. Workbooks without a location can use a document token. Excel's Undo is not Pi's cross-host recovery guarantee. | No effect. |
 
 A modifier changed while a tool runs takes effect at the next tool call, never in the middle of one.
 
@@ -151,18 +151,18 @@ A modifier changed while a tool runs takes effect at the next tool call, never i
 
 | Event | Before sent | While busy |
 | --- | --- | --- |
-| Stop (button or Escape) | Not applicable: no tool call exists yet. | A read in progress finishes or is discarded. A mutation waiting for the lock fails with "Aborted" and does nothing; a mutation already in Excel completes and keeps its backup (confirmed in Excel on the web with six parallel writes: two completed, four "Aborted"). Escape with an approval dialog open closes the dialog (a decline) instead of stopping. |
+| Stop (button or Escape) | Not applicable: no tool call exists yet. | Pending approvals and lock waits cancel. Checked writes settle submitted chunks and report applied work and backup status. Other submitted host calls have bounded grace and may report unknown outcome. Escape dismisses the top modal before acting on the turn. |
 | The user sends something else | Not applicable. | A steer is delivered after the running tools finish; it never interrupts a mutation. |
 | Tab switched, created, closed or reopened | Not applicable. | Tools keep running in their tab. A tab holding the lock cannot be closed. |
-| An overlay or menu opens | Not applicable. | Tools keep running. A second approval dialog closes the first one, which counts as a decline. |
+| An overlay or menu opens | Not applicable. | Tools keep running. Further approvals queue behind the current request. |
 | Model or thinking level changes | Not applicable. | Model change refused while busy; thinking level does not affect tools. |
 | The provider fails | Not applicable. | Tools already running finish; their changes stay. |
 | The taskpane goes away | Not applicable. | A mutation already sent to Excel may complete without its backup being stored. Waiting mutations are lost. The lock disappears with the taskpane. |
-| The workbook changes underneath | Auto-context tells Pi about the user's edits at send time. | Pi's tools see the grid as it is when they run. Addresses without a sheet name follow the sheet the user has active. A revert later writes back the captured state over the user's newer edits in that range. Saving clears all backups. |
-| Focus moves to the grid or another window | Not applicable. | Tools keep running. If the user is editing a cell, Excel on the web rejects Pi's calls at once, reads included: the result says "Excel is in cell-editing mode. Please exit the edit mode by pressing ENTER or TAB or selecting another cell, and then try again." and Pi usually asks the user to finish the edit (confirmed in Excel on the web). |
+| The workbook changes underneath | Auto-context reports new external edits before requests, mid-turn included. | Reads/writes see current grid state; the lock does not exclude co-authors. User restore previews later edits and asks before replacing them. Saving keeps backups. |
+| Focus moves to the grid or another window | Not applicable. | Tools continue. Edit-mode rejections can wait/retry for up to 60 seconds before the first successful sync; a submitted mutation is not replayed after sync. |
 | The context window fills | Not applicable. | No effect on the workbook; large tool output is cut before it reaches the conversation. |
 
-Whatever interrupts a turn, workbook changes already made stay made and can be reverted from their backups until the next save.
+Whatever interrupts a turn, workbook changes already made stay made and can be reverted while their backups are retained; saving does not remove them.
 
 ## Interactions with other systems
 
@@ -178,11 +178,11 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 
 **Offline and provider errors.** Tools talk only to Excel, so they keep working while the provider is unreachable; the turn that called them may fail afterwards.
 
-**Notifications.** Tool cards, "Locking…" on tabs, the "lock" badge in the status bar, approval dialogs, and the "Reverted {address}" toast. There is no notification when backups are cleared, on save or on taskpane load.
+**Notifications.** Tool cards, "Locking…" on tabs, the "lock" badge, queued approval dialogs and revert outcomes. Saving does not clear backups.
 
 **Settings and preferences.** The "Auto mode" switch in Settings, and the retention field in the Backups dialog.
 
-**Host differences.** Desktop Excel on macOS and Windows and Excel on the web run the same tools. Differences come from the host: Excel on the web always reports "saved", so backups are cleared on taskpane load instead of on save; anonymous-link workbooks on the web have no location; Excel on the web puts Pi's changes on its Undo stack; and it rejects calls during cell editing. See [host differences](../cross-cutting/host-differences.md).
+**Host differences.** Tools share paging, checked-write and bounded wait rules. Anonymous-link workbooks may lack a location; optional state APIs differ. Neither desktop nor web clears backups on save. See [host differences](../cross-cutting/host-differences.md).
 
 **Language.** Tool card headers are mostly English in every UI language (only "Overview" is translated); tool results are English because they are written for the model.
 
@@ -190,25 +190,15 @@ Whatever interrupts a turn, workbook changes already made stay made and can be r
 
 ## Edge cases
 
-- A tab whose own model response asks for two mutations at once shows "Locking…" on itself while the first runs, and its close button becomes enabled during that time (confirmed in Excel on the web: one tab running six parallel writes showed "Locking…" with the status bar showing "lock", and the close button was enabled at moments while the lock was held).
+- Parallel mutations in one tab can wait on that tab's own earlier write. Counted lock ownership keeps the tab non-closeable while any write holds the lock.
 - A no-op write (the same values written again) still takes a backup, with "0 changes".
 - Reading a very hidden sheet works if Pi names it; search skips hidden sheets unless Pi names the sheet.
-- Backups for workbook A count against the same 120-entry cap as workbook B; heavy work in one workbook can push out another workbook's backups.
-- After a save on desktop, or after a taskpane reload on the web, `/revert` says "No backups for this workbook yet" even though Pi changed the workbook earlier in the session (confirmed on the web after a reload).
+- Backups are retained per workbook, but the global 240-entry cap can still evict old entries across workbooks.
 
 ## Open questions and verification
 
-- Checked by hand in Excel on the web (orb session, anonymous-link workbook, `ec453df`), 26 October 2026; see [the workbook checklist](../verification/workbook.md). Desktop Excel has not been checked.
-- **Confirmed bug (web).** Excel on the web reports `workbook.isDirty` as `false` at all times, even right after a write, so `src/workbook/save-boundary-monitor.ts:74` (`firstObservationIsAlreadySaved`) clears every backup on the first poll after each taskpane load, and, for a workbook without a location, again on the first poll after the first backup creates the document token. Saving never clears backups on the web. The warning "Backups will be cleared when this workbook is saved in Excel." is wrong there. WB-12 to WB-15.
-- **Confirmed bug.** The "Keep at most" retention value is saved (`src/workbook/recovery/log-store.ts:64`) but never read when backups are stored: `src/workbook/recovery-log.ts:420` always caps the list at `MAX_RECOVERY_ENTRIES` (120), across all workbooks. With the field set to 5, 10 backups were kept. REVERT-21.
-- **Confirmed bug.** Lock state per tab is set from the most recent coordinator event (`src/taskpane/init.ts:1501-1512`). A tab running several mutations at once shows "Locking…" on itself while it holds the lock, and its close button is enabled at moments mid-write. WB-08.
-- **Refuted.** Excel's Undo does undo Pi's changes on Excel on the web (Ctrl+Z step by step, Ctrl+Y redoes). The glossary's "Excel's own Undo does not undo Pi's changes" is wrong at least on the web. Confirmed in Excel for Mac too: with the grid focused, Cmd+Z took back an add-in write and Cmd+Y put it back. WB-17, WB-18.
-- **Refuted.** Excel does not hold add-in calls while a cell is in edit mode on the web; it rejects them at once with "Excel is in cell-editing mode…". WB-18.
-- **Confirmed bug.** Two taskpanes in the same browser storage (here: the same workbook open in two browser tabs) each load the backup list once and then rewrite the whole list on every change (`src/workbook/recovery-log.ts:375-383` and `:420-421`). Pane B's backup of V1 was erased when pane A next wrote, and a backup that pane B had cleared on opening came back from pane A's stale copy. Opening the second pane also cleared every backup on its first check (the web save-state bug above). WB-21.
-- **Confirmed.** `workbook_history` delete and clear are classified as reads (`src/tools/execution-policy.ts:73`): in Confirm mode Pi cleared all four backups with no approval dialog. Possibly intentional (they do not touch the workbook) but it removes the user's safety net silently. APPROVE-17.
-- The README's scope says direct Office.js execution is off by default, but `createAllTools()` registers `execute_office_js` in every configuration (`src/tools/index.ts:50`) and the system prompt advertises it. This document follows the code.
-- On the web, the workbook still had no location after a full reload of Excel (`Office.context.document.url` empty, though `workbook.name` was available), and its document token survived the reload. A document token does not give manual backups an identity. WB-26.
-- Confirmed in Excel for Mac: `isDirty` is reported (unsaved after Pi's write, saved after a save), and saving cleared the backups within 6 seconds (WB-16). After Save As the taskpane picked up the new identity without a reload and the old file's backups were no longer shown (WB-22). A write made by Pi's tool marked the workbook unsaved, but an add-in write from the test bridge did not, so a save after such a write is not observed as a transition. Windows has not been checked.
-- A write captured but not yet stored as a backup when the taskpane closes is lost. Read from code.
+- Merged coordinator/recovery source inspected: per-runtime read barrier, counted lock ownership, durable backups, applied retention, atomic storage updates and always-approved deletion. Old WB/REVERT/APPROVE findings remain in the recorded runs, not as present-tense defects here.
+- A real GPT-6 Luna turn read and wrote a formula; independent Excel read-back returned 8 and the receipt included a backup ID. A merge-child write was refused. See [the workbook checklist](../verification/workbook.md) for the wider acceptance work still required.
+- Optional host APIs, desktop acceptance, concurrent-pane recovery and unknown-outcome timing were not all rerun. A pane closed between write and backup storage can still lose the backup.
 
-Verified against pi-for-excel commit `ec453df`.
+Verified against pi-for-excel commit `1f51cf8` (merged source; old dated findings above are historical, superseded by the current contracts).
