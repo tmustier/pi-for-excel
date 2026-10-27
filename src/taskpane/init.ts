@@ -1266,6 +1266,7 @@ export async function initTaskpane(opts: {
             online: navigator.onLine,
             proxyUrl: proxyUrl ?? null,
             defaultProxyUrl: DEFAULT_PROXY_URL,
+            proxyBlockedByBrowser: isProxyBlockedByBrowser(),
           }));
         });
       },
