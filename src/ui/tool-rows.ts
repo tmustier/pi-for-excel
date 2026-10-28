@@ -270,7 +270,8 @@ export function describeToolRow(
   const { detail, badge } = splitBadge(desc.detail);
   // A stopped write already says "Stopped" and how far it got.
   const verb = desc.action === t("tool-card.stopped.action") ? desc.action : conjugate(desc.action, tense);
-  const refText = stripDimensions(detail);
+  // Result summaries end in a full stop ("Added sheet "Q3"."); a row does not.
+  const refText = stripDimensions(detail).replace(/\.$/u, "");
   const reference = desc.address
     ? (refText && refText !== desc.address ? cellRefDisplay(refText, desc.address) : cellRefs(desc.address))
     : refText;

@@ -162,23 +162,17 @@ export class TurnGroup extends LitElement {
 
     return html`
       <div class="pi-turn-row" data-state=${step.state} data-tool-name=${step.toolCall.name}>
-        <div
+        <button
+          type="button"
           class="pi-turn-row__line"
-          role="button"
-          tabindex="0"
           aria-expanded=${expanded ? "true" : "false"}
           @click=${toggle}
-          @keydown=${(event: KeyboardEvent) => {
-            if (event.key !== "Enter" && event.key !== " ") return;
-            event.preventDefault();
-            toggle();
-          }}
         >
           <span class=${status.className} aria-hidden="true">${icon(status.icon, "xs")}</span>
           <span class="pi-turn-row__sentence">${row.sentence}</span>
           ${row.meta ? html`<span class="pi-turn-row__meta">${row.meta}</span>` : nothing}
           <span class="pi-turn-row__chevron" aria-hidden="true">${icon(expanded ? ChevronUp : ChevronDown, "xs")}</span>
-        </div>
+        </button>
         ${row.reason ? html`<div class="pi-turn-row__reason">${row.reason}</div>` : nothing}
         ${hasToolSetupCard(step.result) ? html`<div class="pi-turn-row__setup">${renderToolSetupCards(step.result)}</div>` : nothing}
         ${expanded ? html`<div class="pi-turn-row__detail">${renderToolRowDetail(step.toolCall.name, step.toolCall.arguments, step.result)}</div>` : nothing}

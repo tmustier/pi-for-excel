@@ -276,8 +276,8 @@ function wrapTool<TParameters extends TSchema, TDetails>(
         });
         throwIfAborted(signal);
         if (!approved) throw new Error(requirement === "confirm_mode"
-          ? "The user declined this workbook change in the approval dialog (Confirm mode)."
-          : "The user declined this action in the approval dialog.");
+          ? "The user declined this workbook change when asked (Confirm mode)."
+          : "The user declined this action when asked.");
       }
     }
 
