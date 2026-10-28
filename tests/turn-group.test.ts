@@ -192,6 +192,8 @@ void test("a row conjugates the call's verb for its state and keeps one fact abo
     { sentence: "Filled 'Cash Flow'!D10:L10", meta: "9 cells", reason: null },
   );
   assert.equal(textOf(describeToolRow("fill_formula", params, undefined, "stopped").sentence), "Stopped filling 'Cash Flow'!D10:L10");
+  const one = result("f", "Filled 'Cash Flow'!D10", 2, { toolName: "fill_formula", details: { kind: "fill_formula", blocked: false, changes: { changedCount: 1, truncated: false, sample: [] } } });
+  assert.equal(describeToolRow("fill_formula", { range: "'Cash Flow'!D10", formula: "=1" }, one, "done").meta, "1 cell");
 
   const failed = result("f", "Error: Sheet \"Cash Flow\" not found.", 2, { toolName: "fill_formula", isError: true });
   const row = describeToolRow("fill_formula", params, failed, "failed");
