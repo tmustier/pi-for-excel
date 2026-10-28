@@ -1,0 +1,428 @@
+/* ═══════════════════════════════════════════════════════
+   TURN GROUP
+   One card per turn: header with state, one row per tool
+   call, the change receipt as footer (<turn-group>).
+   docs/proposals/sidebar-redesign.md §5
+   ═══════════════════════════════════════════════════════ */
+
+turn-group {
+  margin: 0 12px;
+  min-width: 0;
+}
+
+.pi-turn {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+  overflow: hidden;
+  min-width: 0;
+}
+
+/* ── Header ───────────────────────────────────────────── */
+
+.pi-turn__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  padding: 8px 10px 8px 12px;
+  border: none;
+  background: none;
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  text-align: left;
+  cursor: pointer;
+}
+
+.pi-turn__header:hover {
+  background: var(--surface-2);
+}
+
+.pi-turn__header:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
+}
+
+.pi-turn__stack {
+  display: flex;
+  flex-shrink: 0;
+}
+
+.pi-turn__stack:empty {
+  display: none;
+}
+
+.pi-turn__kind {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: -6px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--surface-1);
+  color: var(--fg-2);
+}
+
+.pi-turn__kind:first-child {
+  margin-left: 0;
+}
+
+.pi-turn__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.pi-turn[data-state="waiting"] .pi-turn__title {
+  color: var(--amber);
+}
+
+.pi-turn__spinner {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--fg-3);
+  animation: pi-think-spin 0.9s linear infinite;
+}
+
+.pi-turn__elapsed {
+  flex-shrink: 0;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+
+.pi-turn__failed {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+  color: var(--red);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.pi-turn__chevron {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--fg-3);
+}
+
+/* ── Rows ─────────────────────────────────────────────── */
+
+.pi-turn__rows {
+  border-top: 1px solid var(--line);
+}
+
+.pi-turn-row {
+  padding: 8px 10px 8px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 12.5px;
+  min-width: 0;
+}
+
+.pi-turn-row:last-child {
+  border-bottom: none;
+}
+
+.pi-turn-row[data-state="live"] {
+  background: var(--surface-2);
+}
+
+.pi-turn-row--approval {
+  background: var(--amber-soft);
+}
+
+.pi-turn-row__line {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto 14px;
+  column-gap: 8px;
+  align-items: start;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.pi-turn-row--approval .pi-turn-row__line {
+  grid-template-columns: 16px minmax(0, 1fr);
+  cursor: default;
+}
+
+.pi-turn-row__line:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: var(--radius-xs);
+}
+
+.pi-turn-row__status {
+  display: grid;
+  place-items: center;
+  height: 18px;
+  color: var(--fg-3);
+}
+
+.pi-turn-row__status--done { color: var(--accent-data); }
+.pi-turn-row__status--failed { color: var(--red); }
+.pi-turn-row__status--waiting { color: var(--amber); }
+.pi-turn-row__status--live {
+  color: var(--fg-2);
+  animation: pi-think-spin 0.9s linear infinite;
+}
+
+.pi-turn-row__sentence {
+  min-width: 0;
+  line-height: 18px;
+  color: var(--fg-1);
+  overflow-wrap: anywhere;
+}
+
+.pi-turn-row[data-state="live"] .pi-turn-row__sentence,
+.pi-turn-row[data-state="stopped"] .pi-turn-row__sentence {
+  color: var(--fg-2);
+}
+
+.pi-turn-row[data-state="failed"] .pi-turn-row__sentence {
+  color: var(--red);
+}
+
+.pi-turn-row__ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.pi-turn-row__ref .pi-cell-ref {
+  font: inherit;
+}
+
+.pi-turn-row__meta {
+  color: var(--fg-3);
+  font-size: 11.5px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+
+.pi-turn-row__chevron {
+  display: grid;
+  place-items: center;
+  height: 18px;
+  color: var(--fg-3);
+}
+
+.pi-turn-row__reason,
+.pi-turn-row__sub {
+  margin: 3px 0 0 24px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pi-turn-row__sub > span {
+  display: block;
+}
+
+.pi-turn-row__sub--pre {
+  white-space: pre-line;
+}
+
+.pi-turn-row__approval-details {
+  margin: 6px 0 0 24px;
+  font-size: var(--text-sm);
+}
+
+.pi-turn-row__setup {
+  margin: 8px 0 0 24px;
+}
+
+/* Drill-in: the tool card's body, full width under the row. */
+.pi-turn-row__detail {
+  margin: 8px -10px -8px -12px;
+  border-top: 1px solid var(--line);
+  background: var(--surface-0);
+}
+
+.pi-turn-row__detail > .pi-tool-card__inner {
+  margin: 0;
+  padding: 6px 12px 12px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.pi-turn-row__detail .pi-tool-card__detail {
+  padding-top: 4px;
+}
+
+/* Prose and thinking between steps. */
+.pi-turn-row--note {
+  color: var(--fg-2);
+  padding-left: 36px;
+}
+
+.pi-turn-row--note markdown-block {
+  font-size: 12.5px;
+}
+
+.pi-turn-row--note .thinking-block {
+  margin: 0;
+}
+
+/* ── Approval actions ─────────────────────────────────── */
+
+.pi-turn-row__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+  margin: 8px 0 2px 24px;
+}
+
+.pi-turn-row__link {
+  display: block;
+  margin: 6px 0 0 auto;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--fg-2);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  text-decoration: underline;
+  text-decoration-color: var(--line-strong);
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.pi-turn-row__link:hover {
+  color: var(--fg-1);
+}
+
+/* ── Footer: the change receipt ───────────────────────── */
+
+.pi-turn-changes {
+  color: var(--fg-1);
+  font-size: 12.5px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.pi-turn-changes--footer {
+  padding: 6px 10px 6px 12px;
+  border-top: 1px solid var(--line);
+}
+
+.pi-turn-changes--standalone {
+  margin: 0 12px;
+  padding: 6px 10px 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface-1);
+}
+
+.pi-turn-changes__line {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.pi-turn-changes__summary {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.pi-turn-changes__actions {
+  display: inline-flex;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.pi-turn-changes__warning {
+  display: block;
+  margin-top: 4px;
+  color: var(--fg-2);
+  font-size: var(--text-sm);
+}
+
+.pi-turn-changes[data-outcome="stopped"] .pi-turn-changes__summary,
+.pi-turn-changes[data-outcome="failed"] .pi-turn-changes__summary {
+  color: var(--amber);
+}
+
+/* ── Buttons: one component, three weights ────────────── */
+
+.pi-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--fg-1);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.pi-btn:hover {
+  background: var(--surface-2);
+}
+
+.pi-btn:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.pi-btn:disabled {
+  color: var(--fg-3);
+  cursor: default;
+}
+
+.pi-btn:disabled:hover {
+  background: var(--surface-1);
+}
+
+.pi-btn--primary {
+  border-color: var(--fg-1);
+  background: var(--fg-1);
+  color: var(--surface-0);
+}
+
+.pi-btn--primary:hover {
+  background: var(--fg-2);
+  border-color: var(--fg-2);
+}
+
+.pi-btn--text {
+  padding: 0 6px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--fg-2);
+}
+
+.pi-btn--text:hover {
+  background: var(--surface-2);
+  color: var(--fg-1);
+}
+
+.pi-btn--text:disabled:hover {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pi-turn__spinner,
+  .pi-turn-row__status--live {
+    animation: none;
+  }
+}

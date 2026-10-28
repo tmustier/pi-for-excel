@@ -32,34 +32,6 @@
   border-color: var(--pill-green-hover-border);
 }
 
-/* Complete inside group — strip card chrome (group provides the container) */
-.pi-tool-group .pi-tool-card[data-state="complete"] {
-  border: none;
-  background: none;
-  box-shadow: none;
-  border-radius: 0;
-  margin-right: 0;
-}
-.pi-tool-group .pi-tool-card[data-state="complete"]:hover {
-  border-color: transparent;
-}
-/* Grouped rows: inset 4px from the group border so the hover highlight
-   reads concentric (16px group − 4px inset = 12px row radius) and row
-   text aligns with the group-header label (4px + 8px = 12px pill x). */
-.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle {
-  width: calc(100% - 8px);
-  margin: 0 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-md);
-}
-.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__toggle:hover {
-  background: var(--alpha-4);
-}
-/* Grouped: inner pill needs margins since card chrome is stripped */
-.pi-tool-group .pi-tool-card[data-state="complete"] .pi-tool-card__inner {
-  margin: 4px 8px 6px;
-}
-
 /* Header — local tool-card toggle markup */
 .pi-tool-card__toggle {
   width: 100%;

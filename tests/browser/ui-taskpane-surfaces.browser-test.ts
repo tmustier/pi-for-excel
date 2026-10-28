@@ -267,12 +267,11 @@ void test("tool Markdown renders without its YAML frontmatter", async () => {
         sidebar.syncFromAgent();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
-        await document.querySelector("assistant-message").updateComplete;
-        await document.querySelector("tool-message").updateComplete;
+        await document.querySelector("turn-group").updateComplete;
       })()
     `);
-    await page.locator('.pi-tool-card[data-tool-name="skills"] .pi-tool-card__header').click();
-    const rendered = page.locator('.pi-tool-card[data-tool-name="skills"] .pi-tool-card__markdown');
+    await page.locator('.pi-turn-row[data-tool-name="skills"] .pi-turn-row__line').click();
+    const rendered = page.locator('.pi-turn-row[data-tool-name="skills"] .pi-tool-card__markdown');
     await rendered.getByRole("heading", { name: "Visible guidance" }).waitFor({ state: "visible" });
 
     assert.equal((await rendered.innerText()).includes("browser-sentinel"), false);
@@ -315,8 +314,7 @@ void test("a transform bridge outage renders its setup card", async () => {
         sidebar.syncFromAgent();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
-        await document.querySelector("assistant-message").updateComplete;
-        await document.querySelector("tool-message").updateComplete;
+        await document.querySelector("turn-group").updateComplete;
       })()
     `);
 
@@ -326,7 +324,7 @@ void test("a transform bridge outage renders its setup card", async () => {
   });
 });
 
-void test("direct JavaScript tool cards identify the host runtime being used", async () => {
+void test("direct JavaScript rows identify the host runtime being used", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(`
       (async () => {
@@ -351,16 +349,14 @@ void test("direct JavaScript tool cards identify the host runtime being used", a
         sidebar.syncFromAgent();
         await sidebar.updateComplete;
         await document.querySelector("message-list").updateComplete;
-        for (const element of document.querySelectorAll("assistant-message, tool-message")) {
-          await element.updateComplete;
-        }
+        await document.querySelector("turn-group").updateComplete;
       })()
     `);
 
-    const titles = await page.locator(".pi-tool-card__title").allTextContents();
-    assert.deepEqual(titles, [
-      "Run Office.js Inspect workbook metadata",
-      "Run WPS JSAPI Inspect workbook metadata",
+    const titles = await page.locator(".pi-turn-row__sentence").allTextContents();
+    assert.deepEqual(titles.map((title) => title.replace(/\s+/g, " ").trim()), [
+      "Ran Office.js Inspect workbook metadata",
+      "Ran WPS JSAPI Inspect workbook metadata",
     ]);
   });
 });

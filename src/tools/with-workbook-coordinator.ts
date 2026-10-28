@@ -52,6 +52,8 @@ export interface WorkbookMutationObserver {
 }
 
 export interface ToolApprovalRequest {
+  /** The call that asks, so the transcript can ask in its row. */
+  toolCallId: string;
   executionMode: ExecutionMode;
   /** Why this call asks: Confirm mode, or an action that always asks (see execution-policy). */
   reason: "confirm_mode" | "always" | "irreversible";
@@ -263,6 +265,7 @@ function wrapTool<TParameters extends TSchema, TDetails>(
           throw new Error("This action requires explicit user approval, but confirmation UI is unavailable.");
         }
         const approved = await executionPolicy.requestToolApproval({
+          toolCallId,
           executionMode,
           reason: requirement,
           toolName: tool.name,

@@ -246,11 +246,13 @@ function defaultRequestOfficeJsExecuteApproval(
 }
 
 function getDirectJsExecuteApprovalRequest(
+  toolCallId: string,
   params: unknown,
   apiName: "Office.js" | "WPS JSAPI",
 ): OfficeJsExecuteApprovalRequest {
   if (!isExperimentalGateParamsShape(params)) {
     return {
+      toolCallId,
       explanation: "",
       code: "",
       apiName,
@@ -266,6 +268,7 @@ function getDirectJsExecuteApprovalRequest(
     : "";
 
   return {
+    toolCallId,
     explanation,
     code,
     apiName,
@@ -311,7 +314,7 @@ function wrapDirectWorkbookJsToolWithHardGate(
     execute: async (toolCallId, params, signal, onUpdate) => {
       throwIfAborted(signal);
 
-      const request = getDirectJsExecuteApprovalRequest(params, apiName);
+      const request = getDirectJsExecuteApprovalRequest(toolCallId, params, apiName);
       const risk = assessOfficeJsCodeRisk(request.code);
 
       // Auto mode trusts pure host JSAPI code — skip the approval prompt.

@@ -26,6 +26,11 @@ import { announce } from "./announcer.js";
 
 export interface ApprovalRequest {
   title: string;
+  /**
+   * The tool call that asks. When the transcript shows that call's turn
+   * group, the question is asked in its row instead of a dialog.
+   */
+  toolCallId?: string;
   /** One line naming what will happen and where, e.g. "Write Sheet1!B2:C4". */
   headline?: string;
   /** Structured details (the tool card's humanized input). */
@@ -63,6 +68,108 @@ const queue: QueuedApproval[] = [];
 const allowedTurns = new WeakSet<AbortSignal>();
 let current: { entry: QueuedApproval; dialog: OverlayDialogController; setWaiting: (count: number) => void } | null = null;
 
+/* ── Inline approvals (turn group rows) ─────────────────── */
+
+/** A question asked in the transcript, in the row of the tool call that asks. */
+export interface InlineApproval {
+  toolCallId: string;
+  request: ApprovalRequest;
+  answer(approved: boolean): void;
+  /** Allow this and every eligible change for the rest of the run; only when `request.allowForTurn`. */
+  allowForTurn(): void;
+  /** Run `request.secondaryApproval` (a full backup first), then allow. Rejects if the preparation fails. */
+  prepareAndApprove(): Promise<void>;
+}
+
+export interface InlineApprovalHost {
+  /** The host shows this call's turn group, so it can ask in the row. */
+  claims(toolCallId: string): boolean;
+  /** The set of inline questions changed. */
+  onChange(): void;
+}
+
+const inlineHosts = new Set<InlineApprovalHost>();
+const inline: InlineApproval[] = [];
+/** Moves an inline question back to the dialog queue, unanswered. */
+const releasers = new Map<InlineApproval, () => void>();
+
+export function getInlineApprovals(): readonly InlineApproval[] {
+  return inline;
+}
+
+function notifyInlineHosts(): void {
+  for (const host of inlineHosts) host.onChange();
+}
+
+function claimedInline(toolCallId: string): boolean {
+  for (const host of inlineHosts) {
+    if (host.claims(toolCallId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Registers a transcript as a place to ask about tool calls it shows.
+ * Unregistering moves any unanswered question no other host shows back to
+ * a dialog, so a tab switch never hides a question.
+ */
+export function registerInlineApprovalHost(host: InlineApprovalHost): () => void {
+  inlineHosts.add(host);
+  return () => {
+    if (!inlineHosts.delete(host)) return;
+    for (const approval of [...inline]) {
+      if (!claimedInline(approval.toolCallId)) releasers.get(approval)?.();
+    }
+    host.onChange();
+  };
+}
+
+function removeInline(approval: InlineApproval): void {
+  const index = inline.indexOf(approval);
+  if (index >= 0) inline.splice(index, 1);
+  releasers.delete(approval);
+}
+
+function askInline(entry: QueuedApproval, toolCallId: string): void {
+  let answered = false;
+  const finish = (approved: boolean): void => {
+    if (answered) return;
+    answered = true;
+    removeInline(approval);
+    settle(entry, approved);
+    notifyInlineHosts();
+  };
+  const approval: InlineApproval = {
+    toolCallId,
+    request: entry.request,
+    answer: finish,
+    allowForTurn() {
+      const { signal } = entry.request;
+      if (!entry.request.allowForTurn || !signal || signal.aborted) return;
+      allowedTurns.add(signal);
+      finish(true);
+    },
+    async prepareAndApprove() {
+      const secondary = entry.request.secondaryApproval;
+      if (!secondary || answered || entry.request.signal?.aborted) return;
+      await secondary.onApprove();
+      if (!answered && !entry.request.signal?.aborted) finish(true);
+    },
+  };
+  entry.onAbort = () => finish(false);
+  entry.request.signal?.addEventListener("abort", entry.onAbort, { once: true });
+  releasers.set(approval, () => {
+    if (answered) return;
+    answered = true;
+    removeInline(approval);
+    if (entry.onAbort && entry.request.signal) entry.request.signal.removeEventListener("abort", entry.onAbort);
+    entry.onAbort = null;
+    enqueue(entry);
+  });
+  inline.push(approval);
+  notifyInlineHosts();
+}
+
 function settle(entry: QueuedApproval, approved: boolean): void {
   if (entry.onAbort && entry.request.signal) {
     entry.request.signal.removeEventListener("abort", entry.onAbort);
@@ -74,6 +181,7 @@ function settle(entry: QueuedApproval, approved: boolean): void {
 /** Declines every request, shown or queued, and stops each turn that asked. */
 function stopAll(): void {
   const entries = [...(current ? [current.entry] : []), ...queue.splice(0)];
+  for (const approval of inline.splice(0)) approval.answer(false);
   const stops = new Set<() => void>();
   for (const entry of entries) {
     if (entry.request.onStop) stops.add(entry.request.onStop);
@@ -273,27 +381,36 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     const entry: QueuedApproval = { request, resolve, onAbort: null };
-
-    if (request.signal) {
-      entry.onAbort = () => {
-        if (current?.entry === entry) {
-          settle(entry, false);
-          current.dialog.close();
-          return;
-        }
-        const index = queue.indexOf(entry);
-        if (index >= 0) queue.splice(index, 1);
-        settle(entry, false);
-        updateWaitingCount();
-      };
-      request.signal.addEventListener("abort", entry.onAbort, { once: true });
+    if (request.toolCallId !== undefined && claimedInline(request.toolCallId)) {
+      askInline(entry, request.toolCallId);
+      return;
     }
-
-    queue.push(entry);
-    if (current) {
-      updateWaitingCount();
-    } else {
-      showNext();
-    }
+    enqueue(entry);
   });
+}
+
+/** Queues a question for the dialog, withdrawing it if its turn is stopped first. */
+function enqueue(entry: QueuedApproval): void {
+  const { request } = entry;
+  if (request.signal) {
+    entry.onAbort = () => {
+      if (current?.entry === entry) {
+        settle(entry, false);
+        current.dialog.close();
+        return;
+      }
+      const index = queue.indexOf(entry);
+      if (index >= 0) queue.splice(index, 1);
+      settle(entry, false);
+      updateWaitingCount();
+    };
+    request.signal.addEventListener("abort", entry.onAbort, { once: true });
+  }
+
+  queue.push(entry);
+  if (current) {
+    updateWaitingCount();
+  } else {
+    showNext();
+  }
 }

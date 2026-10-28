@@ -10,55 +10,6 @@
   gap: 12px;
 }
 
-.pi-turn-changes {
-  margin: 0 12px 8px;
-  color: var(--muted-foreground);
-  font-size: var(--text-xs);
-  line-height: 1.6;
-  overflow-wrap: anywhere;
-}
-
-.pi-turn-changes[data-outcome="stopped"],
-.pi-turn-changes[data-outcome="failed"] {
-  border-left: 2px solid var(--pi-amber);
-  padding-left: 8px;
-  color: var(--foreground);
-}
-
-.pi-turn-changes button {
-  color: var(--primary);
-  text-decoration: underline;
-  cursor: pointer;
-}
-
-.pi-turn-changes__actions {
-  display: inline-flex;
-  gap: 8px;
-  margin-left: 8px;
-}
-
-.pi-turn-changes[data-outcome="failed"] {
-  border-color: var(--destructive);
-}
-
-.pi-turn-changes button:disabled {
-  color: var(--muted-foreground);
-  cursor: default;
-  text-decoration: none;
-}
-
-.pi-turn-changes__warning {
-  display: block;
-}
-
-/* Streaming message wrapper */
-.pi-streaming-body {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-
 /* User message — white card, right-aligned */
 .pi-user-row {
   display: flex;

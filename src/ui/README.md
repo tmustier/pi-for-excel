@@ -13,7 +13,7 @@ The sidebar UI is first-party end to end:
 │  #pi-notices           ← banners (banner.ts)      │
 │  .pi-messages          ← scrollable               │
 │    message-list        ← src/ui/messages          │
-│    streaming-message-container  ← src/ui/messages │
+│      turn-group        ← one card per turn        │
 │    .pi-empty           ← empty state              │
 │  .pi-dock              ← composer unit            │
 │    .pi-working         ← working line (stream)    │
@@ -26,26 +26,41 @@ The sidebar UI is first-party end to end:
 
 `pi-sidebar` subscribes to the `Agent` directly and passes messages/tools/streaming state down as properties to the message components.
 
-One model of a streaming turn: the response being streamed renders only in
-`<streaming-message-container>`. At `message_end` pi-agent-core pushes the
-finished response into `state.messages`; the sidebar clears the streaming copy
-in the same update, so `<message-list>` alone draws it from then on. Its tool
-cards spin until their own `tool_execution_end` (results arriving before the
-batch's toolResult messages are passed down as `liveToolResults`). Whether a
-card, thinking block or group is open comes from `transcript-state.ts`, never
-from the element, so it survives the element being replaced.
+The transcript is drawn by turn (`turn-model.ts`): a user message, then the
+prose before the first tool call, one `<turn-group>` holding every tool call
+of the turn (across however many responses it took) and the prose between
+them, then the answer. The group header carries the turn's state (`Working`
+with the elapsed time, `Waiting for approval`, `Worked for 8s`, `1 failed`);
+each call is a row with a past-tense sentence (`tool-rows.ts`), one meta
+fact, an inline reason when it failed, and a drill-in into the call's input
+and result. A workbook change that needs approval asks in its row
+(`approval-dialog.ts` inline hosts); the change receipt is the footer.
+
+One model of a streaming turn: the sidebar batches the response being
+streamed per frame and passes it to `<message-list>` as `streamingMessage`,
+so its rows appear in the turn's group as the model asks for them. At
+`message_end` pi-agent-core pushes the finished response into
+`state.messages`; the sidebar clears the streaming copy in the same update,
+so the list draws it from `messages` from then on. Rows stay live until
+their own `tool_execution_end` (results arriving before the batch's
+toolResult messages are passed down as `liveToolResults`). Whether a group,
+row or thinking block is open comes from `transcript-state.ts`, never from
+the element, so it survives the element being replaced. The group collapses
+itself once the answer starts.
 
 ### Message component modules (`src/ui/messages/`)
 
 | Module | Elements / exports |
 |---|---|
-| `message-list.ts` | `<message-list>` — stable history, dispatches to custom role renderers first |
-| `streaming-message-container.ts` | `<streaming-message-container>` — rAF-batched streaming message (`setMessage()`) |
-| `messages.ts` | `<user-message>`, `<assistant-message>`, `<tool-message>` |
+| `message-list.ts` | `<message-list>` — the transcript by turn, dispatches to custom role renderers first |
+| `turn-model.ts` | `buildTranscriptBlocks()` — splits messages into lead, turn group and answer |
+| `turn-group.ts` | `<turn-group>` — header state, rows, approval row, receipt footer |
+| `turn-changes-receipt.ts` | The change receipt (`Changed 45 cells`, Undo, Review), as footer or standalone |
+| `messages.ts` | `<user-message>`, `<assistant-message>` (draws a `contentFrom`/`contentTo` slice of a response) |
 | `markdown-block.ts` | `<markdown-block>` — marked + input hardening; fenced code → `<code-block encoding="base64">` |
 | `code-block.ts` | `<code-block>` — highlight.js core + copy button |
 | `thinking-block.ts` | `<thinking-block>` — collapsible (header is a button); "Thinking…" while it is the streaming block, then "Thought for Xs" from transcript state, "Thought" when the timing was not observed |
-| `transcript-state.ts` | View state that outlives elements: details mode (Ctrl/Cmd+O, saved), hand toggles of cards/blocks/groups, observed thinking durations |
+| `transcript-state.ts` | View state that outlives elements: details mode (Ctrl/Cmd+O, saved), hand toggles of groups/rows/blocks, observed thinking durations |
 | `attachment-tile.ts` | `<attachment-tile>` — defensive rendering for restored attachment messages |
 | `message-renderer-registry.ts` | `registerMessageRenderer()` / `renderMessage()` by role |
 | `tool-renderer-registry.ts` | `registerToolRenderer()` / `renderTool()` + JSON fallback renderer |

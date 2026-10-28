@@ -77,7 +77,7 @@ function safeParseParams(params: unknown): Record<string, unknown> {
   return {};
 }
 
-function splitToolResultContent(result: ToolResultMessage): {
+export function splitToolResultContent(result: ToolResultMessage): {
   text: string;
   images: ImageContent[];
 } {
@@ -147,7 +147,7 @@ function stripMarkdownInline(line: string): string {
     .trim();
 }
 
-function extractSummaryLine(text: string): string | null {
+export function extractSummaryLine(text: string): string | null {
   for (const rawLine of text.split("\n")) {
     const t = rawLine.trim();
     if (!t) continue;
@@ -353,7 +353,7 @@ function createChangeExplanationInput(args: {
   };
 }
 
-function extractResultError(resultText: string | undefined): string | undefined {
+export function extractResultError(resultText: string | undefined): string | undefined {
   if (!resultText) return undefined;
 
   const summary = resultSummary(resultText);
@@ -557,7 +557,7 @@ function renderChangeExplanationSection(
 /* ── Human-readable descriptions ────────────────────────────── */
 
 /** Strip "(N×M)" / "(NxM)" dimension notation — not intuitive for users. */
-function stripDimensions(text: string): string {
+export function stripDimensions(text: string): string {
   return text.replace(/\s*\(\d+[×x]\d+\)/gi, "").trim();
 }
 
@@ -723,7 +723,7 @@ function badge(
   return "";
 }
 
-interface ToolDesc {
+export interface ToolDesc {
   /** Bold verb, e.g. "Read", "Wrote", "Format" */
   action: string;
   /** Normal-weight rest, e.g. "Costs!A1:C19" */
@@ -883,9 +883,21 @@ function describeModifyStructure(context: ToolDescriptionContext): ToolDesc {
 
   const action = params.action as string | undefined;
   const name = (params.name ?? params.new_name) as string | undefined;
+  const sheet = params.sheet as string | undefined;
   if (action === "add_sheet") return { action: "Add", detail: `${name ? `sheet "${name}"` : "sheet"}${recovery}` };
   if (action === "rename_sheet") return { action: "Rename", detail: `${name ? `to "${name}"` : "sheet"}${recovery}` };
-  if (action === "delete_sheet") return { action: "Delete", detail: `sheet${recovery}` };
+  if (action === "delete_sheet") return { action: "Delete", detail: `sheet${sheet ? ` "${sheet}"` : ""}${recovery}` };
+  if (action === "insert_rows" || action === "delete_rows" || action === "insert_columns" || action === "delete_columns") {
+    const count = typeof params.count === "number" ? params.count : 1;
+    const position = typeof params.position === "number" ? params.position : undefined;
+    const unit = action.endsWith("rows") ? "row" : "column";
+    const where = position === undefined ? ""
+      : count > 1 ? ` ${position}–${position + count - 1}` : ` ${position}`;
+    return {
+      action: action.startsWith("insert") ? "Insert" : "Delete",
+      detail: `${count > 1 ? `${count} ${unit}s` : unit}${where}${sheet ? ` in ${sheet}` : ""}${recovery}`,
+    };
+  }
   return { action: "Modify", detail: `structure${recovery}` };
 }
 
@@ -1121,7 +1133,7 @@ const TOOL_DESCRIPTION_HANDLERS = {
 } satisfies Record<SupportedToolName, ToolDescriptionHandler>;
 
 /** Structured description: bold action + normal-weight detail. */
-function describeToolCall(
+export function describeToolCall(
   toolName: SupportedToolName,
   params: unknown,
   resultText: string | undefined,
@@ -1139,6 +1151,138 @@ function describeToolCall(
 
 /* ── Renderer ───────────────────────────────────────────────── */
 
+/** The card's failure test: tools report most failures as an "Error …" result rather than throwing. */
+export function isFailedToolResult(result: ToolResultMessage): boolean {
+  return result.isError || extractResultError(splitToolResultContent(result).text) !== undefined;
+}
+
+/**
+ * Expanded body of a tool call: the humanized input, then the result
+ * (data table, dependency tree, markdown, image, or JSON), the cell diff and
+ * the change explanation. Shared by the tool card and the turn group row.
+ */
+export function renderToolCardBody(
+  toolName: SupportedToolName,
+  params: unknown,
+  result: ToolResultMessage | undefined,
+): TemplateResult {
+  const paramsJson = formatParamsJson(params);
+  const inputSection = paramsJson ? html`
+    <div class="pi-tool-card__section">
+      <div class="pi-tool-card__section-label">${t("messages.toolInput")}</div>
+      ${humanizeToolInput(toolName, params) ?? html`<code-block .code=${paramsJson} language="json"></code-block>`}
+    </div>
+  ` : html``;
+
+  if (!result) {
+    return html`
+      <div class="pi-tool-card__inner">
+        <div class="pi-tool-card__detail">
+          <span class="pi-tool-card__tool-id">${toolName}</span>
+        </div>
+        ${inputSection}
+      </div>
+    `;
+  }
+
+  // `details` is unknown at this seam: older persisted sessions may carry any shape.
+  const details = decodeToolDetails(result.details);
+  const { text, images } = splitToolResultContent(result);
+  const standaloneImagePath = detectStandaloneImagePath(text);
+  const json = tryFormatJsonOutput(text);
+  const cleanedText = stripYamlFrontmatter(text);
+  const humanizedText = compactRangesInMarkdown(humanizeColorsInText(cleanedText));
+  const useMarkdown = !json.isJson && looksLikeMarkdown(cleanedText);
+  const csvTable = details?.kind === "read_range_csv"
+    ? renderCsvTable(details)
+    : null;
+  const traceDetails = details?.kind === "trace_dependencies"
+    ? details
+    : null;
+  const depTree = traceDetails
+    ? renderDepTree(traceDetails.root, traceDetails.mode ?? "precedents")
+    : null;
+  const depSectionLabel = traceDetails
+    ? traceDetails.mode === "dependents"
+      ? t("tool-card.section.dependents")
+      : t("tool-card.section.precedents")
+    : t("tool-card.section.dependencies");
+  const formulaExplanation = renderExplainFormulaDetails(details);
+
+  return html`
+    <div class="pi-tool-card__inner">
+      <div class="pi-tool-card__detail">
+        <span class="pi-tool-card__tool-id">${toolName}</span>
+      </div>
+      ${inputSection}
+      <div class="pi-tool-card__section">
+        <div class="pi-tool-card__section-label">${formulaExplanation !== null ? t("tool-card.section.formulaExplanation") : depTree !== null ? depSectionLabel : csvTable !== null ? t("tool-card.section.data") : t("tool-card.section.result")}</div>
+        ${formulaExplanation !== null
+          ? formulaExplanation
+          : csvTable !== null
+          ? csvTable
+          : depTree !== null
+          ? depTree
+          : isEchoResult(toolName, text)
+          ? html`<div class="pi-tool-card__plain-text pi-tool-card__echo-result">${t("tool-card.done")}</div>`
+          : standaloneImagePath
+          ? html`
+            <div class="pi-tool-image-link">
+              <div>${t("tool-card.image")}
+                <a href=${toFileUrl(standaloneImagePath)} target="_blank"
+                  rel="noopener noreferrer" class="pi-tool-image-link__anchor">
+                  ${pathBasename(standaloneImagePath)}
+                </a>
+              </div>
+              <div class="pi-tool-image-link__path">
+                ${standaloneImagePath}
+              </div>
+            </div>
+          `
+          : json.isJson
+            ? html`<code-block .code=${json.formatted} language="json"></code-block>`
+            : useMarkdown
+              ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || t("messages.noOutput")}></markdown-block></div>`
+              : html`<div class="pi-tool-card__plain-text">${humanizedText || t("messages.noOutput")}</div>`}
+        ${renderImages(images)}
+        ${renderChartImageDetails(details, images.length > 0)}
+      </div>
+      ${renderWorkbookCellDiff(details)}
+      ${renderChangeExplanationSection(toolName, params, text, details)}
+    </div>
+  `;
+}
+
+/**
+ * Guided setup for a failure the user can fix (web search not configured,
+ * a bridge unreachable). Shown next to the call whether or not it is
+ * expanded.
+ */
+export function hasToolSetupCard(result: ToolResultMessage | undefined): boolean {
+  const details = decodeToolDetails(result?.details);
+  return details !== undefined && (shouldShowSearchSetupCard(details) || shouldShowBridgeSetupCard(details));
+}
+
+export function renderToolSetupCards(result: ToolResultMessage | undefined): TemplateResult {
+  const details = decodeToolDetails(result?.details);
+  const searchSetupDetails = details !== undefined && shouldShowSearchSetupCard(details) ? details : null;
+  const initSearchSetup = (el: Element | undefined): void => {
+    if (el instanceof HTMLElement && searchSetupDetails) {
+      mountSearchSetupCard(el, searchSetupDetails);
+    }
+  };
+  const bridgeSetupDetails = details !== undefined && shouldShowBridgeSetupCard(details) ? details : null;
+  const initBridgeSetup = (el: Element | undefined): void => {
+    if (el instanceof HTMLElement && bridgeSetupDetails) {
+      mountBridgeSetupCard(el, bridgeSetupDetails);
+    }
+  };
+  return html`
+    ${searchSetupDetails !== null ? html`<div ${ref(initSearchSetup)}></div>` : html``}
+    ${bridgeSetupDetails !== null ? html`<div ${ref(initBridgeSetup)}></div>` : html``}
+  `;
+}
+
 function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer {
   return {
     render(
@@ -1148,10 +1292,8 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
       disclosure: ToolCardDisclosure,
     ): ToolRenderResult {
       const resultText = result ? splitToolResultContent(result).text : undefined;
-      // Tools report most failures as an "Error …" result rather than throwing;
-      // either way the card is a failure, so reads and writes look the same.
       const state: ToolState = result
-        ? (result.isError || extractResultError(resultText) !== undefined ? "error" : "complete")
+        ? (isFailedToolResult(result) ? "error" : "complete")
         : isStreaming
           ? "inprogress"
           : "complete";
@@ -1171,140 +1313,29 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
         : desc.detail;
       const title = html`<span class="pi-tool-card__title"><strong>${desc.action}</strong>${desc.detail ? html` <span class="pi-tool-card__detail-text">${detailContent}</span>` : ""}</span>`;
 
-      // ── With result ─────────────────────────────────────
-      if (result) {
-        const { text, images } = splitToolResultContent(result);
-        const standaloneImagePath = detectStandaloneImagePath(text);
-        const json = tryFormatJsonOutput(text);
-        const cleanedText = stripYamlFrontmatter(text);
-        const humanizedText = compactRangesInMarkdown(humanizeColorsInText(cleanedText));
-        const useMarkdown = !json.isJson && looksLikeMarkdown(cleanedText);
-        const csvTable = details?.kind === "read_range_csv"
-          ? renderCsvTable(details)
-          : null;
-        const traceDetails = details?.kind === "trace_dependencies"
-          ? details
-          : null;
-        const depTree = traceDetails
-          ? renderDepTree(traceDetails.root, traceDetails.mode ?? "precedents")
-          : null;
-        const depSectionLabel = traceDetails
-          ? traceDetails.mode === "dependents"
-            ? t("tool-card.section.dependents")
-            : t("tool-card.section.precedents")
-          : t("tool-card.section.dependencies");
-        const formulaExplanation = renderExplainFormulaDetails(details);
-
-        // Search setup card: show inline guided setup when web_search fails
-        const searchSetupDetails = details !== undefined && shouldShowSearchSetupCard(details) ? details : null;
-        const initSearchSetup = (el: Element | undefined): void => {
-          if (el instanceof HTMLElement && searchSetupDetails) {
-            mountSearchSetupCard(el, searchSetupDetails);
-          }
-        };
-
-        // Bridge setup card: show inline setup for bridge-related failures.
-        const bridgeSetupDetails = details !== undefined && shouldShowBridgeSetupCard(details) ? details : null;
-        const initBridgeSetup = (el: Element | undefined): void => {
-          if (el instanceof HTMLElement && bridgeSetupDetails) {
-            mountBridgeSetupCard(el, bridgeSetupDetails);
-          }
-        };
-
-        return {
-          content: html`
-            <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
-              <div class="pi-tool-card__header">
-                ${renderDisclosureToolCardHeader(state, title, disclosure)}
-              </div>
-              <div class=${bodyClass}>
-                <div class="pi-tool-card__inner">
-                  <div class="pi-tool-card__detail">
-                    <span class="pi-tool-card__tool-id">${toolName}</span>
-                  </div>
-                  ${paramsJson ? html`
-                    <div class="pi-tool-card__section">
-                      <div class="pi-tool-card__section-label">${t("messages.toolInput")}</div>
-                      ${humanizeToolInput(toolName, params) ?? html`<code-block .code=${paramsJson} language="json"></code-block>`}
-                    </div>
-                  ` : ""}
-                  <div class="pi-tool-card__section">
-                    <div class="pi-tool-card__section-label">${formulaExplanation !== null ? t("tool-card.section.formulaExplanation") : depTree !== null ? depSectionLabel : csvTable !== null ? t("tool-card.section.data") : t("tool-card.section.result")}</div>
-                    ${formulaExplanation !== null
-                      ? formulaExplanation
-                      : csvTable !== null
-                      ? csvTable
-                      : depTree !== null
-                      ? depTree
-                      : isEchoResult(toolName, text)
-                      ? html`<div class="pi-tool-card__plain-text pi-tool-card__echo-result">${t("tool-card.done")}</div>`
-                      : standaloneImagePath
-                      ? html`
-                        <div class="pi-tool-image-link">
-                          <div>${t("tool-card.image")}
-                            <a href=${toFileUrl(standaloneImagePath)} target="_blank"
-                              rel="noopener noreferrer" class="pi-tool-image-link__anchor">
-                              ${pathBasename(standaloneImagePath)}
-                            </a>
-                          </div>
-                          <div class="pi-tool-image-link__path">
-                            ${standaloneImagePath}
-                          </div>
-                        </div>
-                      `
-                      : json.isJson
-                        ? html`<code-block .code=${json.formatted} language="json"></code-block>`
-                        : useMarkdown
-                          ? html`<div class="pi-tool-card__markdown"><markdown-block .content=${humanizedText || t("messages.noOutput")}></markdown-block></div>`
-                          : html`<div class="pi-tool-card__plain-text">${humanizedText || t("messages.noOutput")}</div>`}
-                    ${renderImages(images)}
-                    ${renderChartImageDetails(details, images.length > 0)}
-                  </div>
-                  ${renderWorkbookCellDiff(details)}
-                  ${renderChangeExplanationSection(toolName, params, text, details)}
-                </div>
-              </div>
-            </div>
-            ${searchSetupDetails !== null ? html`<div ${ref(initSearchSetup)}></div>` : html``}
-            ${bridgeSetupDetails !== null ? html`<div ${ref(initBridgeSetup)}></div>` : html``}
-          `,
-          isCustom: true,
-        };
-      }
-
-      // ── Streaming / pending with params ──────────────────
-      if (paramsJson) {
-        return {
-          content: html`
-            <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
-              <div class="pi-tool-card__header">
-                ${renderDisclosureToolCardHeader(state, title, disclosure)}
-              </div>
-              <div class=${bodyClass}>
-                <div class="pi-tool-card__inner">
-                  <div class="pi-tool-card__detail">
-                    <span class="pi-tool-card__tool-id">${toolName}</span>
-                  </div>
-                  <div class="pi-tool-card__section">
-                    <div class="pi-tool-card__section-label">${t("messages.toolInput")}</div>
-                    ${humanizeToolInput(toolName, params) ?? html`<code-block .code=${paramsJson} language="json"></code-block>`}
-                  </div>
-                </div>
-              </div>
-            </div>
-          `,
-          isCustom: true,
-        };
-      }
-
       // ── No params or result yet ──────────────────────────
+      if (!result && !paramsJson) {
+        return {
+          content: html`
+            <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
+              <div class="pi-tool-card__header">
+                ${renderToolCardHeader(state, title)}
+              </div>
+            </div>
+          `,
+          isCustom: true,
+        };
+      }
+
       return {
         content: html`
           <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
             <div class="pi-tool-card__header">
-              ${renderToolCardHeader(state, title)}
+              ${renderDisclosureToolCardHeader(state, title, disclosure)}
             </div>
+            <div class=${bodyClass}>${renderToolCardBody(toolName, params, result)}</div>
           </div>
+          ${renderToolSetupCards(result)}
         `,
         isCustom: true,
       };
@@ -1315,7 +1346,7 @@ function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer 
 const CUSTOM_RENDERED_TOOL_NAMES: readonly SupportedToolName[] = TOOL_NAMES_WITH_RENDERER;
 const CUSTOM_RENDERED_TOOL_NAME_SET = new Set<string>(CUSTOM_RENDERED_TOOL_NAMES);
 
-function isSupportedToolName(name: string): name is SupportedToolName {
+export function isSupportedToolName(name: string): name is SupportedToolName {
   return CUSTOM_RENDERED_TOOL_NAME_SET.has(name);
 }
 

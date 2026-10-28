@@ -161,6 +161,7 @@ import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
 import { requestApproval } from "../ui/approval-dialog.js";
 import { humanizeToolInput } from "../ui/humanize-params.js";
 import { describePendingToolCall } from "../ui/tool-renderers.js";
+import { toolActionVerb } from "../ui/tool-rows.js";
 import {
   BackupIdentityMonitor,
   startBackupIdentityPolling,
@@ -1048,6 +1049,8 @@ export async function initTaskpane(opts: {
   const requestRuntimeToolApproval = (args: {
     title: string;
     message: string;
+    toolCallId?: string;
+    headline?: string;
     confirmLabel?: string;
     signal?: AbortSignal;
     source?: string;
@@ -1058,6 +1061,8 @@ export async function initTaskpane(opts: {
   }): Promise<boolean> => {
     return requestApproval({
       title: args.title,
+      ...(args.toolCallId ? { toolCallId: args.toolCallId } : {}),
+      ...(args.headline ? { headline: args.headline } : {}),
       message: normalizeApprovalMessage(args.title, args.message),
       confirmLabel: args.confirmLabel ?? t("init.confirm.allowOnce"),
       ...(args.allowForTurn ? { allowForTurn: true } : {}),
@@ -1203,6 +1208,7 @@ export async function initTaskpane(opts: {
             const title = deletesBackups ? t("approval.title.deleteBackups") : t("approval.title.workbookChange");
             return requestApproval({
               title,
+              toolCallId: request.toolCallId,
               headline: describePendingToolCall(request.toolName, request.params) ?? request.toolName,
               ...(details ? { details } : {}),
               note: deletesBackups ? t("approval.note.deleteBackups")
@@ -1212,7 +1218,8 @@ export async function initTaskpane(opts: {
                 label: t("approval.fullBackupFirst"),
                 onApprove: async () => { await createManualFullBackup(); },
               } } : {}),
-              confirmLabel: deletesBackups ? t("approval.allowDelete") : t("init.confirm.allowOnce"),
+              // The button names the change ("Fill", "Delete"), as the row will.
+              confirmLabel: deletesBackups ? t("approval.allowDelete") : toolActionVerb(request.toolName, request.params) ?? t("init.confirm.allowOnce"),
               confirmTone: deletesBackups || irreversible ? "danger" : "primary",
               ...(request.signal ? { signal: request.signal } : {}),
               ...(overwrites ? { overwrites } : {}),
@@ -1233,6 +1240,8 @@ export async function initTaskpane(opts: {
             title: apiName === "WPS JSAPI"
               ? t("init.confirm.wpsJsTitle")
               : t("init.confirm.officeJsTitle"),
+            toolCallId: request.toolCallId,
+            headline: apiName === "WPS JSAPI" ? t("tools.action.runWpsJs") : t("tools.action.runOfficeJs"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
             allowForTurn: !request.destructive && !request.riskIdentifiers?.length,
