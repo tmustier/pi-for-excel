@@ -10,22 +10,30 @@
   pointer-events: auto;
 }
 
+/* A sheet of empty cells behind the welcome, at Excel's default 64×20
+   cell size, fading out towards the edges. The only place the grid motif
+   appears; the working transcript stays plain. */
+.pi-empty::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(var(--line-strong) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line-strong) 1px, transparent 1px);
+  background-size: 64px 20px;
+  background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 75% 55% at 50% 42%, #000 25%, transparent 100%);
+  mask-image: radial-gradient(ellipse 75% 55% at 50% 42%, #000 25%, transparent 100%);
+}
+
 .pi-empty__content {
+  position: relative;
   min-height: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-}
-
-.pi-empty__logo {
-  font-size: var(--text-display);
-  font-weight: 600;
-  color: var(--fg-3);
-  font-family: var(--font-sans);
-  margin-bottom: 4px;
-  opacity: 0.18;
-  letter-spacing: -0.03em;
 }
 
 .pi-empty__tagline {
@@ -54,7 +62,7 @@
   font-family: var(--font-sans);
   color: var(--foreground);
   padding: 9px 12px;
-  background: var(--white-alpha-70);
+  background: var(--surface-1);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
   line-height: 1.35;
@@ -94,8 +102,8 @@
 }
 
 .pi-empty__hint:hover {
-  background: var(--white-alpha-90);
-  border-color: var(--alpha-10);
+  background: var(--surface-1);
+  border-color: var(--line-strong);
   box-shadow: 0 2px 8px var(--alpha-6);
 }
 
@@ -120,10 +128,6 @@
   .pi-empty__content {
     min-height: 0;
     justify-content: flex-start;
-  }
-
-  .pi-empty__logo {
-    display: none;
   }
 
   .pi-empty__tagline {

@@ -1375,7 +1375,6 @@ export class PiSidebar extends LitElement {
     return html`
       <div class="pi-empty">
         <div class="pi-empty__content">
-          <div class="pi-empty__logo">π</div>
           <p class="pi-empty__tagline">
             ${t("sidebar.empty.tagline")}
           </p>

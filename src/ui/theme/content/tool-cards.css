@@ -209,7 +209,9 @@
   vertical-align: middle;
 }
 
-/* Clickable cell references — navigate to the range in Excel */
+/* Clickable cell references — navigate to the range in Excel.
+   Quiet at rest; the data green under the pointer says "this is a place in
+   the workbook". */
 .pi-cell-ref {
   cursor: pointer;
   color: inherit;
@@ -217,11 +219,17 @@
   text-decoration-color: var(--line-strong);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
+  border-radius: 2px;
   transition: text-decoration-color var(--duration-fast), color var(--duration-fast);
 }
-.pi-cell-ref:hover {
-  color: var(--fg-1);
-  text-decoration-color: var(--fg-3);
+.pi-cell-ref:hover,
+.pi-cell-ref:focus-visible {
+  color: var(--accent-data);
+  text-decoration-color: var(--accent-data);
+  outline: none;
+}
+.pi-cell-ref:focus-visible {
+  box-shadow: 0 0 0 2px var(--accent-data-soft);
 }
 
 /* Data preview — mini table for write_cells values */

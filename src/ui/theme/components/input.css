@@ -134,12 +134,13 @@ pi-input {
   pointer-events: none;
 }
 
+/* The one action that asks Pi to touch the workbook carries the data green. */
 .pi-input-btn--send {
-  background: var(--primary);
-  color: var(--primary-foreground);
+  background: var(--accent-data);
+  color: var(--accent-data-foreground);
 }
 .pi-input-btn--send:hover:not(.is-disabled) {
-  background: var(--fg-2);
+  background: var(--accent-data-strong);
 }
 .pi-input-btn--send.is-disabled {
   background: var(--surface-2);
