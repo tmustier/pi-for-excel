@@ -1424,6 +1424,7 @@
   "tool-card.stopped.after": "{address} — 已写入 {count} 个",
   "tool-card.stopped.afterCount": "— 已写入 {count} 个",
   "tool-card.stopped.unknown": "{address} — 请检查已写入的内容",
+  "turnChanges.summaryOne": "已更改 1 个单元格",
   "turnChanges.summary": "已更改 {count} 个单元格",
   "turnChanges.review": "查看",
   "turnChanges.undo": "撤销",

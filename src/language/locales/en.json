@@ -1424,6 +1424,7 @@
   "tool-card.stopped.after": "{address} — {count} written",
   "tool-card.stopped.afterCount": "— {count} written",
   "tool-card.stopped.unknown": "{address} — check what was written",
+  "turnChanges.summaryOne": "Changed 1 cell",
   "turnChanges.summary": "Changed {count} cells",
   "turnChanges.review": "Review",
   "turnChanges.undo": "Undo",

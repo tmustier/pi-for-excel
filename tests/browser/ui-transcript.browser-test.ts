@@ -431,7 +431,7 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     assert.equal(await receipts.first().getByRole("button", { name: "Undo", exact: true }).count(), 0);
     assert.doesNotMatch(await receipts.first().innerText(), /Changed 0 cells/);
     await receipts.last().getByRole("button", { name: "Undo", exact: true }).click();
-    assert.match(await receipts.last().innerText(), /Changed 1 cells/);
+    assert.match(await receipts.last().innerText(), /Changed 1 cell\b/);
     assert.match(await receipts.last().innerText(),
       /Office\.js code changed Sheet1!X12, 'Q3 Plan'!B2:C3, Sheet1!A1, Sheet1!A2, Sheet1!A3, Sheet1!A4 \+1; not covered by Undo this turn/);
   } finally {

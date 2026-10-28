@@ -21,7 +21,7 @@ export function renderTurnChangesReceipt(message: TurnChangesMessage, placement:
   };
   return html`<div class="pi-turn-changes pi-turn-changes--${placement}" data-outcome=${message.outcome} role="status">
     ${message.changes.length > 0 ? html`<div class="pi-turn-changes__line">
-      <span class="pi-turn-changes__summary">${t("turnChanges.summary", { count })}</span>
+      <span class="pi-turn-changes__summary">${count === 1 ? t("turnChanges.summaryOne") : t("turnChanges.summary", { count })}</span>
       <span class="pi-turn-changes__actions">
         <button type="button" class="pi-btn pi-btn--text" ?disabled=${!hasBackups} @click=${() => action("undo")}>${t(message.undoneBackupIds?.length && !hasBackups ? "turnChanges.undone" : "turnChanges.undo")}</button>
         <button type="button" class="pi-btn pi-btn--secondary" @click=${() => action("review")}>${t("turnChanges.review")}</button>
