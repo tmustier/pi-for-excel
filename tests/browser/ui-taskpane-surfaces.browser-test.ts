@@ -97,6 +97,7 @@ void test("a busy model choice applies to the next run without changing the runn
 
     const input = page.locator("pi-input textarea");
     await input.fill("/");
+    await page.locator("#pi-command-menu .pi-cmd-name").first().waitFor({ state: "visible" });
     const names = await page.locator("#pi-command-menu .pi-cmd-name").allTextContents();
     assert.equal(names[0], "/new");
     for (const pruned of ["/share-session", "/resume-here", "/debug", "/experimental", "/tools", "/plugins", "/skills"]) {

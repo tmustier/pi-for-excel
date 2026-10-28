@@ -9,12 +9,12 @@
  * verbs do; the structural strings are localized.
  */
 
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
+import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { html, type TemplateResult } from "lit";
 import { Code, Globe, Puzzle, Table, Terminal, type IconNode } from "lucide";
 
 import { t } from "../language/index.js";
-import { decodeToolDetails } from "../tools/tool-details.js";
+import { decodeToolDetails, type ExcelToolDetails } from "../tools/tool-details.js";
 import { cellRefDisplay, cellRefs } from "./cell-link.js";
 import { renderTool } from "./messages/tool-renderer-registry.js";
 import {
@@ -35,11 +35,8 @@ export type ToolKind = "sheet" | "python" | "web" | "code" | "extension";
 
 export interface ToolRowDescription {
   sentence: TemplateResult;
-  /** Plain-text form of the sentence, for announcements and tests. */
-  text: string;
   /** One fact about the result ("9 cells", "6 results"), or null. */
   meta: string | null;
-  kind: ToolKind;
   /** The error text the model received, for failed rows. */
   reason: string | null;
 }
@@ -159,23 +156,6 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-/** The card verb, such as Fill or Web search, in the tense a row needs. */
-function conjugate(action: string, tense: ToolRowTense): string {
-  const forms = VERBS[action];
-  if (!forms) {
-    // Unknown verb (a result summary's first word, or an extension's label): leave it alone.
-    return tense === "failed" ? t("turn.row.couldNot", { action: lowerFirst(action) })
-      : tense === "stopped" ? t("turn.row.stopped", { action: lowerFirst(action) })
-      : action;
-  }
-  switch (tense) {
-    case "live": return forms.live;
-    case "done": return forms.past;
-    case "failed": return t("turn.row.couldNot", { action: lowerFirst(forms.base) });
-    case "stopped": return t("turn.row.stopped", { action: lowerFirst(forms.live) });
-  }
-}
-
 /** The imperative verb for an approval button: "Fill", "Delete". */
 export function toolActionVerb(toolName: string, params: unknown): string | null {
   if (!isSupportedToolName(toolName)) return null;
@@ -183,27 +163,18 @@ export function toolActionVerb(toolName: string, params: unknown): string | null
   return VERBS[desc.action]?.base.split(" ")[0] ?? null;
 }
 
-/** The card's " — 9 changed, no backup" suffix, as the meta fact and the remainder. */
-function splitBadge(detail: string): { detail: string; badge: string | null } {
-  if (detail.startsWith("— ")) return { detail: "", badge: detail.slice(2) };
-  const index = detail.indexOf(" — ");
-  if (index < 0) return { detail, badge: null };
-  return { detail: detail.slice(0, index), badge: detail.slice(index + 3) };
-}
-
 function cellCount(count: number): string {
   return count === 1 ? t("turn.row.cell") : t("turn.row.cells", { count });
 }
 
 /** One fact about what the call produced, from its details or its result text. */
-function describeMeta(toolName: string, resultText: string | undefined, result: ToolResultMessage | undefined, badge: string | null): string | null {
-  const details = decodeToolDetails(result?.details);
+function describeMeta(toolName: string, resultText: string | undefined, details: ExcelToolDetails | undefined, badge: string | null): string | null {
   switch (details?.kind) {
     case "write_cells":
     case "fill_formula": {
-      if (details.stopped && typeof details.writtenCount === "number") return cellCount(details.writtenCount);
+      if (details.stopped && details.writtenCount !== undefined) return cellCount(details.writtenCount);
       const changed = details.changes?.changedCount;
-      if (typeof changed === "number") return cellCount(changed);
+      if (changed !== undefined) return cellCount(changed);
       break;
     }
     case "python_transform_range": {
@@ -211,18 +182,18 @@ function describeMeta(toolName: string, resultText: string | undefined, result: 
         return cellCount(details.rowsWritten === undefined ? 0 : details.rowsWritten * (details.colsWritten ?? 1));
       }
       const changed = details.changes?.changedCount;
-      if (typeof changed === "number") return cellCount(changed);
+      if (changed !== undefined) return cellCount(changed);
       break;
     }
     case "read_range_csv":
       return cellCount(details.values.reduce((count, row) => count + row.length, 0));
     case "web_search":
-      if (typeof details.resultCount === "number") {
+      if (details.resultCount !== undefined) {
         return details.resultCount === 1 ? t("turn.row.result") : t("turn.row.results", { count: details.resultCount });
       }
       break;
     case "charts":
-      if (typeof details.count === "number") return details.count === 1 ? t("turn.row.chart") : t("turn.row.charts", { count: details.count });
+      if (details.count !== undefined) return details.count === 1 ? t("turn.row.chart") : t("turn.row.charts", { count: details.count });
       break;
     case "skills_list":
     case "files_list":
@@ -248,14 +219,20 @@ function describeMeta(toolName: string, resultText: string | undefined, result: 
  */
 export function describeToolRow(
   toolName: string,
-  params: unknown,
+  params: ToolCall["arguments"],
   result: ToolResultMessage | undefined,
   tense: ToolRowTense,
   label?: string,
 ): ToolRowDescription {
-  const kind = toolKind(toolName);
   const resultText = result ? splitToolResultContent(result).text : undefined;
-  const reason = tense === "failed" ? failureReason(result, resultText) : null;
+  const details = decodeToolDetails(result?.details);
+  let reason: string | null = null;
+  if (tense === "failed") {
+    const error = details && "error" in details ? details.error : null;
+    const firstLine = (resultText ?? "").split("\n").find((line) => line.trim() !== "") ?? "";
+    reason = extractResultError(resultText) || error || firstLine
+      .replace(/^\s*(?:⚠️|❌)?\s*(?:\*\*)?error(?:\*\*)?:?\s*/iu, "").replace(/\*\*/gu, "").trim() || null;
+  }
 
   if (!isSupportedToolName(toolName)) {
     const name = label ?? toolName;
@@ -263,13 +240,20 @@ export function describeToolRow(
       : tense === "failed" ? t("turn.row.couldNot", { action: t("turn.row.run", { name }) })
       : tense === "stopped" ? t("turn.row.stopped", { action: t("turn.row.running", { name }) })
       : t("turn.row.ran", { name });
-    return { sentence: html`${text}`, text, meta: null, kind, reason };
+    return { sentence: html`${text}`, meta: null, reason };
   }
 
-  const desc = describeToolCall(toolName, params, resultText, decodeToolDetails(result?.details));
-  const { detail, badge } = splitBadge(desc.detail);
+  const desc = describeToolCall(toolName, params, resultText, details);
+  const badgeIndex = desc.detail.indexOf(" — ");
+  const { detail, badge } = desc.detail.startsWith("— ") ? { detail: "", badge: desc.detail.slice(2) }
+    : badgeIndex < 0 ? { detail: desc.detail, badge: null }
+    : { detail: desc.detail.slice(0, badgeIndex), badge: desc.detail.slice(badgeIndex + 3) };
   // A stopped write already says "Stopped" and how far it got.
-  const verb = desc.action === t("tool-card.stopped.action") ? desc.action : conjugate(desc.action, tense);
+  const forms = VERBS[desc.action];
+  const verb = desc.action === t("tool-card.stopped.action") ? desc.action
+    : tense === "failed" ? t("turn.row.couldNot", { action: lowerFirst(forms?.base ?? desc.action) })
+    : tense === "stopped" ? t("turn.row.stopped", { action: lowerFirst(forms?.live ?? desc.action) })
+    : tense === "live" ? forms?.live ?? desc.action : forms?.past ?? desc.action;
   // Result summaries end in a full stop ("Added sheet "Q3"."); a row does not.
   const refText = stripDimensions(detail).replace(/\.$/u, "");
   const reference = desc.address
@@ -280,26 +264,13 @@ export function describeToolRow(
     : html`${verb} <span class="pi-turn-row__ref">${reference}</span>`;
   return {
     sentence,
-    text: refText ? `${verb} ${refText}` : verb,
-    meta: tense === "failed" || tense === "live" ? null : describeMeta(toolName, resultText, result, tense === "stopped" ? null : badge),
-    kind,
+    meta: tense === "failed" || tense === "live" ? null : describeMeta(toolName, resultText, details, tense === "stopped" ? null : badge),
     reason,
   };
 }
 
-/** The error text the model received, with the "Error:" prefix removed. */
-function failureReason(result: ToolResultMessage | undefined, resultText: string | undefined): string | null {
-  if (!result) return null;
-  const fromSummary = extractResultError(resultText);
-  if (fromSummary) return fromSummary;
-  const details = decodeToolDetails(result.details);
-  if (details && "error" in details && typeof details.error === "string" && details.error) return details.error;
-  const firstLine = (resultText ?? "").split("\n").find((line) => line.trim() !== "") ?? "";
-  return firstLine.replace(/^\s*(?:⚠️|❌)?\s*(?:\*\*)?error(?:\*\*)?:?\s*/iu, "").replace(/\*\*/gu, "").trim() || null;
-}
-
 /** The row's expanded body: the tool card's input and result sections. */
-export function renderToolRowDetail(toolName: string, params: unknown, result: ToolResultMessage | undefined): TemplateResult {
+export function renderToolRowDetail(toolName: string, params: ToolCall["arguments"], result: ToolResultMessage | undefined): TemplateResult {
   if (isSupportedToolName(toolName)) return renderToolCardBody(toolName, params, result);
   return renderTool(toolName, params, result, false, { expanded: true, toggle: () => {} }).content;
 }

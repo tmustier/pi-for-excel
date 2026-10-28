@@ -16,6 +16,7 @@ import { html, LitElement, type TemplateResult } from "lit";
 import { property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 
+import { registerInlineApprovalHost } from "../approval-dialog.js";
 import { renderMessage } from "./message-renderer-registry.js";
 import { buildTranscriptBlocks, type TranscriptBlock } from "./turn-model.js";
 import "./messages.js";
@@ -44,6 +45,8 @@ export class MessageList extends LitElement {
   /** The response being streamed, which pi-agent-core adds to `messages` only when it ends. */
   @property({ type: Object }) streamingMessage: AssistantMessage | null = null;
 
+  private _approvalHost: ReturnType<typeof registerInlineApprovalHost> | undefined;
+
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
   }
@@ -51,12 +54,21 @@ export class MessageList extends LitElement {
   override connectedCallback(): void {
     super.connectedCallback();
     this.style.display = "block";
+    this._approvalHost = registerInlineApprovalHost({
+      claims: (id) => this.isConnected && this._blocks().some((block) => block.type === "turnGroup"
+        && block.group.steps.some((step) => step.type === "tool" && step.toolCall.id === id)),
+      onChange: () => this.requestUpdate(),
+    });
   }
 
-  /** Tool call ids the list draws, for questions asked in their rows. */
-  showsToolCall(toolCallId: string): boolean {
-    return this._blocks().some((block) => block.type === "turnGroup"
-      && block.group.steps.some((step) => step.type === "tool" && step.toolCall.id === toolCallId));
+  override disconnectedCallback(): void {
+    super.disconnectedCallback();
+    this._approvalHost?.unregister();
+    this._approvalHost = undefined;
+  }
+
+  override updated(): void {
+    this._approvalHost?.refresh();
   }
 
   private _blocks(): TranscriptBlock[] {

@@ -1258,12 +1258,7 @@ export function renderToolCardBody(
  * a bridge unreachable). Shown next to the call whether or not it is
  * expanded.
  */
-export function hasToolSetupCard(result: ToolResultMessage | undefined): boolean {
-  const details = decodeToolDetails(result?.details);
-  return details !== undefined && (shouldShowSearchSetupCard(details) || shouldShowBridgeSetupCard(details));
-}
-
-export function renderToolSetupCards(result: ToolResultMessage | undefined): TemplateResult {
+export function renderToolSetupCards(result: ToolResultMessage | undefined): TemplateResult | null {
   const details = decodeToolDetails(result?.details);
   const searchSetupDetails = details !== undefined && shouldShowSearchSetupCard(details) ? details : null;
   const initSearchSetup = (el: Element | undefined): void => {
@@ -1272,6 +1267,7 @@ export function renderToolSetupCards(result: ToolResultMessage | undefined): Tem
     }
   };
   const bridgeSetupDetails = details !== undefined && shouldShowBridgeSetupCard(details) ? details : null;
+  if (!searchSetupDetails && !bridgeSetupDetails) return null;
   const initBridgeSetup = (el: Element | undefined): void => {
     if (el instanceof HTMLElement && bridgeSetupDetails) {
       mountBridgeSetupCard(el, bridgeSetupDetails);

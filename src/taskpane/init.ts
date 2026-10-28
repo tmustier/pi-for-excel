@@ -9,7 +9,6 @@ function isTaskpaneInitPayloadShape(value: unknown): value is Record<string, unk
  * sidebar mount, slash commands, keyboard shortcuts).
  */
 
-import { html, render } from "lit";
 import { Value } from "typebox/value";
 import { describeOfficeJsChanges, readTurnBackups, summarizeTurnChanges, turnChangeActionSchema, undoTurnChanges } from "../messages/turn-changes.js";
 import { createOverlayDialog, createOverlayHeader } from "../ui/overlay-dialog.js";

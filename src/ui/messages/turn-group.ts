@@ -22,20 +22,15 @@ import { AlertTriangle, Check, ChevronDown, ChevronUp, Circle, Loader, type Icon
 import { t } from "../../language/index.js";
 import { getInlineApprovals, type InlineApproval } from "../approval-dialog.js";
 import { icon } from "../icons.js";
-import { hasToolSetupCard, renderToolSetupCards } from "../tool-renderers.js";
-import { describeToolRow, renderToolRowDetail, toolKind, toolKindIcon, type ToolKind, type ToolRowTense } from "../tool-rows.js";
+import { renderToolSetupCards } from "../tool-renderers.js";
+import { describeToolRow, renderToolRowDetail, toolKind, toolKindIcon, type ToolKind } from "../tool-rows.js";
 import { renderTurnChangesReceipt } from "./turn-changes-receipt.js";
-import { getThinkingDurationMs, isDisclosureExpanded, setDisclosureExpanded, subscribeDisclosure, thinkingKey } from "./transcript-state.js";
+import { getThinkingDurationMs, isDisclosureExpanded, setDisclosureExpanded, subscribeDisclosure } from "./transcript-state.js";
 import type { TurnGroupModel, TurnNoteStep, TurnToolStep } from "./turn-model.js";
 import "./markdown-block.js";
 import "./thinking-block.js";
 
 const KIND_ORDER: readonly ToolKind[] = ["sheet", "python", "web", "code", "extension"];
-
-export function formatElapsed(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  return seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-}
 
 const STATUS_ICONS: Record<TurnToolStep["state"] | "waiting", { icon: IconNode; className: string }> = {
   live: { icon: Loader, className: "pi-turn-row__status pi-turn-row__status--live" },
@@ -71,13 +66,8 @@ export class TurnGroup extends LitElement {
 
   override updated(): void {
     // The elapsed time ticks once a second while the turn runs.
-    if (this.model?.live) this._startTicking();
-    else this._stopTicking();
-  }
-
-  private _startTicking(): void {
-    if (this._ticker !== undefined) return;
-    this._ticker = window.setInterval(() => this.requestUpdate(), 1000);
+    if (this.model?.endedAt !== null) this._stopTicking();
+    else this._ticker ??= window.setInterval(() => this.requestUpdate(), 1000);
   }
 
   private _stopTicking(): void {
@@ -98,9 +88,10 @@ export class TurnGroup extends LitElement {
     const failed = toolSteps.filter((step) => step.state === "failed").length;
     const waiting = toolSteps.some((step) => this._approvalFor(step.toolCall.id) !== undefined);
     const kinds = KIND_ORDER.filter((kind) => toolSteps.some((step) => toolKind(step.toolCall.name) === kind));
-    const state = waiting ? "waiting" : model.live ? "live" : "done";
-    const elapsed = formatElapsed((model.endedAt ?? Date.now()) - model.startedAt);
-    const expanded = isDisclosureExpanded(model.key, !model.answerStarted);
+    const state = waiting ? "waiting" : model.endedAt === null ? "live" : "done";
+    const seconds = Math.max(0, Math.round(((model.endedAt ?? Date.now()) - model.startedAt) / 1000));
+    const elapsed = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+    const expanded = waiting || isDisclosureExpanded(model.key, !model.answerStarted);
 
     const title = state === "waiting" ? t("turn.waiting")
       : state === "live" ? t("turn.working")
@@ -132,31 +123,27 @@ export class TurnGroup extends LitElement {
   }
 
   private _renderNote(step: TurnNoteStep): TemplateResult {
-    const chunk = step.message.content[step.contentIndex];
-    if (chunk?.type === "thinking") {
-      const key = thinkingKey(step.message, step.contentIndex);
+    const chunk = step.content;
+    if (chunk.type === "thinking") {
       return html`<div class="pi-turn-row pi-turn-row--note">
         <thinking-block
           .content=${chunk.thinking}
           .isStreaming=${step.streaming}
-          .disclosureKey=${key}
-          .durationMs=${getThinkingDurationMs(key)}
+          .disclosureKey=${step.key}
+          .durationMs=${getThinkingDurationMs(step.key)}
         ></thinking-block>
       </div>`;
     }
-    if (chunk?.type === "text") {
-      return html`<div class="pi-turn-row pi-turn-row--note"><markdown-block .content=${chunk.text}></markdown-block></div>`;
-    }
-    return html``;
+    return html`<div class="pi-turn-row pi-turn-row--note"><markdown-block .content=${chunk.text}></markdown-block></div>`;
   }
 
   private _renderToolRow(step: TurnToolStep): TemplateResult {
     const approval = this._approvalFor(step.toolCall.id);
     if (approval) return this._renderApprovalRow(step, approval);
 
-    const tense: ToolRowTense = step.state;
-    const row = describeToolRow(step.toolCall.name, step.toolCall.arguments, step.result, tense, step.tool?.label);
+    const row = describeToolRow(step.toolCall.name, step.toolCall.arguments, step.result, step.state, step.tool?.label);
     const status = STATUS_ICONS[step.state];
+    const setup = renderToolSetupCards(step.result);
     const expanded = isDisclosureExpanded(step.key);
     const toggle = (): void => setDisclosureExpanded(step.key, !expanded);
 
@@ -174,7 +161,7 @@ export class TurnGroup extends LitElement {
           <span class="pi-turn-row__chevron" aria-hidden="true">${icon(expanded ? ChevronUp : ChevronDown, "xs")}</span>
         </button>
         ${row.reason ? html`<div class="pi-turn-row__reason">${row.reason}</div>` : nothing}
-        ${hasToolSetupCard(step.result) ? html`<div class="pi-turn-row__setup">${renderToolSetupCards(step.result)}</div>` : nothing}
+        ${setup ? html`<div class="pi-turn-row__setup">${setup}</div>` : nothing}
         ${expanded ? html`<div class="pi-turn-row__detail">${renderToolRowDetail(step.toolCall.name, step.toolCall.arguments, step.result)}</div>` : nothing}
       </div>
     `;
@@ -202,13 +189,13 @@ export class TurnGroup extends LitElement {
         ${this._preparationFailed === approval ? html`<div class="pi-turn-row__reason" role="alert">${t("approval.preparationFailed")}</div>` : nothing}
         <div class="pi-turn-row__actions">
           <button type="button" class="pi-btn pi-btn--secondary" @click=${() => approval.answer(false)}>${t("approval.decline")}</button>
-          <button type="button" class="pi-btn pi-btn--primary" @click=${() => approval.answer(true)}>${request.confirmLabel}</button>
+          <button type="button" class="pi-btn pi-btn--primary" ?disabled=${approval.preparing} @click=${() => approval.answer(true)}>${request.confirmLabel}</button>
         </div>
         ${request.allowForTurn && request.signal
           ? html`<button type="button" class="pi-turn-row__link" @click=${() => approval.allowForTurn()}>${t("approval.allowForTurn")}</button>`
           : nothing}
         ${request.secondaryApproval
-          ? html`<button type="button" class="pi-turn-row__link" @click=${prepare}>${request.secondaryApproval.label}</button>`
+          ? html`<button type="button" class="pi-turn-row__link" ?disabled=${approval.preparing} @click=${prepare}>${request.secondaryApproval.label}</button>`
           : nothing}
       </div>
     `;

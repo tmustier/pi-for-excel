@@ -35,6 +35,9 @@ each call is a row with a past-tense sentence (`tool-rows.ts`), one meta
 fact, an inline reason when it failed, and a drill-in into the call's input
 and result. A workbook change that needs approval asks in its row
 (`approval-dialog.ts` inline hosts); the change receipt is the footer.
+`message-list` refreshes its host claims whenever the transcript changes and
+unregisters on disconnect; unanswered questions it no longer shows return to
+the dialog queue. Waiting questions keep their group expanded.
 
 One model of a streaming turn: the sidebar batches the response being
 streamed per frame and passes it to `<message-list>` as `streamingMessage`,

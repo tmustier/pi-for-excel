@@ -67,6 +67,12 @@ void test("a streaming turn draws one turn group whose rows finish as each tool 
     assert.equal(turn.rows[0]?.text, "Read Sheet1!A1:B12");
 
     await page.evaluate(() => window.piTranscriptHarness?.release("read-3"));
+    await page.waitForFunction(() => {
+      const message = window.piTranscriptHarness?.agent.state.streamingMessage;
+      return message?.role === "assistant" && message.content.some((chunk) => chunk.type === "thinking" && chunk.thinking)
+        && !message.content.some((chunk) => chunk.type === "text" && chunk.text.trim());
+    });
+    assert.equal((await readTurn(page)).title, "Working", "thinking before the answer is still live");
     await page.waitForFunction(() => window.piTranscriptHarness?.agent.state.isStreaming === false);
     await page.waitForTimeout(300);
     turn = await readTurn(page);
@@ -192,6 +198,56 @@ void test("Ctrl+O switches details mode for every row, survives re-renders and r
   }
 });
 
+void test("inline approvals stay visible when collapsed, and fall back unanswered on tab switch or sidebar disconnect", async () => {
+  const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-approvals" });
+  const { page } = opened;
+  try {
+    await seedRestoredTurn(page);
+    const header = page.locator(".pi-turn__header");
+    await header.click();
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+
+    await page.evaluate(async () => {
+      const modulePath = "/src/ui/approval-dialog.ts";
+      const { requestApproval } = await import(modulePath);
+      void requestApproval({ title: "Write D1", toolCallId: "details-0", confirmLabel: "Write" }).then((approved) => {
+        document.documentElement.dataset.approvalOutcome = String(approved);
+      });
+    });
+    const approval = page.locator(".pi-turn-row--approval");
+    await approval.waitFor({ state: "visible" });
+    assert.equal(await header.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.locator(".pi-turn__title").innerText(), "Waiting for approval");
+    await header.click();
+    await approval.waitFor({ state: "visible" });
+
+    await page.locator(".pi-session-tabs__new").click();
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-approval-outcome"), null);
+    await dialog.getByRole("button", { name: "Write", exact: true }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.approvalOutcome === "true");
+
+    await page.locator(".pi-session-tab__main").first().click();
+    await page.evaluate(async () => {
+      delete document.documentElement.dataset.approvalOutcome;
+      const modulePath = "/src/ui/approval-dialog.ts";
+      const { requestApproval } = await import(modulePath);
+      void requestApproval({ title: "Write D2", toolCallId: "details-1", confirmLabel: "Write" }).then((approved) => {
+        document.documentElement.dataset.approvalOutcome = String(approved);
+      });
+    });
+    await approval.waitFor({ state: "visible" });
+    await page.evaluate(() => document.querySelector("pi-sidebar").remove());
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-approval-outcome"), null);
+    await dialog.getByRole("button", { name: "Decline", exact: true }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.approvalOutcome === "false");
+  } finally {
+    await opened.finish();
+  }
+});
+
 /* ── Turn groups across tab switches ── */
 
 async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void> {
@@ -293,6 +349,24 @@ void test("a stopped write says how far it got instead of claiming success", asy
       "Stopped Stop!C1:C9 | 9 cells",
       "Edited Stop!A1:B2",
     ]);
+  } finally {
+    await opened.finish();
+  }
+});
+
+void test("failed rows show the model's error, and successful rows keep one result fact", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    const group = page.locator('[data-gallery="turn-group"] turn-group').nth(1);
+    await group.locator(".pi-turn__header").click();
+    const failed = group.locator('.pi-turn-row[data-state="failed"]');
+    assert.equal(await failed.locator(".pi-turn-row__sentence").innerText(), "Could not fill 'Cash Flow'!D12:L12");
+    assert.equal(await failed.locator(".pi-turn-row__reason").innerText(), "Inputs!C6 no longer exists, so the formula returns #REF!.");
+    assert.equal(await failed.locator(".pi-turn-row__meta").count(), 0);
+    assert.equal(await failed.getByRole("button", { name: "Retry", exact: true }).count(), 0);
+    assert.equal(await group.locator('.pi-turn-row[data-tool-name="web_search"] .pi-turn-row__meta').innerText(), "6 results");
+    assert.equal(await group.locator('.pi-turn-row[data-tool-name="read_range"] .pi-turn-row__meta').innerText(), "54 cells");
   } finally {
     await opened.finish();
   }

@@ -11,8 +11,6 @@ import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
-import { registerInlineApprovalHost } from "./approval-dialog.js";
-import type { MessageList } from "./messages/message-list.js";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
@@ -201,12 +199,10 @@ export class PiSidebar extends LitElement {
   @state() private _tabContextMenuPosition: { x: number; y: number } | null = null;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
-  @query("message-list") private _messageList?: MessageList;
   @query("pi-input") private _input?: PiInput;
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
   private _unsubscribe: (() => void) | undefined;
-  private _unregisterApprovalHost: (() => void) | undefined;
   /** Results of tools that finished before their batch did (see MessageList.liveToolResults). */
   private _liveToolResults = new Map<string, ToolResultMessage>();
   /**
@@ -344,19 +340,12 @@ export class PiSidebar extends LitElement {
     document.addEventListener("keydown", this._onEscapeKey);
     window.addEventListener("resize", this._onWindowResize);
     this._onPayloadUpdate();
-    // Questions about a tool call this transcript shows are asked in its row.
-    this._unregisterApprovalHost = registerInlineApprovalHost({
-      claims: (toolCallId) => this.isConnected && (this._messageList?.showsToolCall(toolCallId) ?? false),
-      onChange: () => this.requestUpdate(),
-    });
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._unsubscribe = undefined;
-    this._unregisterApprovalHost?.();
-    this._unregisterApprovalHost = undefined;
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     this._dockObserver?.disconnect();
@@ -519,6 +508,7 @@ export class PiSidebar extends LitElement {
           // waits for the batch's toolResult message, as before.
           const raw: unknown = ev.result;
           if (!Value.Check(liveToolResultSchema, raw)) break;
+          this._liveToolResults = new Map(this._liveToolResults);
           this._liveToolResults.set(ev.toolCallId, {
             role: "toolResult",
             toolCallId: ev.toolCallId,
@@ -887,10 +877,6 @@ export class PiSidebar extends LitElement {
     const agent = this.agent;
     if (!agent) return html``;
     const state = agent.state;
-    const toolResultsById = new Map(this._liveToolResults);
-    for (const message of state.messages) {
-      if (message.role === "toolResult") toolResultsById.set(message.toolCallId, message);
-    }
 
     // Derive from agent state directly — _hasMessages may lag behind after
     // batch operations like replaceMessages() that don't fire per-message events.
@@ -914,7 +900,7 @@ export class PiSidebar extends LitElement {
               .streamingMessage=${state.isStreaming ? this._streamingMessage : null}
               .tools=${state.tools}
               .pendingToolCalls=${state.pendingToolCalls}
-              .liveToolResults=${toolResultsById}
+              .liveToolResults=${this._liveToolResults}
               .isStreaming=${state.isStreaming || this.tabBusy}
               .errorSummary=${this.turnError}
             ></message-list>

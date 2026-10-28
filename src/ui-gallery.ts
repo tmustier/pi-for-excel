@@ -17,10 +17,9 @@ import "./boot.js";
 // Register web components we render
 import "./ui/register-components.js";
 
-import { registerInlineApprovalHost, requestApproval } from "./ui/approval-dialog.js";
+import { requestApproval } from "./ui/approval-dialog.js";
 import { createBanner } from "./ui/banner.js";
 import { humanizeToolInput } from "./ui/humanize-params.js";
-import type { MessageList } from "./ui/messages/message-list.js";
 import { describePendingToolCall } from "./ui/tool-renderers.js";
 import { createCopyableCommand } from "./ui/command-copy.js";
 import { mountTranscriptHarness } from "./ui-gallery-transcript.js";
@@ -217,7 +216,6 @@ turnFixtures.push(["Waiting for approval", fixtureTurn("approve", {
   ],
 })]);
 
-const turnLists: MessageList[] = [];
 for (const [label, messages] of turnFixtures) {
   const caption = document.createElement("div");
   caption.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 12px 0 4px;";
@@ -227,14 +225,9 @@ for (const [label, messages] of turnFixtures) {
   list.isStreaming = label.startsWith("Working") || label.startsWith("Waiting");
   list.pendingToolCalls = new Set(["live-f2", "approve-d1"]);
   turnSection.append(caption, list);
-  turnLists.push(list);
 }
 
 // The approval row: the question is asked in the pending call's row.
-registerInlineApprovalHost({
-  claims: (toolCallId) => turnLists.some((list) => list.showsToolCall(toolCallId)),
-  onChange: () => { for (const list of turnLists) list.requestUpdate(); },
-});
 const approvalAbort = new AbortController();
 const approvalParams = { action: "delete_rows", sheet: "Summary", start_row: 40, count: 13 };
 const approvalDetails = humanizeToolInput("modify_structure", approvalParams);

@@ -11,13 +11,13 @@
  */
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
-import type { AssistantMessage, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
+import type { AssistantMessage, TextContent, ThinkingContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type { TurnChangesMessage } from "../../messages/turn-changes.js";
 import { decodeToolDetails } from "../../tools/tool-details.js";
 import { isFailedToolResult } from "../tool-renderers.js";
-
-export type TurnStepState = "live" | "done" | "failed" | "stopped";
+import type { ToolRowTense } from "../tool-rows.js";
+import { thinkingKey } from "./transcript-state.js";
 
 export interface TurnToolStep {
   type: "tool";
@@ -26,15 +26,14 @@ export interface TurnToolStep {
   toolCall: ToolCall;
   tool: AgentTool | undefined;
   result: ToolResultMessage | undefined;
-  state: TurnStepState;
+  state: ToolRowTense;
 }
 
 /** Prose or thinking between tool calls: what the model said before its next step. */
 export interface TurnNoteStep {
   type: "note";
   key: string;
-  message: AssistantMessage;
-  contentIndex: number;
+  content: TextContent | ThinkingContent;
   /** The block is still being streamed. */
   streaming: boolean;
 }
@@ -48,8 +47,6 @@ export interface TurnGroupModel {
   startedAt: number;
   /** When the last step finished; null while the turn runs. */
   endedAt: number | null;
-  /** The turn is still running: more steps may come. */
-  live: boolean;
   /** The answer has started, so the group collapses itself. */
   answerStarted: boolean;
   changes: TurnChangesMessage | null;
@@ -88,22 +85,6 @@ interface Response {
   lastCall: number;
 }
 
-/** The user pressed Stop during the call; the result says how far it got. */
-function wasStopped(result: ToolResultMessage): boolean {
-  const details = decodeToolDetails(result.details);
-  return details !== undefined && "stopped" in details && details.stopped === true;
-}
-
-function isNoteChunk(message: AssistantMessage, index: number): boolean {
-  const chunk = message.content[index];
-  if (!chunk) return false;
-  return (chunk.type === "text" && chunk.text.trim() !== "") || (chunk.type === "thinking" && chunk.thinking.trim() !== "");
-}
-
-function hasText(message: AssistantMessage, from: number, to: number): boolean {
-  return message.content.slice(from, to).some((chunk) => chunk.type === "text" && chunk.text.trim() !== "");
-}
-
 /**
  * Splits the transcript into blocks. Assistant responses that follow one
  * another without a user message in between form one turn; its tool calls
@@ -128,7 +109,7 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
       continue;
     }
 
-    // The turn: assistant responses, their results and the receipt, up to the next other message.
+    // Context-only updates do not interrupt a turn; a receipt closes it.
     const responses: Response[] = [];
     let changes: TurnChangesMessage | null = null;
     let end = index;
@@ -140,7 +121,10 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
         responses.push({ message: candidate, index: end, firstCall: calls[0] ?? -1, lastCall: calls[calls.length - 1] ?? -1 });
       } else if (candidate.role === "turnChanges") {
         changes = candidate;
-      } else if (candidate.role !== "toolResult" && candidate.role !== "artifact") {
+        end++;
+        break;
+      } else if (candidate.role !== "toolResult" && candidate.role !== "artifact"
+        && candidate.role !== "autoContext" && candidate.role !== "system") {
         break;
       }
       end++;
@@ -180,28 +164,31 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
 
     // Group: every tool call, and the prose between the first and the last.
     const steps: TurnStep[] = [];
-    let endedAt = firstTool.message.timestamp;
-    let live = false;
-    const turnIsLast = end >= all.length;
+    let endedAt = message.timestamp;
+    let hasLiveTool = false;
+    const terminated = last.message.stopReason === "error" || last.message.stopReason === "aborted";
+    const active = running && end === all.length && !changes && !terminated;
     for (const response of responses) {
       if (response.index < firstTool.index) continue;
       const { message: assistant } = response;
       const streaming = response.index === streamingIndex;
       const from = response.index === firstTool.index ? firstTool.firstCall : 0;
-      const to = response.index === lastTool.index && response.index === last.index
-        ? lastTool.lastCall + 1
+      const to = response.index === lastTool.index ? lastTool.lastCall + 1
         : response.index > lastTool.index ? 0 : assistant.content.length;
       for (let contentIndex = from; contentIndex < to; contentIndex++) {
         const chunk = assistant.content[contentIndex];
         if (!chunk) break;
         if (chunk.type === "toolCall") {
           const result = results.get(chunk.id);
-          const state: TurnStepState = result
-            ? (wasStopped(result) ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
+          const details = decodeToolDetails(result?.details);
+          const stopped = details !== undefined && "stopped" in details && details.stopped === true;
+          const state: ToolRowTense = result
+            ? (stopped ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
+            : assistant.stopReason === "error" ? "failed"
             : assistant.stopReason === "aborted" ? "stopped"
-            : running && turnIsLast && (streaming || pendingToolCalls.has(chunk.id) || assistant.stopReason === "toolUse") ? "live"
+            : active && (streaming || pendingToolCalls.has(chunk.id) || assistant.stopReason === "toolUse") ? "live"
             : "stopped";
-          if (state === "live") live = true;
+          if (state === "live") hasLiveTool = true;
           if (result) endedAt = Math.max(endedAt, result.timestamp);
           steps.push({
             type: "tool",
@@ -211,26 +198,24 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
             result,
             state,
           });
-        } else if (isNoteChunk(assistant, contentIndex)) {
+        } else if ((chunk.type === "text" && chunk.text.trim() !== "")
+          || (chunk.type === "thinking" && chunk.thinking.trim() !== "")) {
           steps.push({
             type: "note",
-            key: `note:${assistant.timestamp}:${contentIndex}`,
-            message: assistant,
-            contentIndex,
+            key: thinkingKey(assistant, contentIndex),
+            content: chunk,
             streaming: streaming && contentIndex === assistant.content.length - 1,
           });
         }
       }
       endedAt = Math.max(endedAt, assistant.timestamp);
     }
-    // Between responses (the last one asked for tools, the next has not started) the turn is still running.
-    if (running && turnIsLast && last.index !== streamingIndex && last.message.stopReason === "toolUse" && !changes) live = true;
-    if (running && turnIsLast && last.index === streamingIndex && last.index === lastTool.index) live = true;
-
-    // Answer: everything after the last tool call.
-    const answerStarted = last.index > lastTool.index
-      ? responses.some((response) => response.index > lastTool.index && hasText(response.message, 0, response.message.content.length))
-      : hasText(last.message, lastTool.lastCall + 1, last.message.content.length);
+    // Text after the last call starts the answer; thinking alone does not.
+    const answerStarted = !hasLiveTool && responses.some((response) => response.index >= lastTool.index
+      && response.message.content.slice(response.index === lastTool.index ? lastTool.lastCall + 1 : 0)
+        .some((chunk) => chunk.type === "text" && chunk.text.trim() !== ""));
+    const live = active && (hasLiveTool || (!answerStarted
+      && (last.index === streamingIndex || last.message.stopReason === "toolUse")));
 
     blocks.push({
       type: "turnGroup",
@@ -238,19 +223,16 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
       group: {
         key: `turn:${firstTool.message.timestamp}`,
         steps,
-        startedAt: firstTool.message.timestamp,
+        startedAt: message.timestamp,
         endedAt: live ? null : endedAt,
-        live,
         answerStarted,
         changes,
       },
     });
 
-    if (last.index === lastTool.index) {
-      draw(last, lastTool.lastCall + 1, last.message.content.length);
-    } else {
-      for (const response of responses) {
-        if (response.index > lastTool.index) draw(response, 0, response.message.content.length);
+    for (const response of responses) {
+      if (response.index >= lastTool.index) {
+        draw(response, response.index === lastTool.index ? lastTool.lastCall + 1 : 0, response.message.content.length);
       }
     }
     index = end;

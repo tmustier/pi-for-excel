@@ -177,7 +177,7 @@ void test("a question about a call the transcript shows is asked in its row, and
   try {
     const shown = new Set(["call-1"]);
     let changes = 0;
-    const unregister = registerInlineApprovalHost({ claims: (id) => shown.has(id), onChange: () => { changes += 1; } });
+    const host = registerInlineApprovalHost({ claims: (id) => shown.has(id), onChange: () => { changes += 1; } });
 
     const outcomes: string[] = [];
     const inlineAsk = requestApproval({ title: "Write D1", toolCallId: "call-1", confirmLabel: "Write" }).then((ok) => outcomes.push(`D1:${ok}`));
@@ -202,7 +202,7 @@ void test("a question about a call the transcript shows is asked in its row, and
     const orphan = requestApproval({ title: "Write D3", toolCallId: "call-1", confirmLabel: "Write" }).then((ok) => outcomes.push(`D3:${ok}`));
     await flushAsync();
     assert.equal(getInlineApprovals().length, 1);
-    unregister();
+    host.unregister();
     await flushAsync();
     assert.deepEqual(getInlineApprovals(), []);
     assert.equal(onScreenTitle(), "Write D3");
@@ -217,7 +217,7 @@ void test("a question about a call the transcript shows is asked in its row, and
 void test("an inline question is withdrawn when its turn stops, and turn consent covers later inline questions", async () => {
   const { restore } = installFakeDom();
   try {
-    const unregister = registerInlineApprovalHost({ claims: () => true, onChange: () => {} });
+    const host = registerInlineApprovalHost({ claims: () => true, onChange: () => {} });
     const controller = new AbortController();
     const outcomes: string[] = [];
     const first = requestApproval({ title: "Write D1", toolCallId: "call-1", confirmLabel: "Write", allowForTurn: true, signal: controller.signal }).then((ok) => outcomes.push(`D1:${ok}`));
@@ -238,8 +238,131 @@ void test("an inline question is withdrawn when its turn stops, and turn consent
     await third;
     assert.deepEqual(outcomes, ["D1:true", "D3:false"]);
     assert.deepEqual(getInlineApprovals(), []);
-    unregister();
+    host.unregister();
   } finally {
+    restore();
+  }
+});
+
+void test("changing a host's claims re-asks its unanswered question, removing every abort listener once", async (context) => {
+  const { restore } = installFakeDom();
+  const controller = new AbortController();
+  const added = context.mock.method(controller.signal, "addEventListener");
+  const removed = context.mock.method(controller.signal, "removeEventListener");
+  let visible = true;
+  const host = registerInlineApprovalHost({ claims: () => visible, onChange() {} });
+  try {
+    const outcomes: boolean[] = [];
+    const pending = requestApproval({ title: "Write", toolCallId: "call", confirmLabel: "Write", signal: controller.signal })
+      .then((approved) => outcomes.push(approved));
+    const stale = getInlineApprovals()[0];
+    assert.ok(stale);
+    visible = false;
+    host.refresh();
+    assert.deepEqual(getInlineApprovals(), []);
+    assert.equal(onScreenTitle(), "Write");
+    assert.deepEqual(outcomes, [], "changing tabs must not answer the question");
+    stale.answer(true);
+    assert.deepEqual(outcomes, [], "the detached row no longer owns the answer");
+    controller.abort();
+    await pending;
+    assert.deepEqual(outcomes, [false]);
+    assert.equal(document.getElementById(TOOL_APPROVAL_OVERLAY_ID), null);
+    assert.equal(added.mock.calls.length, 2);
+    assert.equal(removed.mock.calls.length, 2);
+    assert.deepEqual(removed.mock.calls.map((call) => call.arguments[1]), added.mock.calls.map((call) => call.arguments[1]));
+  } finally {
+    host.unregister();
+    controller.abort();
+    await flushAsync();
+    restore();
+  }
+});
+
+void test("another host can keep an inline question visible until the last host disconnects", async () => {
+  const { restore } = installFakeDom();
+  const first = registerInlineApprovalHost({ claims: () => true, onChange() {} });
+  const second = registerInlineApprovalHost({ claims: () => true, onChange() {} });
+  try {
+    const pending = requestApproval({ title: "Write", toolCallId: "shared", confirmLabel: "Write" });
+    first.unregister();
+    assert.equal(getInlineApprovals().length, 1);
+    assert.equal(onScreenTitle(), undefined);
+    second.unregister();
+    assert.deepEqual(getInlineApprovals(), []);
+    assert.equal(onScreenTitle(), "Write");
+    clickButton("Write");
+    assert.equal(await pending, true);
+  } finally {
+    first.unregister();
+    second.unregister();
+    restore();
+  }
+});
+
+void test("Stop Pi stops turns with inline questions as well as the dialog queue", async () => {
+  const { restore } = installFakeDom();
+  const host = registerInlineApprovalHost({ claims: (id) => id === "inline", onChange() {} });
+  try {
+    let stopped = 0;
+    const inline = requestApproval({ title: "Inline", toolCallId: "inline", confirmLabel: "Write", onStop: () => { stopped++; } });
+    const dialog = requestApproval({ title: "Dialog", confirmLabel: "Write", onStop() {} });
+    clickButton("Stop Pi");
+    assert.deepEqual(await Promise.all([inline, dialog]), [false, false]);
+    assert.equal(stopped, 1);
+    assert.deepEqual(getInlineApprovals(), []);
+  } finally {
+    host.unregister();
+    restore();
+  }
+});
+
+void test("turn consent answers already waiting inline changes without granting destructive ones", async () => {
+  const { restore } = installFakeDom();
+  const host = registerInlineApprovalHost({ claims: () => true, onChange() {} });
+  const controller = new AbortController();
+  try {
+    const request = { title: "Write", confirmLabel: "Write", allowForTurn: true, signal: controller.signal };
+    const first = requestApproval({ ...request, toolCallId: "a" });
+    const second = requestApproval({ ...request, toolCallId: "b" });
+    const destructive = requestApproval({ ...request, toolCallId: "c", allowForTurn: false });
+    const approval = getInlineApprovals()[0];
+    assert.ok(approval);
+    approval.allowForTurn();
+    assert.deepEqual(await Promise.all([first, second]), [true, true]);
+    assert.deepEqual(getInlineApprovals().map((item) => item.toolCallId), ["c"]);
+    controller.abort();
+    assert.equal(await destructive, false);
+  } finally {
+    controller.abort();
+    host.unregister();
+    restore();
+  }
+});
+
+void test("inline preparation runs once and cannot approve after the host has released it", async () => {
+  const { restore } = installFakeDom();
+  const host = registerInlineApprovalHost({ claims: () => true, onChange() {} });
+  try {
+    let finish = (): void => {};
+    let preparations = 0;
+    const prepared = new Promise<void>((resolve) => { finish = resolve; });
+    const pending = requestApproval({ title: "Delete", toolCallId: "call", confirmLabel: "Delete", secondaryApproval: {
+      label: "Backup first", onApprove: () => { preparations++; return prepared; },
+    } });
+    const approval = getInlineApprovals()[0];
+    assert.ok(approval);
+    const first = approval.prepareAndApprove();
+    await approval.prepareAndApprove();
+    assert.equal(preparations, 1);
+    host.unregister();
+    finish();
+    await first;
+    assert.equal(onScreenTitle(), "Delete");
+    clickButton("Decline");
+    assert.equal(await pending, false);
+  } finally {
+    host.unregister();
     restore();
   }
 });

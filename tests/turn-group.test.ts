@@ -8,7 +8,7 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import { buildTranscriptBlocks } from "../src/ui/messages/turn-model.ts";
-import { describeToolRow, toolActionVerb } from "../src/ui/tool-rows.ts";
+import { toolActionVerb } from "../src/ui/tool-rows.ts";
 
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
@@ -38,8 +38,8 @@ function build(messages: AgentMessage[], options: { streaming?: AssistantMessage
 function shape(blocks: ReturnType<typeof build>): string[] {
   return blocks.map((block) => {
     if (block.type === "turnGroup") {
-      const steps = block.group.steps.map((step) => step.type === "tool" ? `${step.toolCall.id}:${step.state}` : `note@${step.contentIndex}`);
-      return `group[${steps.join(",")}]${block.group.live ? " live" : ""}${block.group.answerStarted ? " answered" : ""}${block.group.changes ? " receipt" : ""}`;
+      const steps = block.group.steps.map((step) => step.type === "tool" ? `${step.toolCall.id}:${step.state}` : `note:${step.content.type === "text" ? step.content.text : step.content.thinking}`);
+      return `group[${steps.join(",")}]${block.group.endedAt === null ? " live" : ""}${block.group.answerStarted ? " answered" : ""}${block.group.changes ? " receipt" : ""}`;
     }
     const range = block.contentFrom === undefined ? "" : `[${block.contentFrom},${block.contentTo ?? "end"}]`;
     return `${block.message.role}${range}${block.streaming ? " streaming" : ""}`;
@@ -62,7 +62,7 @@ void test("a turn of several responses makes one group: lead, every call and the
   assert.deepEqual(shape(build(messages)), [
     "user",
     "assistant[0,2]",
-    "group[r1:done,r2:failed,note@0,r3:done] answered receipt",
+    "group[r1:done,r2:failed,note:Now the totals.,r3:done] answered receipt",
     "assistant[0,2]",
     "user",
     "assistant[0,1]",
@@ -77,7 +77,7 @@ void test("while the turn runs, calls without a result are live and the streamed
   // The next response streams a tool call: its row appears in the same group, live.
   const streaming = assistant(20, [{ type: "text", text: "Next." }, call("r3", "A3")]);
   const done: AgentMessage[] = [...messages, result("r2", "Filled A2", 12)];
-  assert.deepEqual(shape(build(done, { running: true, streaming })), ["user", "group[r1:done,r2:done,note@0,r3:live] live"]);
+  assert.deepEqual(shape(build(done, { running: true, streaming })), ["user", "group[r1:done,r2:done,note:Next.,r3:live] live"]);
 
   // The answer streams: the group is finished and collapses, the answer draws below it.
   const answer = assistant(30, [{ type: "text", text: "All" }]);
@@ -98,34 +98,67 @@ void test("a stopped turn marks calls without a result as stopped and keeps its 
   assert.equal(group.group.endedAt, 11);
 });
 
-void test("rows read in the tense of their state and carry one fact", () => {
-  const filled = result("f", "Filled **Sheet1!B2:B9** — 8 changed", 1, {
-    details: { kind: "fill_formula", blocked: false, address: "Sheet1!B2:B9", changes: { changedCount: 8, truncated: false, sample: [] } },
-  });
-  const params = { range: "Sheet1!B2:B9", formula: "=A2*2" };
-  assert.deepEqual(pick(describeToolRow("fill_formula", params, filled, "done")), { text: "Filled Sheet1!B2:B9", meta: "8 cells", kind: "sheet", reason: null });
-  assert.deepEqual(pick(describeToolRow("fill_formula", params, undefined, "live")), { text: "Filling Sheet1!B2:B9", meta: null, kind: "sheet", reason: null });
-  assert.deepEqual(pick(describeToolRow("fill_formula", params, result("f", "Error: Sheet1!A2 is protected.", 1, { isError: true }), "failed")),
-    { text: "Could not fill Sheet1!B2:B9", meta: null, kind: "sheet", reason: "Sheet1!A2 is protected." });
-  assert.deepEqual(pick(describeToolRow("fill_formula", params, undefined, "stopped")), { text: "Stopped filling Sheet1!B2:B9", meta: null, kind: "sheet", reason: null });
+void test("context updates do not split a turn, but a receipt ends it", () => {
+  const blocks = build([
+    assistant(10, [call("r1", "A1")]), result("r1", "ok", 11),
+    { role: "autoContext", kind: "changes", text: "User edited A2", timestamp: 12 },
+    { role: "system", content: "Tool loadout changed", timestamp: 13 },
+    assistant(20, [call("r2", "A2")]), result("r2", "ok", 21),
+    { role: "turnChanges", turnId: "first", timestamp: 22, outcome: "finished", changes: [] },
+    assistant(30, [call("r3", "A3")]), result("r3", "ok", 31),
+  ]);
+  assert.deepEqual(shape(blocks), ["group[r1:done,r2:done] receipt", "group[r3:done]"]);
+});
 
-  const read = result("r", "**Sheet1!A1:C12** (12×3)\n\n| | A |", 1, { toolName: "read_range" });
-  assert.deepEqual(pick(describeToolRow("read_range", { range: "Sheet1!A1:C12" }, read, "done")), { text: "Read Sheet1!A1:C12", meta: "36 cells", kind: "sheet", reason: null });
+void test("thinking-only and empty streams keep the group live until answer text starts", () => {
+  const messages = [assistant(1000, [call("r1", "A1")]), result("r1", "ok", 4000)];
+  for (const content of [[], [{ type: "thinking" as const, thinking: "Check totals" }], [{ type: "text" as const, text: "  " }]]) {
+    const blocks = build(messages, { running: true, streaming: assistant(5000, content) });
+    assert.equal(shape(blocks)[0], "group[r1:done] live");
+  }
+  const blocks = build(messages, { running: true, streaming: assistant(5000, [{ type: "text", text: "Done" }]) });
+  assert.deepEqual(shape(blocks), ["group[r1:done] answered", "assistant[0,1] streaming"]);
+  const group = blocks[0];
+  assert.ok(group?.type === "turnGroup");
+  assert.equal(group.group.startedAt, 1000);
+  assert.equal(group.group.endedAt, 5000);
+});
 
-  const search = result("w", "1. ONS", 1, { toolName: "web_search", details: { kind: "web_search", ok: true, provider: "brave", query: "UK CPI", sentQuery: "UK CPI", maxResults: 10, resultCount: 6 } });
-  assert.deepEqual(pick(describeToolRow("web_search", { query: "UK CPI" }, search, "done")), { text: "Searched the web for \"UK CPI\"", meta: "6 results", kind: "web", reason: null });
-  assert.equal(describeToolRow("python_transform_range", { range: "A1" }, undefined, "live").kind, "python");
+void test("elapsed time covers lead responses and later tool results, not just the last response", () => {
+  const blocks = build([
+    assistant(1000, [{ type: "text", text: "Planning" }]),
+    assistant(2000, [call("r1", "A1")]), result("r1", "ok", 5000),
+    assistant(4000, [{ type: "text", text: "Done" }], "stop"),
+  ]);
+  const group = blocks.find((block) => block.type === "turnGroup");
+  assert.ok(group?.type === "turnGroup");
+  assert.equal(group.group.startedAt, 1000);
+  assert.equal(group.group.endedAt, 5000);
+});
 
-  // An extension tool has no verb table: its label carries the row.
-  assert.equal(describeToolRow("sum_rows", {}, undefined, "live", "Sum rows").text, "Running Sum rows");
-  assert.equal(describeToolRow("sum_rows", {}, result("x", "oops", 1, { isError: true, toolName: "sum_rows" }), "failed").text, "Could not run sum_rows");
+void test("a provider failure during a tool call is failed, not stopped or live", () => {
+  assert.deepEqual(shape(build([assistant(10, [call("r1", "A1")], "error")], { running: true })),
+    ["group[r1:failed]", "assistant[1,1]"]);
+});
 
-  // The approval button names the change.
+void test("prose after the last call stays outside the group when another response follows", () => {
+  const messages = [
+    assistant(10, [call("r1", "A1"), { type: "text" as const, text: "Filled A1." }]),
+    result("r1", "ok", 11),
+    assistant(20, [{ type: "thinking", thinking: "Check" }], "stop"),
+  ];
+  assert.deepEqual(shape(build(messages)), ["group[r1:done] answered", "assistant[1,2]", "assistant[0,1]"]);
+});
+
+void test("trailing prose is not an answer while its tool calls still run", () => {
+  const response = assistant(10, [call("r1", "A1"), { type: "text", text: "Filled A1." }]);
+  assert.deepEqual(shape(build([response], { running: true })), ["group[r1:live] live", "assistant[1,2]"]);
+  assert.deepEqual(shape(build([response, result("r1", "ok", 20)], { running: true })),
+    ["group[r1:done] answered", "assistant[1,2]"]);
+});
+
+void test("approval buttons name the action, falling back for extension tools", () => {
   assert.equal(toolActionVerb("modify_structure", { action: "delete_rows", sheet: "Summary", position: 40, count: 13 }), "Delete");
   assert.equal(toolActionVerb("write_cells", { start_cell: "A1", values: [[1]] }), "Write");
   assert.equal(toolActionVerb("sum_rows", {}), null);
 });
-
-function pick(row: ReturnType<typeof describeToolRow>) {
-  return { text: row.text, meta: row.meta, kind: row.kind, reason: row.reason };
-}
