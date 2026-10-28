@@ -39,8 +39,8 @@ pi-sidebar {
   height: 24px;
   background: linear-gradient(
     to bottom,
-    oklch(0.98 0.002 90 / 0.5),
-    oklch(0.98 0.002 90 / 0.2) 40%,
+    rgba(250, 249, 247, 0.5),
+    rgba(250, 249, 247, 0.2) 40%,
     transparent
   );
   pointer-events: none;
@@ -137,8 +137,8 @@ pi-sidebar {
 }
 
 .pi-session-tab.is-active {
-  background: oklch(0.45 0.12 160 / 0.18);
-  border-color: var(--green-alpha-25);
+  background: var(--surface-2);
+  border-color: var(--line-strong);
   color: var(--foreground);
 }
 
@@ -153,8 +153,8 @@ pi-sidebar {
 }
 
 .pi-session-tab.is-active:focus-within {
-  border-color: var(--pi-green);
-  box-shadow: 0 0 0 2px var(--green-alpha-14);
+  border-color: var(--fg-3);
+  box-shadow: 0 0 0 2px var(--alpha-8);
 }
 
 .pi-session-tab__main {
@@ -198,8 +198,8 @@ pi-sidebar {
   width: 7px;
   height: 7px;
   border-radius: var(--radius-full);
-  background: var(--pi-green);
-  box-shadow: 0 0 0 2px var(--white-alpha-90);
+  background: var(--fg-2);
+  box-shadow: none;
   flex-shrink: 0;
   animation: pi-tab-busy 1.4s ease-in-out infinite;
 }
@@ -268,14 +268,14 @@ pi-sidebar {
 }
 
 .pi-session-tab.is-active .pi-session-tab__close {
-  background: oklch(1 0 0 / 0.58);
-  border-color: var(--green-alpha-20);
-  color: oklch(0.43 0.02 160);
+  background: var(--surface-1);
+  border-color: var(--line);
+  color: var(--fg-2);
 }
 
 .pi-session-tab__close:hover {
-  background: oklch(0.58 0.22 27 / 0.95);
-  border-color: oklch(0.58 0.22 27 / 0.75);
+  background: var(--red);
+  border-color: var(--red);
   color: white;
 }
 
@@ -303,9 +303,9 @@ pi-sidebar {
 }
 
 .pi-session-tabs__new:hover {
-  background: var(--pi-green-light);
-  border-color: var(--green-alpha-30);
-  color: var(--pi-green);
+  background: var(--surface-2);
+  border-color: var(--line-strong);
+  color: var(--foreground);
 }
 
 .pi-session-tab__close:disabled {
@@ -320,9 +320,9 @@ pi-sidebar {
 }
 
 .pi-session-tab.is-active .pi-session-tab__close:disabled:hover {
-  background: oklch(1 0 0 / 0.58);
-  border-color: var(--green-alpha-20);
-  color: oklch(0.43 0.02 160);
+  background: var(--surface-1);
+  border-color: var(--line);
+  color: var(--fg-2);
 }
 
 .pi-session-tab-context-menu {
@@ -363,7 +363,7 @@ pi-sidebar {
 }
 
 .pi-session-tab-context-menu__item--danger {
-  color: oklch(0.58 0.2 27);
+  color: var(--red);
 }
 
 .pi-session-tab-context-menu__divider {

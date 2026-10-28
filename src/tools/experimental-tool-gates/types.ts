@@ -65,6 +65,8 @@ export interface PythonBridgeApprovalRequest {
 }
 
 export interface OfficeJsExecuteApprovalRequest {
+  /** The call that asks, so the transcript can ask in its row. */
+  toolCallId: string;
   explanation: string;
   code: string;
   apiName?: "Office.js" | "WPS JSAPI";

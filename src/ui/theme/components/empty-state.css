@@ -20,8 +20,8 @@
 
 .pi-empty__logo {
   font-size: var(--text-display);
-  font-weight: 700;
-  color: var(--pi-green);
+  font-weight: 600;
+  color: var(--fg-3);
   font-family: var(--font-sans);
   margin-bottom: 4px;
   opacity: 0.18;
@@ -55,7 +55,7 @@
   color: var(--foreground);
   padding: 9px 12px;
   background: var(--white-alpha-70);
-  border: 1px solid oklch(0 0 0 / 0.07);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   line-height: 1.35;
   pointer-events: auto;
@@ -199,7 +199,7 @@
   padding: 8px 10px;
   border-radius: var(--radius-md);
   border: 1px solid var(--red-alpha-20);
-  background: oklch(0.97 0.02 25);
+  background: var(--red-soft);
   color: var(--pi-red-text);
   font-family: var(--font-sans);
   font-size: var(--text-sm);

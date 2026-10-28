@@ -44,22 +44,6 @@ function renderStreamingSpinner(state: ToolHeaderState): TemplateResult {
   `;
 }
 
-export function renderToolCardHeader(state: ToolHeaderState, text: TemplateResult): TemplateResult {
-  return html`
-    <div class="pi-tool-card__toggle pi-tool-card__toggle--static">
-      <span class="pi-tool-card__toggle-main">
-        ${renderStreamingSpinner(state)}
-        ${text}
-      </span>
-    </div>
-  `;
-}
-
-export interface ToolCardDisclosure {
-  expanded: boolean;
-  toggle: () => void;
-}
-
 function renderChevron(expanded: boolean): TemplateResult {
   return html`
     <span class="pi-tool-card__chevron-up ${expanded ? "" : "hidden"}">
@@ -68,34 +52,6 @@ function renderChevron(expanded: boolean): TemplateResult {
     <span class="pi-tool-card__chevron-collapsed ${expanded ? "hidden" : ""}">
       ${icon(ChevronsUpDown, "sm")}
     </span>
-  `;
-}
-
-/**
- * Header for a card whose expanded state lives in transcript state
- * (tool calls): the caller re-renders with the new state after `toggle`.
- */
-export function renderDisclosureToolCardHeader(
-  state: ToolHeaderState,
-  text: TemplateResult,
-  disclosure: ToolCardDisclosure,
-): TemplateResult {
-  return html`
-    <button
-      type="button"
-      class="pi-tool-card__toggle"
-      aria-expanded=${disclosure.expanded ? "true" : "false"}
-      @click=${(event: Event) => {
-        event.preventDefault();
-        disclosure.toggle();
-      }}
-    >
-      <span class="pi-tool-card__toggle-main">
-        ${renderStreamingSpinner(state)}
-        ${text}
-      </span>
-      <span class="pi-tool-card__toggle-chevron" aria-hidden="true">${renderChevron(disclosure.expanded)}</span>
-    </button>
   `;
 }
 

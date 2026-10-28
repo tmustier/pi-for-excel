@@ -108,7 +108,7 @@
 .pi-shortcuts-section-header {
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  font-weight: 700;
+  font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--muted-foreground);

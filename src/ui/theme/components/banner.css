@@ -33,12 +33,12 @@
 }
 
 .pi-banner--warning {
-  background: oklch(0.97 0.03 84);
+  background: var(--amber-soft);
   border-color: var(--amber-alpha-30);
 }
 
 .pi-banner--error {
-  background: oklch(0.97 0.02 25);
+  background: var(--red-soft);
   border-color: var(--red-alpha-20);
 }
 
@@ -98,12 +98,12 @@
 .pi-banner__action--primary {
   padding: 3px 10px;
   border-radius: var(--radius-sm);
-  background: var(--pi-green);
+  background: var(--primary);
   color: var(--primary-foreground);
 }
 
 .pi-banner__action--primary:hover {
-  background: var(--pi-green-strong);
+  background: var(--fg-2);
   text-decoration: none;
 }
 
@@ -162,8 +162,6 @@
   text-decoration: underline;
 }
 
-.dark .pi-banner--warning { background: oklch(0.3 0.04 84 / 0.6); }
-.dark .pi-banner--error { background: oklch(0.3 0.05 25 / 0.6); }
 
 @media (max-height: 520px) {
   .pi-banner {

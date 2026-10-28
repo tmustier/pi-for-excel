@@ -9,7 +9,7 @@
 #   ./scripts/ui-verify.sh stop               # Close browser + stop dev server (if we started it)
 #
 # Sections (data-gallery attributes in ui-gallery.html):
-#   badges, file-items, tool-cards, tool-groups, diff-table,
+#   badges, file-items, turn-group, diff-table,
 #   text-preview, buttons, toasts, banners, markdown
 #
 # Prerequisites:

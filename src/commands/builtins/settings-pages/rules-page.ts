@@ -254,8 +254,8 @@ function createHeaderPreview(
     text.setAttribute("x", String(x + 8));
     text.setAttribute("fill", normalizedFont);
     text.setAttribute("font-size", "12");
-    text.setAttribute("font-family", "DM Sans, sans-serif");
-    text.setAttribute("font-weight", bold ? "700" : "400");
+    text.setAttribute("font-family", "IBM Plex Sans, sans-serif");
+    text.setAttribute("font-weight", bold ? "600" : "400");
 
     if (wrapText && label === "Cost of Goods Sold") {
       text.setAttribute("y", "20");

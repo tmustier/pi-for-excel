@@ -14,25 +14,30 @@ const viewport = { width: 420, height: 900 };
 
 /* ── Live turn: real <pi-sidebar> + Agent, scripted stream (src/ui-gallery-transcript.ts) ── */
 
-interface CardFact { where: "list" | "stream"; state: string | undefined; visible: boolean }
+interface RowFact { state: string | undefined; text: string }
 
-async function readTurn(page: Page): Promise<{ copies: number; cards: CardFact[]; thinking: string[] }> {
+async function readTurn(page: Page): Promise<{ copies: number; groups: number; title: string; rows: RowFact[]; thinking: string[] }> {
   return page.evaluate(() => {
     const host = document.querySelector('[data-gallery="transcript"]');
     if (!host) throw new Error("transcript section missing");
     const copies = [...host.querySelectorAll("assistant-message")]
       .filter((el) => el.textContent.includes("three blocks of the sheet")).length;
-    const cards = [...host.querySelectorAll<HTMLElement>(".pi-tool-card[data-tool-name=read_range]")].map((card) => ({
-      where: card.closest("streaming-message-container") ? "stream" as const : "list" as const,
-      state: card.dataset.state,
-      visible: card.getBoundingClientRect().height > 0,
+    const rows = [...host.querySelectorAll<HTMLElement>('.pi-turn-row[data-tool-name="read_range"]')].map((row) => ({
+      state: row.dataset.state,
+      text: row.querySelector(".pi-turn-row__sentence")?.textContent.replace(/\s+/g, " ").trim() ?? "",
     }));
     const thinking = [...host.querySelectorAll(".pi-thinking-label")].map((el) => el.textContent.trim());
-    return { copies, cards, thinking };
+    return {
+      copies,
+      groups: host.querySelectorAll("turn-group").length,
+      title: host.querySelector(".pi-turn__title")?.textContent.trim() ?? "",
+      rows,
+      thinking,
+    };
   });
 }
 
-void test("a streaming turn draws each response once and finishes each tool card as it completes", async () => {
+void test("a streaming turn draws one turn group whose rows finish as each tool completes", async () => {
   const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
   const { page } = opened;
   try {
@@ -43,10 +48,13 @@ void test("a streaming turn draws each response once and finishes each tool card
     await page.waitForTimeout(200);
     let turn = await readTurn(page);
     assert.equal(turn.copies, 1, "the response with running tools is drawn once");
-    assert.deepEqual(turn.cards.map((card) => card.state), ["inprogress", "inprogress", "inprogress"]);
+    assert.equal(turn.groups, 1, "one group for the turn");
+    assert.equal(turn.title, "Working");
+    assert.deepEqual(turn.rows.map((row) => row.state), ["live", "live", "live"]);
+    assert.deepEqual(turn.rows.map((row) => row.text), ["Reading Sheet1!A1:B12", "Reading Sheet1!C1:D12", "Reading Sheet1!E1:F12"]);
     assert.match(turn.thinking[0] ?? "", /^Thought for \d+s$/, "reasoning ended before the tool calls");
 
-    // The slowest tool is still running: the two finished cards stop spinning now.
+    // The slowest tool is still running: the two finished rows read in the past tense now.
     await page.evaluate(() => {
       window.piTranscriptHarness?.release("read-2");
       window.piTranscriptHarness?.release("read-1");
@@ -55,23 +63,37 @@ void test("a streaming turn draws each response once and finishes each tool card
     await page.waitForTimeout(200);
     turn = await readTurn(page);
     assert.equal(turn.copies, 1);
-    assert.deepEqual(turn.cards.map((card) => card.state), ["complete", "complete", "inprogress"]);
+    assert.deepEqual(turn.rows.map((row) => row.state), ["done", "done", "live"]);
+    assert.equal(turn.rows[0]?.text, "Read Sheet1!A1:B12");
 
     await page.evaluate(() => window.piTranscriptHarness?.release("read-3"));
+    await page.waitForFunction(() => {
+      const message = window.piTranscriptHarness?.agent.state.streamingMessage;
+      return message?.role === "assistant" && message.content.some((chunk) => chunk.type === "thinking" && chunk.thinking)
+        && !message.content.some((chunk) => chunk.type === "text" && chunk.text.trim());
+    });
+    assert.equal((await readTurn(page)).title, "Working", "thinking before the answer is still live");
     await page.waitForFunction(() => window.piTranscriptHarness?.agent.state.isStreaming === false);
     await page.waitForTimeout(300);
     turn = await readTurn(page);
     assert.equal(turn.copies, 1);
-    assert.deepEqual(turn.cards.map((card) => card.state), ["complete", "complete", "complete"]);
+    assert.equal(turn.groups, 1, "the second response joins the same turn");
+    assert.match(turn.title, /^Worked for \d+s$/);
     assert.ok(turn.thinking.every((label) => /^Thought for \d+s$/.test(label)), turn.thinking.join(" | "));
 
-    // Three reads group and start collapsed: the group really hides its cards.
-    assert.deepEqual(turn.cards.map((card) => card.visible), [false, false, false]);
-    const groupHeader = page.locator('[data-gallery="transcript"] .pi-tool-group__header');
+    // The answer started, so the group collapsed itself; its header opens it again.
+    assert.deepEqual(turn.rows, [], "collapsed group hides its rows");
+    const groupHeader = page.locator('[data-gallery="transcript"] .pi-turn__header');
     await groupHeader.click();
     await page.waitForTimeout(100);
     assert.equal(await groupHeader.getAttribute("aria-expanded"), "true");
-    assert.deepEqual((await readTurn(page)).cards.map((card) => card.visible), [true, true, true]);
+    assert.deepEqual((await readTurn(page)).rows.map((row) => row.state), ["done", "done", "done"]);
+
+    // A row drills into the call's input and result (its reference is a link, so open it from the chevron).
+    const firstRow = page.locator('[data-gallery="transcript"] .pi-turn-row__chevron').first();
+    await firstRow.click();
+    await page.locator('[data-gallery="transcript"] .pi-turn-row__detail').first().waitFor({ state: "visible" });
+    assert.match(await page.locator('[data-gallery="transcript"] .pi-turn-row__detail').first().innerText(), /12 rows of monthly totals/);
 
     // Thinking header is a keyboard control.
     const thinkingHeader = page.locator('[data-gallery="transcript"] thinking-block .thinking-header').first();
@@ -118,27 +140,27 @@ async function seedRestoredTurn(page: Page): Promise<void> {
     );
     sidebar.syncFromAgent();
   });
-  await page.locator(".pi-tool-group").waitFor({ state: "attached" });
+  await page.locator("turn-group").waitFor({ state: "attached" });
 }
 
 async function readDetails(page: Page): Promise<{ openBodies: number; groupExpanded: string | null; thinkingExpanded: string | null }> {
   return page.evaluate(() => ({
-    openBodies: [...document.querySelectorAll<HTMLElement>(".pi-tool-card__body")]
-      .filter((body) => body.getBoundingClientRect().height > 0).length,
-    groupExpanded: document.querySelector(".pi-tool-group__header")?.getAttribute("aria-expanded") ?? null,
+    openBodies: document.querySelectorAll(".pi-turn-row__detail").length,
+    groupExpanded: document.querySelector(".pi-turn__header")?.getAttribute("aria-expanded") ?? null,
     thinkingExpanded: document.querySelector("thinking-block .thinking-header")?.getAttribute("aria-expanded") ?? null,
   }));
 }
 
-void test("Ctrl+O switches details mode for every card, survives re-renders and reloads", async () => {
+void test("Ctrl+O switches details mode for every row, survives re-renders and reloads", async () => {
   const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-details" });
   const { page } = opened;
   try {
     await seedRestoredTurn(page);
     await page.waitForTimeout(200);
-    assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "false", thinkingExpanded: "false" });
+    // A restored turn with no answer keeps its group open; its rows start closed.
+    assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "true", thinkingExpanded: "false" });
 
-    // First press expands: details start collapsed, matching the cards.
+    // First press expands: details start collapsed, matching the rows.
     await page.keyboard.press("Control+o");
     await page.waitForTimeout(200);
     assert.deepEqual(await readDetails(page), { openBodies: 3, groupExpanded: "true", thinkingExpanded: "true" });
@@ -153,11 +175,9 @@ void test("Ctrl+O switches details mode for every card, survives re-renders and 
     await page.waitForTimeout(200);
     assert.equal((await readDetails(page)).openBodies, 3);
 
-    // A hand toggle overrides one card until the next Ctrl+O.
-    await page.locator(".pi-tool-card__toggle").first().click();
-    // The body animates closed; wait for the transition rather than a fixed delay.
-    await page.waitForFunction(() => document.querySelectorAll(".pi-tool-card__body--collapsed").length === 1);
-    await page.waitForTimeout(400);
+    // A hand toggle overrides one row until the next Ctrl+O.
+    await page.locator(".pi-turn-row__chevron").first().click();
+    await page.waitForFunction(() => document.querySelectorAll(".pi-turn-row__detail").length === 2);
     assert.equal((await readDetails(page)).openBodies, 2);
 
     await page.reload();
@@ -172,13 +192,63 @@ void test("Ctrl+O switches details mode for every card, survives re-renders and 
 
     await page.keyboard.press("Control+o");
     await page.waitForTimeout(200);
-    assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "false", thinkingExpanded: "false" });
+    assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "true", thinkingExpanded: "false" });
   } finally {
     await opened.finish();
   }
 });
 
-/* ── Tool groups across tab switches ── */
+void test("inline approvals stay visible when collapsed, and fall back unanswered on tab switch or sidebar disconnect", async () => {
+  const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-approvals" });
+  const { page } = opened;
+  try {
+    await seedRestoredTurn(page);
+    const header = page.locator(".pi-turn__header");
+    await header.click();
+    assert.equal(await header.getAttribute("aria-expanded"), "false");
+
+    await page.evaluate(async () => {
+      const modulePath = "/src/ui/approval-dialog.ts";
+      const { requestApproval } = await import(modulePath);
+      void requestApproval({ title: "Write D1", toolCallId: "details-0", confirmLabel: "Write" }).then((approved) => {
+        document.documentElement.dataset.approvalOutcome = String(approved);
+      });
+    });
+    const approval = page.locator(".pi-turn-row--approval");
+    await approval.waitFor({ state: "visible" });
+    assert.equal(await header.getAttribute("aria-expanded"), "true");
+    assert.equal(await page.locator(".pi-turn__title").innerText(), "Waiting for approval");
+    await header.click();
+    await approval.waitFor({ state: "visible" });
+
+    await page.locator(".pi-session-tabs__new").click();
+    const dialog = page.locator("#pi-tool-approval-overlay");
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-approval-outcome"), null);
+    await dialog.getByRole("button", { name: "Write", exact: true }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.approvalOutcome === "true");
+
+    await page.locator(".pi-session-tab__main").first().click();
+    await page.evaluate(async () => {
+      delete document.documentElement.dataset.approvalOutcome;
+      const modulePath = "/src/ui/approval-dialog.ts";
+      const { requestApproval } = await import(modulePath);
+      void requestApproval({ title: "Write D2", toolCallId: "details-1", confirmLabel: "Write" }).then((approved) => {
+        document.documentElement.dataset.approvalOutcome = String(approved);
+      });
+    });
+    await approval.waitFor({ state: "visible" });
+    await page.evaluate(() => document.querySelector("pi-sidebar").remove());
+    await dialog.waitFor({ state: "visible" });
+    assert.equal(await page.locator("html").getAttribute("data-approval-outcome"), null);
+    await dialog.getByRole("button", { name: "Decline", exact: true }).click();
+    await page.waitForFunction(() => document.documentElement.dataset.approvalOutcome === "false");
+  } finally {
+    await opened.finish();
+  }
+});
+
+/* ── Turn groups across tab switches ── */
 
 async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void> {
   await page.evaluate(({ tag, turns }) => {
@@ -188,6 +258,7 @@ async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void
       const timestamp = 1000 + turnIndex * 10;
       const calls = names.map((name, index) => ({ type: "toolCall", id: `${tag}-${turnIndex}-${index}`, name, arguments: { range: `Sheet1!A${index + 1}` } }));
       sidebar.agent.state.messages.push(
+        { role: "user", content: `${tag} ask ${turnIndex}`, timestamp: timestamp - 1 },
         { role: "assistant", content: [{ type: "text", text: `${tag} turn` }, ...calls], api: "openai-responses", provider: "openai", model: "fixture", usage, stopReason: "toolUse", timestamp },
         ...calls.map((call) => ({ role: "toolResult", toolCallId: call.id, toolName: call.name, content: [{ type: "text", text: "ok" }], isError: false, timestamp: timestamp + 1 })),
       );
@@ -196,15 +267,15 @@ async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void
   }, { tag, turns });
 }
 
-async function readGroups(page: Page): Promise<{ cards: number; groups: string[] }> {
+async function readGroups(page: Page): Promise<{ rows: number; groups: string[] }> {
   return page.evaluate(() => ({
-    cards: document.querySelectorAll("pi-sidebar tool-message").length,
-    groups: [...document.querySelectorAll(".pi-tool-group")].map((group) =>
-      `${group.querySelector(".pi-tool-group__label")?.textContent ?? ""}:${group.querySelectorAll("tool-message").length}`),
+    rows: document.querySelectorAll("pi-sidebar .pi-turn-row").length,
+    groups: [...document.querySelectorAll("pi-sidebar turn-group")].map((group) =>
+      `${group.querySelector(".pi-turn__title")?.textContent?.trim() ?? ""}:${group.querySelectorAll(".pi-turn-row").length}`),
   }));
 }
 
-void test("tool groups keep exactly their cards across tab switches", async () => {
+void test("turn groups keep exactly their rows across tab switches", async () => {
   const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-tabs" });
   const { page } = opened;
   try {
@@ -215,13 +286,12 @@ void test("tool groups keep exactly their cards across tab switches", async () =
 
     const tabs = page.locator(".pi-session-tab__main");
     const expected = {
-      A: { cards: 5, groups: ["3 reads:3", "2 edits:2"] },
-      B: { cards: 5, groups: ["4 reads:4"] },
+      A: { rows: 5, groups: ["Worked for 0s:3", "Worked for 0s:2"] },
+      B: { rows: 5, groups: ["Worked for 0s:4", "Worked for 0s:1"] },
     };
     for (let switchIndex = 0; switchIndex < 6; switchIndex++) {
       const tab = switchIndex % 2 === 0 ? "A" : "B";
       await tabs.nth(switchIndex % 2).click();
-      await page.locator(".pi-tool-group__header").first().click();
       await page.waitForTimeout(150);
       assert.deepEqual(await readGroups(page), expected[tab], `switch ${switchIndex + 1} to ${tab}`);
     }
@@ -257,24 +327,46 @@ void test("a stopped write says how far it got instead of claiming success", asy
     await page.evaluate((cases) => {
       const sidebar = document.querySelector("pi-sidebar");
       const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-      // One response per call, so finished calls of the same tool do not group.
+      // One turn per call, so each row's sentence can be read on its own.
       for (const [index, item] of cases.entries()) {
         sidebar.agent.state.messages.push(
-          { role: "assistant", content: [{ type: "toolCall", id: item.id, name: item.name, arguments: item.args }], api: "openai-responses", provider: "openai", model: "fixture", usage, stopReason: "toolUse", timestamp: 2000 + index * 10 },
-          { role: "toolResult", toolCallId: item.id, toolName: item.name, content: [{ type: "text", text: item.text }], details: item.details, isError: item.isError, timestamp: 2001 + index * 10 },
+          { role: "user", content: `stop ${index}`, timestamp: 2000 + index * 10 },
+          { role: "assistant", content: [{ type: "toolCall", id: item.id, name: item.name, arguments: item.args }], api: "openai-responses", provider: "openai", model: "fixture", usage, stopReason: "toolUse", timestamp: 2001 + index * 10 },
+          { role: "toolResult", toolCallId: item.id, toolName: item.name, content: [{ type: "text", text: item.text }], details: item.details, isError: item.isError, timestamp: 2002 + index * 10 },
         );
       }
       sidebar.syncFromAgent();
     }, cases);
     await page.waitForTimeout(200);
-    const titles = await page.locator(".pi-tool-card__title").allInnerTexts();
-    assert.deepEqual(titles.map((title) => title.replace(/\s+/g, " ").trim()), [
-      "Stopped — nothing written",
-      "Stopped Stop!A1:B40 — 20 written",
-      "Stopped — nothing written",
-      "Stopped Stop!C1:C9 — 9 written",
-      "Edit Stop!A1:B2",
+    const rows = await page.locator(".pi-turn-row[data-tool-name]").evaluateAll((items) => items.map((item) => [
+      item.querySelector(".pi-turn-row__sentence")?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+      item.querySelector(".pi-turn-row__meta")?.textContent?.trim() ?? "",
+    ].filter(Boolean).join(" | ")));
+    assert.deepEqual(rows, [
+      "Stopped | 0 cells",
+      "Stopped Stop!A1:B40 | 20 cells",
+      "Stopped | 0 cells",
+      "Stopped Stop!C1:C9 | 9 cells",
+      "Edited Stop!A1:B2",
     ]);
+  } finally {
+    await opened.finish();
+  }
+});
+
+void test("failed rows show the model's error, and successful rows keep one result fact", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    const group = page.locator('[data-gallery="turn-group"] turn-group').nth(1);
+    await group.locator(".pi-turn__header").click();
+    const failed = group.locator('.pi-turn-row[data-state="failed"]');
+    assert.equal(await failed.locator(".pi-turn-row__sentence").innerText(), "Could not fill 'Cash Flow'!D12:L12");
+    assert.equal(await failed.locator(".pi-turn-row__reason").innerText(), "Inputs!C6 no longer exists, so the formula returns #REF!.");
+    assert.equal(await failed.locator(".pi-turn-row__meta").count(), 0);
+    assert.equal(await failed.getByRole("button", { name: "Retry", exact: true }).count(), 0);
+    assert.equal(await group.locator('.pi-turn-row[data-tool-name="web_search"] .pi-turn-row__meta').innerText(), "6 results");
+    assert.equal(await group.locator('.pi-turn-row[data-tool-name="read_range"] .pi-turn-row__meta').innerText(), "54 cells");
   } finally {
     await opened.finish();
   }
@@ -287,9 +379,9 @@ void test("turn receipts render every ending and dispatch typed Review and Undo 
     const receipts = page.locator('[data-gallery="turn-changes"] .pi-turn-changes');
     await receipts.first().waitFor();
     assert.deepEqual(await receipts.evaluateAll((items) => items.map((item) => item.getAttribute("data-outcome"))), ["finished", "stopped", "failed"]);
-    assert.match(await receipts.first().innerText(), /Changed Sheet1!B2:B40, Summary!A1 · Total: 40/);
+    assert.match(await receipts.first().innerText(), /Changed 40 cells/);
     assert.match(await receipts.last().innerText(), /Some changes have no backup/);
-    for (const label of ["Review", "Undo this turn"]) {
+    for (const label of ["Review", "Undo"]) {
       const action = page.evaluate(() => new Promise((resolve) => {
         document.addEventListener("pi:turn-change-action", (event) => {
           if (!(event instanceof CustomEvent)) return;
@@ -336,10 +428,10 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     }
     // No change events arrived for the code: the warning cannot name ranges.
     assert.match(await receipts.first().innerText(), /Ran Office\.js code; not covered/);
-    assert.equal(await receipts.first().getByRole("button", { name: "Undo this turn", exact: true }).count(), 0);
-    assert.doesNotMatch(await receipts.first().innerText(), /Changed.*Total: 0/);
-    await receipts.last().getByRole("button", { name: "Undo this turn", exact: true }).click();
-    assert.match(await receipts.last().innerText(), /Changed Sheet1!D7 · Total: 1/);
+    assert.equal(await receipts.first().getByRole("button", { name: "Undo", exact: true }).count(), 0);
+    assert.doesNotMatch(await receipts.first().innerText(), /Changed 0 cells/);
+    await receipts.last().getByRole("button", { name: "Undo", exact: true }).click();
+    assert.match(await receipts.last().innerText(), /Changed 1 cell\b/);
     assert.match(await receipts.last().innerText(),
       /Office\.js code changed Sheet1!X12, 'Q3 Plan'!B2:C3, Sheet1!A1, Sheet1!A2, Sheet1!A3, Sheet1!A4 \+1; not covered by Undo this turn/);
   } finally {

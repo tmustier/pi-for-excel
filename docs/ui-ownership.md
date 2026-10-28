@@ -101,8 +101,9 @@ Steps (each a coherent commit):
    the bundle. Fenced code travels base64 (`encoding="base64"`) through the
    HTML attribute boundary.
 5. **Clean-room message layer** ✅ → `src/ui/messages/`: `message-list`,
-   `streaming-message-container`, `user-message`, `assistant-message`,
-   `tool-message`, `thinking-block`, `attachment-tile`, both renderer
+   `user-message`, `assistant-message`, `thinking-block`, `attachment-tile`
+   (the streaming container and `tool-message` were later replaced by the
+   turn group, `docs/proposals/sidebar-redesign.md` §5), both renderer
    registries, and a local standard `convertToLlm` conversion
    (`src/messages/attachments.ts` owns the attachment/artifact roles +
    `CustomAgentMessages` augmentation). Style-hook semantics folded directly
@@ -176,10 +177,9 @@ Steps (each a coherent commit):
 
 Known risk areas and how they are handled:
 
-- **Streaming re-render performance** — StreamingMessageContainer re-renders
-  the in-flight assistant message on deltas; keep the same
-  "only the last message re-renders" contract and verify with a long
-  streaming session.
+- **Streaming re-render performance** — the streamed response is passed to
+  `<message-list>` once per animation frame as a clone; only the last turn's
+  elements re-render on deltas. Verify with a long streaming session.
 - **Scroll anchoring** — preserve MessageList's pin-to-bottom behavior
   (stick when at bottom, don't yank when scrolled up).
 - **Markdown incremental rendering** — `<pi-markdown>` re-parses on each
@@ -202,9 +202,8 @@ gone from `package.json`; `hidden` is now a first-party class owned by
 
 Directions agreed for design review (mockups via ui-gallery before build-out):
 
-1. **Activity condensation** — collapse runs of tool cards into a single live
-   activity block ("Working… n steps", expandable), instead of one card per
-   tool call. Biggest transcript-density win at 350 px.
+1. **Activity condensation** ✅ — one `<turn-group>` per turn instead of one
+   card per tool call (`docs/proposals/sidebar-redesign.md` §5).
 2. **Status bar consolidation** — one summary chip opening a single popover
    (model · thinking · context · execution mode) instead of four micro-chips.
 3. **Calm empty state** — at most one banner; suggestion cards tightened;

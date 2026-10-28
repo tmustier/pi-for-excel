@@ -1,0 +1,333 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#faf9f7;--surface:#fff;--surface-2:#f1efeb;--line:#e6e3de;--line-strong:#d3cfc8;--fg:#1c1b19;--fg-2:#55524d;--fg-3:#6b6862;--accent:#1e6f55;--amber:#9a6b12;--amber-soft:#fbf3e3;--red:#b4421f;--red-soft:#f9ebe5;--sans:'IBM Plex Sans',system-ui,sans-serif;--mono:'IBM Plex Mono',ui-monospace,Menlo,monospace;--sel:#d9e9e1}
+  .dark{--bg:#171614;--surface:#1e1d1a;--surface-2:#262420;--line:#2d2b26;--line-strong:#3b3832;--fg:#ecebe7;--fg-2:#b3b0a9;--fg-3:#99958d;--accent:#5fc294;--amber:#e0b24a;--amber-soft:#2e2718;--red:#f08a66;--red-soft:#3a221a;--sel:#244237}
+  *{box-sizing:border-box;margin:0;padding:0} svg{display:block;flex:none} ::selection{background:var(--sel)}
+  body{background:#d8d5cf;font:13px var(--sans);color:var(--fg);padding:34px;display:flex;flex-wrap:wrap;gap:28px;align-items:flex-start;font-variant-numeric:tabular-nums}
+  .wrap{position:relative;flex:none}
+  .cap{position:absolute;top:-22px;left:0;font:500 11px var(--sans);color:#4a4843}
+  .pane{width:360px;height:720px;background:var(--bg);color:var(--fg);display:flex;flex-direction:column;border:1px solid #bfbbb3;overflow:hidden;position:relative}
+  .m{font-family:var(--mono);font-size:12px}
+  .ref{font-family:var(--mono);font-size:12px;white-space:nowrap}
+  .ib{width:28px;height:28px;display:grid;place-items:center;border-radius:6px;color:var(--fg-2)} .ib.on{background:var(--surface-2);color:var(--fg)}
+
+  /* header */
+  .hdr{display:flex;align-items:center;gap:4px;padding:6px 8px 6px 14px;border-bottom:1px solid var(--line);flex:none;min-height:41px}
+  .hdr .title{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .scroll{flex:1;overflow:hidden;padding:0 14px;position:relative}
+
+  /* banner */
+  .banner{display:flex;align-items:flex-start;gap:10px;padding:10px 10px 10px 14px;border-bottom:1px solid var(--line);background:var(--surface);font-size:12.5px;line-height:1.45}
+  .banner.err{background:var(--red-soft)} .banner.err .bi{color:var(--red)}
+  .banner .bi{color:var(--fg-3);margin-top:2px} .banner .bt{flex:1;color:var(--fg)} .banner .bt p{color:var(--fg-2)}
+  .banner .ba{display:flex;gap:10px;margin-top:6px} .banner .ba a{color:var(--fg);font-weight:500;text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line-strong)}
+  .banner .bx{color:var(--fg-3)}
+
+  /* popover */
+  .pop{position:absolute;background:var(--surface);border:1px solid var(--line-strong);border-radius:8px;box-shadow:0 6px 20px -6px rgba(0,0,0,.18);z-index:5;min-width:200px;padding:4px}
+  .pop .sec{padding:8px 10px 4px;font-size:11.5px;color:var(--fg-3)}
+  .pop .it{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:5px;font-size:13px;color:var(--fg)} .pop .it svg{color:var(--fg-3)} .pop .it.hl{background:var(--surface-2)}
+  .pop .it .k{margin-left:auto;color:var(--fg-3);font-size:11.5px} .pop .it .sub{margin-left:auto;color:var(--fg-3);font-size:11.5px;white-space:nowrap}
+  .pop .it .ti{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .pop .it.cmd .ti{font-family:var(--mono);font-size:12px}
+  .pop .it .desc{color:var(--fg-3);font-size:12px;margin-left:auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+  .pop hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+  .pop .it .chk{margin-left:auto;color:var(--accent)}
+  .pop .it .two{display:flex;flex-direction:column;gap:1px;min-width:0} .pop .it .two small{color:var(--fg-3);font-size:11.5px}
+
+  /* transcript bits */
+  .user{padding:9px 12px;background:var(--surface-2);border-radius:8px;line-height:1.5;margin:14px 0 16px}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}
+  .chip{display:inline-flex;align-items:center;gap:5px;padding:3px 7px 3px 5px;border-radius:5px;background:var(--surface);border:1px solid var(--line);color:var(--fg-2);font-size:12px} .chip svg{color:var(--fg-3)} .chip .m{color:var(--fg);font-size:11.5px}
+  .prose{line-height:1.55;font-size:13.5px} .prose p+p,.prose p+*{margin-top:8px} .prose code{font:400 12.5px var(--mono);background:var(--surface-2);padding:1px 3px;border-radius:3px}
+  .prose h3{font-size:13.5px;font-weight:600;margin:14px 0 4px}
+  .prose ul{padding-left:18px} .prose li+li{margin-top:3px}
+  .think{margin:12px 0}
+  .think .th{font-size:12.5px;color:var(--fg-3);display:inline-flex;align-items:center;gap:4px}
+  .think .tb{margin:6px 0 0 0;padding-left:12px;border-left:1px solid var(--line);color:var(--fg-2);font-size:12.5px;line-height:1.5}
+  .code{margin:10px 0;border:1px solid var(--line);border-radius:6px;overflow:hidden;background:var(--surface)}
+  .code .ch{display:flex;align-items:center;padding:5px 8px 5px 10px;border-bottom:1px solid var(--line);font-size:11.5px;color:var(--fg-3)} .code .ch svg{margin-left:auto;color:var(--fg-3)}
+  .code pre{padding:8px 10px;font:400 12px/1.5 var(--mono);color:var(--fg);overflow:hidden}
+  .code .kw{color:#7a3e9d} .dark .code .kw{color:#c792ea}
+  table.md{border-collapse:collapse;width:100%;font-size:12.5px;margin:10px 0}
+  table.md th{text-align:left;font-weight:500;color:var(--fg-3);padding:5px 8px;border-bottom:1px solid var(--line-strong);font-size:12px}
+  table.md td{padding:5px 8px;border-bottom:1px solid var(--line)} table.md td.n{text-align:right;font-family:var(--mono);font-size:12px}
+  .ans{display:flex;gap:4px;margin-top:8px} .ans .ib{width:24px;height:24px}
+
+  /* composer */
+  .dock{flex:none;padding:10px 12px 12px}
+  .tray{display:flex;flex-direction:column;gap:4px;padding:0 2px 8px}
+  .q{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg-2);padding:4px 6px;border-radius:6px;background:var(--surface-2)} .q svg{color:var(--fg-3)} .q .qt{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .q .ql{color:var(--fg-3);font-size:11.5px}
+  .working{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--fg-2);padding:0 4px 8px} .working .k{margin-left:auto;color:var(--fg-3);font-size:11.5px}
+  .comp{background:var(--surface);border:1px solid var(--line-strong);border-radius:10px}
+  .comp .att{display:flex;flex-wrap:wrap;gap:5px;padding:10px 10px 0}
+  .comp .ta{padding:11px 12px 6px;min-height:42px;font-size:13.5px;color:var(--fg-3);line-height:1.45} .comp .ta.typed{color:var(--fg)}
+  .comp .row{display:flex;align-items:center;gap:2px;padding:2px 6px 6px 6px;min-width:0}
+  .cchip{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 7px;border-radius:6px;color:var(--fg-2);font-size:12px;font-weight:500;white-space:nowrap;flex:none} .cchip.icon{padding:0 6px} .cchip svg{color:var(--fg-3)}
+  .cchip.model{flex:0 1 auto;min-width:0} .cchip.model .n{overflow:hidden;text-overflow:ellipsis} .cchip.warn{color:var(--amber)} .cchip.on{background:var(--surface-2);color:var(--fg)}
+  .send{margin-left:auto;width:28px;height:28px;border-radius:7px;background:var(--fg);color:var(--bg);display:grid;place-items:center;flex:none} .send.idle{background:var(--surface-2);color:var(--fg-3)} .send.stop{background:var(--surface);color:var(--fg);border:1px solid var(--line-strong)}
+  .toast{position:absolute;left:12px;right:12px;bottom:94px;background:var(--fg);color:var(--bg);padding:9px 12px;border-radius:8px;font-size:12.5px;display:flex;align-items:center;gap:10px;z-index:6} .toast a{margin-left:auto;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+
+  /* sheet (full-pane overlay) */
+  .sheet{position:absolute;inset:0;background:var(--bg);display:flex;flex-direction:column;z-index:4}
+  .sh{display:flex;align-items:center;gap:4px;padding:6px 8px 6px 8px;border-bottom:1px solid var(--line);min-height:41px}
+  .sh .title{font-weight:500;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-left:2px}
+  .sb{flex:1;overflow:hidden}
+  .sec{padding:16px 14px 6px;font-size:12px;color:var(--fg-3)}
+  .r{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line);min-height:44px}
+  .r:last-child{border-bottom:0}
+  .r .rt{flex:1;min-width:0} .r .rt b{font-weight:500;display:block} .r .rt small{display:block;color:var(--fg-3);font-size:12px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .r .rv{color:var(--fg-3);font-size:12.5px;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+  .r .rv.ok{color:var(--accent)}
+  .r.hl{background:var(--surface-2)}
+  .r svg.lead{color:var(--fg-3)}
+  .tog{width:30px;height:18px;border-radius:9px;background:var(--line-strong);position:relative;flex:none} .tog::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:var(--surface)} .tog.on{background:var(--fg)} .tog.on::after{left:14px}
+  .search{margin:12px 14px 4px;display:flex;align-items:center;gap:8px;padding:0 10px;height:34px;border:1px solid var(--line-strong);border-radius:8px;background:var(--surface);color:var(--fg-3)}
+  .search span{color:var(--fg)}
+  .btn{display:inline-flex;align-items:center;gap:5px;height:28px;font:500 12px var(--sans);line-height:1;padding:0 10px;border-radius:6px;border:1px solid var(--line-strong);background:var(--surface);color:var(--fg);white-space:nowrap}
+  .btn.primary{background:var(--fg);color:var(--bg);border-color:var(--fg)} .btn.text{border-color:transparent;background:transparent;color:var(--fg-2);padding:0 6px}
+  .btn.lg{height:36px;font-size:13px;padding:0 14px;width:100%;justify-content:center}
+  .actions{display:flex;gap:6px;justify-content:flex-end;padding:12px 14px}
+  .empty{padding:28px 14px;text-align:center;color:var(--fg-3);font-size:12.5px;line-height:1.5} .empty b{display:block;color:var(--fg);font-weight:500;margin-bottom:2px}
+  .segs{display:flex;gap:2px;margin:12px 14px 0;background:var(--surface-2);padding:2px;border-radius:7px} .segs span{flex:1;text-align:center;padding:5px 0;border-radius:5px;font-size:12.5px;color:var(--fg-2)} .segs span.on{background:var(--surface);color:var(--fg);font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.06)}
+  textarea.rules{display:block;margin:12px 14px 0;width:calc(100% - 28px);height:200px;border:1px solid var(--line-strong);border-radius:8px;padding:10px;font:13px/1.5 var(--sans);color:var(--fg-3);background:var(--surface);resize:none}
+  .hint{padding:8px 14px 0;font-size:12px;color:var(--fg-3);line-height:1.45}
+
+  /* welcome */
+  .welcome{padding:48px 24px 0;display:flex;flex-direction:column;height:100%}
+  .welcome h1{font-size:22px;font-weight:500;letter-spacing:-.01em} .welcome p{margin-top:8px;color:var(--fg-2);line-height:1.5;font-size:13.5px}
+  .welcome .prov{margin-top:28px;border-top:1px solid var(--line)}
+  .welcome .pr{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line)} .welcome .pr b{font-weight:500;display:block} .welcome .pr small{display:block;color:var(--fg-3);font-size:12px;margin-top:1px} .welcome .pr .rt{flex:1} .welcome .pr svg{color:var(--fg-3)}
+  .welcome .foot{margin-top:auto;padding:16px 0 20px;font-size:12px;color:var(--fg-3);display:flex;justify-content:space-between}
+  .welcome .foot a{text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--line-strong)}
+  @keyframes spin{to{transform:rotate(360deg)}} .spin{animation:spin 1s linear infinite}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute">
+  <symbol id="plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></symbol>
+  <symbol id="x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="back" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="chev-r" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="chev-d" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></symbol>
+  <symbol id="check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="info" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3L2 20h20L12 3z"/><path d="M12 10v4M12 17h.01"/></symbol>
+  <symbol id="clip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.4 11.05l-9.2 9.2a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.65 5.65l-9.2 9.2a2 2 0 0 1-2.83-2.83l8.5-8.5"/></symbol>
+  <symbol id="up" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></symbol>
+  <symbol id="stop" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></symbol>
+  <symbol id="range" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="1.5"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/><rect x="9" y="9" width="6" height="6" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></symbol>
+  <symbol id="copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="folder" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></symbol>
+  <symbol id="plug" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
+  <symbol id="rules" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h10M4 18h7"/></symbol>
+  <symbol id="history" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/></symbol>
+  <symbol id="backup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v6H4zM4 14h16v6H4zM8 7h.01M8 17h.01"/></symbol>
+  <symbol id="kbd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M7 10h.01M11 10h.01M15 10h.01M7 14h10"/></symbol>
+  <symbol id="sheet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M9 4v16"/></symbol>
+  <symbol id="key" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="14" r="4"/><path d="M11 11l9-9M16 6l2 2M13 9l2 2"/></symbol>
+  <symbol id="spinner" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 3a9 9 0 1 0 9 9"/></symbol>
+</svg>
+<script>
+const I=(id,s=14,cls='')=>`<svg class="${cls}" width="${s}" height="${s}"><use href="#${id}"/></svg>`;
+const hdr=(title,menuOn)=>`<div class="hdr"><span class="title">${title}</span><span class="ib">${I('plus',15)}</span><span class="ib ${menuOn?'on':''}">${I('menu',15)}</span></div>`;
+const compRow=(opts={})=>`<div class="row">
+  <span class="cchip icon">${I('clip',14)}</span>
+  <span class="cchip model"><span class="n">GPT-6.1 Sol</span>${I('chev-d',11)}</span>
+  <span class="cchip ${opts.hl==='high'?'on':''}">High</span>
+  <span class="cchip ${opts.hl==='mode'?'on':''}">${opts.mode||'Auto'}</span>
+  ${opts.ctx?`<span class="cchip warn">Context ${opts.ctx}</span>`:''}
+  <span class="send ${opts.send||'idle'}">${I(opts.send==='stop'?'stop':'up',opts.send==='stop'?12:14)}</span></div>`;
+const comp=(ph,opts={})=>`<div class="comp">${opts.att?`<div class="att">${opts.att}</div>`:''}<div class="ta ${opts.typed?'typed':''}">${ph}</div>${compRow(opts)}</div>`;
+const chip=(icon,txt)=>`<span class="chip">${I(icon,12)}<span class="m">${txt}</span></span>`;
+const sheet=(title,body,opts={})=>`<div class="sheet ${opts.cls||''}"><div class="sh">${opts.back?`<span class="ib">${I('back',16)}</span>`:''}<span class="title">${title}</span>${opts.action||''}<span class="ib">${I('x',15)}</span></div><div class="sb">${body}</div></div>`;
+const row=(o)=>`<div class="r ${o.cls||''}">${o.icon?I(o.icon,15,'lead'):''}<span class="rt"><b>${o.t}</b>${o.s?`<small>${o.s}</small>`:''}</span>${o.v!==undefined?`<span class="rv ${o.vcls||''}">${o.v}</span>`:''}${o.tog!==undefined?`<span class="tog ${o.tog?'on':''}"></span>`:''}${o.chev?I('chev-r',14,'lead'):''}</div>`;
+const sec=t=>`<div class="sec">${t}</div>`;
+const userMsg=(t,chips)=>`<div class="user">${t}${chips?`<div class="chips">${chips}</div>`:''}</div>`;
+const pane=(cap,html,cls='')=>`<div class="wrap"><div class="cap">${cap}</div><div class="pane ${cls}">${html}</div></div>`;
+
+const P=[];
+
+/* 1 header menu */
+P.push(pane('1  Menu', hdr('Fill Q3 cash flow',true)+`<div class="scroll">${userMsg("Fill the Q3 rows from the Inputs sheet and flag anything that doesn't reconcile.")}
+<div class="pop" style="top:6px;right:8px;width:236px">
+  <div class="sec">Recent chats</div>
+  <div class="it hl">${I('check',13)}<span class="ti">Fill Q3 cash flow</span><span class="sub">now</span></div>
+  <div class="it"><span style="width:13px"></span><span class="ti">Reconcile P&amp;L to Summary</span><span class="sub">2h</span></div>
+  <div class="it"><span style="width:13px"></span><span class="ti">Explain this workbook</span><span class="sub">Mon</span></div>
+  <div class="it">${I('history',14)}<span class="ti">All chats</span><span class="k">⌘⇧O</span></div>
+  <hr>
+  <div class="it">${I('folder',14)}<span class="ti">Files</span></div>
+  <div class="it">${I('plug',14)}<span class="ti">Connections</span></div>
+  <div class="it">${I('rules',14)}<span class="ti">Rules</span></div>
+  <div class="it">${I('backup',14)}<span class="ti">Backups</span></div>
+  <hr>
+  <div class="it">${I('gear',14)}<span class="ti">Settings</span><span class="k">⌘,</span></div>
+  <div class="it">${I('kbd',14)}<span class="ti">Keyboard shortcuts</span></div>
+</div></div>
+<div class="dock">${comp('Ask about this workbook')}</div>`));
+
+/* 2 shell under load: banner, queue, attachments, toast */
+P.push(pane('2  Banner, queue, attachments, toast', hdr('Fill Q3 cash flow')+`
+<div class="banner">${I('info',14,'bi')}<span class="bt">Pi can search the web and use the connections you add.<div class="ba"><a>Got it</a><a>Review in Settings</a></div></span><span class="bx">${I('x',13)}</span></div>
+<div class="scroll">${userMsg("Fill the Q3 rows from the Inputs sheet and flag anything that doesn't reconcile.",chip('range',"'Cash Flow'!D10:L15")+chip('doc','assumptions.md'))}
+<div class="prose"><p>Inputs has monthly values in <code>Inputs!C4:K9</code>. I'll fill rows 10–15 with formulas, then check the totals against Summary.</p></div>
+<div class="toast">Closed “Explain this workbook”<a>Undo</a></div>
+</div>
+<div class="dock">
+  <div class="tray">
+    <div class="q">${I('clock',12)}<span class="qt">Then format the new rows to match row 9</span><span class="ql">queued</span>${I('x',12)}</div>
+  </div>
+  <div class="working">${I('spinner',12,'spin')}Filling <span class="ref">'Cash Flow'!D13:L13</span><span class="k">Esc to stop</span></div>
+  ${comp('Steer, or queue a follow-up',{send:'stop',att:chip('doc','q3-actuals.csv')})}
+</div>`));
+
+/* 3 slash menu */
+P.push(pane('3  Command menu', hdr('New chat')+`<div class="scroll">
+<div class="pop" style="left:12px;right:12px;bottom:12px;top:auto;position:absolute">
+  <div class="it cmd hl"><span class="ti">/new</span><span class="desc">New chat</span></div>
+  <div class="it cmd"><span class="ti">/resume</span><span class="desc">Open a previous chat</span></div>
+  <div class="it cmd"><span class="ti">/compact</span><span class="desc">Summarise older messages</span></div>
+  <div class="it cmd"><span class="ti">/copy</span><span class="desc">Copy last answer</span></div>
+  <div class="it cmd"><span class="ti">/export</span><span class="desc">Export transcript as JSON</span></div>
+  <div class="it cmd"><span class="ti">/name</span><span class="desc">Rename this chat</span></div>
+  <div class="it cmd"><span class="ti">/backup</span><span class="desc">Back up the workbook</span></div>
+  <div class="it cmd"><span class="ti">/revert</span><span class="desc">Restore a backup</span></div>
+</div></div>
+<div class="dock">${comp('/',{typed:true})}</div>`));
+
+/* 3b thinking popover */
+P.push(pane('3b  Thinking menu', hdr('New chat')+`<div class="scroll">
+<div class="pop" style="left:84px;bottom:12px;top:auto;position:absolute;width:210px">
+  <div class="sec">Thinking</div>
+  <div class="it"><span class="ti">Min</span></div>
+  <div class="it"><span class="ti">Low</span></div>
+  <div class="it"><span class="ti">Medium</span></div>
+  <div class="it hl"><span class="ti">High</span><span class="chk">${I('check',13)}</span></div>
+  <div class="it"><span class="ti">Extra high</span></div>
+  <div class="it"><span class="ti">Max</span></div>
+  <hr><div class="sec" style="padding-top:2px">Higher is slower and more thorough. ⌃⌥T cycles.</div>
+</div></div>
+<div class="dock">${comp('Ask about this workbook',{hl:'high'})}</div>`));
+
+/* 3c mode popover */
+P.push(pane('3c  Workbook changes menu', hdr('New chat')+`<div class="scroll">
+<div class="pop" style="left:112px;bottom:12px;top:auto;position:absolute;width:236px">
+  <div class="sec">Workbook changes</div>
+  <div class="it hl"><span class="two"><span>Auto</span><small>Applies changes without asking</small></span><span class="chk">${I('check',13)}</span></div>
+  <div class="it"><span class="two"><span>Confirm</span><small>Asks before each change</small></span></div>
+</div></div>
+<div class="dock">${comp('Ask about this workbook',{hl:'mode'})}</div>`));
+
+/* 4 settings sheet */
+P.push(pane('4  Settings (full-pane sheet)', hdr('New chat')+sheet('Settings',`
+${sec('Models')}
+${row({t:'Providers',s:'Anthropic, OpenAI, Gemini and 4 more',v:'4 connected',chev:true})}
+${row({t:'Custom gateway',s:'OpenAI-compatible endpoint',v:'Off',chev:true})}
+${row({t:'Proxy',s:'Route API calls through a helper',v:'Off',chev:true})}
+${sec('Behaviour')}
+${row({t:'Workbook changes',s:'Auto applies without asking',v:'Auto',chev:true})}
+${row({t:'Anthropic subscription warning',s:'Once per session for Pro and Max sign-in',tog:true})}
+${row({t:'Theme',v:'Follow Office',chev:true})}
+${row({t:'Language',v:'English',chev:true})}
+${sec('Rules and data')}
+${row({t:'Rules',s:'Guidance Pi follows in every chat',chev:true})}
+${row({t:'Files',s:'49 files, 389 KB',chev:true})}
+${row({t:'Backups',s:'Full-workbook backups for this file',chev:true})}
+${sec('About')}
+${row({t:'Pi for Excel',v:'0.12.0',vcls:''})}
+`)));
+
+/* 5 model picker sheet */
+P.push(pane('5  Model (sheet with search)', hdr('New chat')+sheet('Model',`
+<div class="search">${I('search',14)}<span></span>Search models</div>
+${sec('Recent')}
+${row({cls:'hl',t:'GPT-6.1 Sol',s:'openai-codex, 500k context',v:I('check',14),vcls:'ok'})}
+${row({t:'Claude Opus 5.5',s:'anthropic, 1M context'})}
+${sec('Anthropic')}
+${row({t:'Claude Fable 5.1',s:'1M context'})}
+${row({t:'Claude Sonnet 5.5',s:'1M context'})}
+${row({t:'Claude Opus 5.5',s:'1M context'})}
+${sec('OpenAI')}
+${row({t:'GPT-6.1 Sol',s:'500k context'})}
+${row({t:'GPT-6 Astra',s:'400k context'})}
+${sec('OpenRouter')}
+${row({t:'unbiased/pareto-26.10',s:'1M context'})}
+`,{action:`<span class="btn text">Providers</span>`})));
+
+/* 6 all chats sheet */
+P.push(pane('6  All chats', hdr('New chat')+sheet('Chats',`
+<div class="search">${I('search',14)}Search chats</div>
+${sec('This workbook')}
+${row({t:'Fill Q3 cash flow',s:'12 messages, changed 45 cells',v:'now'})}
+${row({t:'Reconcile P&amp;L to Summary',s:'8 messages',v:'2h'})}
+${row({t:'Explain this workbook',s:'3 messages',v:'Mon'})}
+${sec('Other workbooks')}
+${row({t:'Clean supplier list',s:'Suppliers 2026.xlsx',v:'Fri'})}
+${row({t:'Build hiring model',s:'Headcount plan.xlsx',v:'Oct 14'})}
+${row({t:'Format pricing table',s:'Pricing v3.xlsx',v:'Oct 9'})}
+`,{back:false,action:`<span class="btn text">Edit</span>`})));
+
+/* 7 rules sheet */
+P.push(pane('7  Rules', hdr('New chat')+sheet('Rules',`
+<div class="segs"><span class="on">All my files</span><span>This workbook</span><span>Formats</span></div>
+<div class="hint">Guidance Pi follows in every chat. Pi can also add to these when you tell it a preference, for example “always use EUR”.</div>
+<textarea class="rules">Your preferences and habits, e.g.
+• Always use EUR for currencies
+• Format dates as dd-mmm-yyyy
+• Check circular references after writes</textarea>
+<div class="hint" style="text-align:right">0 / 2,000</div>
+<div class="actions"><span class="btn text">Cancel</span><span class="btn primary">Save</span></div>
+`,{back:true})));
+
+/* 8 welcome */
+P.push(pane('8  First run', `<div class="welcome">
+<h1>Pi for Excel</h1>
+<p>An agent that reads your spreadsheet, makes changes and does the research, using models you already have.</p>
+<div class="prov">
+  <div class="pr"><span class="rt"><b>Anthropic</b><small>Claude Pro or Max, or an API key</small></span>${I('chev-r',14)}</div>
+  <div class="pr"><span class="rt"><b>OpenAI</b><small>ChatGPT Plus or Pro, or an API key</small></span>${I('chev-r',14)}</div>
+  <div class="pr"><span class="rt"><b>Google Gemini</b><small>API key</small></span>${I('chev-r',14)}</div>
+  <div class="pr"><span class="rt"><b>Other providers</b><small>DeepSeek, Mistral, Groq, xAI, OpenRouter</small></span>${I('chev-r',14)}</div>
+  <div class="pr"><span class="rt"><b>Custom gateway</b><small>Any OpenAI-compatible endpoint</small></span>${I('chev-r',14)}</div>
+</div>
+<div class="foot"><a>Having trouble signing in?</a><a>English</a></div>
+</div>`));
+
+/* 9 transcript content */
+P.push(pane('9  Thinking, answer, table, code', hdr('Summarise Sheet1')+`<div class="scroll">
+${userMsg("Summarise the three blocks on Sheet1 and give me the formula for Q1.")}
+<div class="think"><span class="th">Thought for 3s ${I('chev-d',12)}</span><div class="tb">Three blocks: monthly totals in B2:D13, a quarterly roll-up in F2:G5, and a notes column. Q1 is the sum of the first three months.</div></div>
+<div class="prose"><p>All three blocks hold monthly totals. Q1 is highest at <strong>412,000</strong>.</p>
+<table class="md"><tr><th>Quarter</th><th style="text-align:right">Total</th></tr><tr><td>Q1</td><td class="n">412,000</td></tr><tr><td>Q2</td><td class="n">388,500</td></tr><tr><td>Q3</td><td class="n">401,200</td></tr></table>
+<p>The Q1 total in <code>G2</code> is:</p></div>
+<div class="code"><div class="ch">formula ${I('copy',13)}</div><pre><span class="kw">=SUM</span>(B2:B4)</pre></div>
+<div class="ans"><span class="btn text" style="margin-left:-6px">${I('copy',12)}Copy answer</span></div>
+</div>
+<div class="dock">${comp('Ask about this workbook',{ctx:'71%'})}</div>`));
+
+/* 10 dark settings */
+P.push(pane('10  Dark', hdr('New chat')+sheet('Settings',`
+${sec('Models')}
+${row({t:'Providers',s:'Anthropic, OpenAI, Gemini and 4 more',v:'4 connected',chev:true})}
+${row({t:'Custom gateway',s:'OpenAI-compatible endpoint',v:'Off',chev:true})}
+${sec('Behaviour')}
+${row({t:'Workbook changes',s:'Auto applies without asking',v:'Auto',chev:true})}
+${row({t:'Anthropic subscription warning',s:'Once per session for Pro and Max sign-in',tog:true})}
+${row({t:'Theme',v:'Dark',chev:true})}
+${row({t:'Language',v:'English',chev:true})}
+${sec('Rules and data')}
+${row({t:'Rules',s:'Guidance Pi follows in every chat',chev:true})}
+${row({t:'Files',s:'49 files, 389 KB',chev:true})}
+`),'dark'));
+
+const params=new URLSearchParams(location.search); const only=params.get('only');
+const idx=only?only.split(',').map(Number):P.map((_,i)=>i+1);
+document.body.innerHTML+=idx.map(i=>P[i-1]).join('');
+if(params.get('zoom')) document.body.style.zoom=params.get('zoom');
+</script></body></html>

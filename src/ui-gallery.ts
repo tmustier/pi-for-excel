@@ -7,7 +7,7 @@
  * Access at: http://localhost:3141/src/ui-gallery.html
  *
  * Each section has a data-gallery attribute for targeted screenshots:
- *   agent-browser screenshot --selector '[data-gallery="tool-cards"]'
+ *   agent-browser screenshot --selector '[data-gallery="turn-group"]'
  */
 
 // Boot with the same CSS + patches as the real taskpane.
@@ -17,10 +17,15 @@ import "./boot.js";
 // Register web components we render
 import "./ui/register-components.js";
 
+import { requestApproval } from "./ui/approval-dialog.js";
 import { createBanner } from "./ui/banner.js";
+import { humanizeToolInput } from "./ui/humanize-params.js";
+import { describePendingToolCall } from "./ui/tool-renderers.js";
 import { createCopyableCommand } from "./ui/command-copy.js";
 import { mountTranscriptHarness } from "./ui-gallery-transcript.js";
-import { escapeHtml, setSafeInnerHTML } from "./utils/html.js";
+import { setSafeInnerHTML } from "./utils/html.js";
+import type { AgentMessage } from "@earendil-works/pi-agent-core";
+import type { JsonObject } from "@earendil-works/pi-ai";
 import type { TurnChangesMessage } from "./messages/turn-changes.js";
 
 const galleryRoot = document.getElementById("gallery-root");
@@ -124,45 +129,118 @@ fileItemSection.appendChild(createMockFileItem("cache-observability-baselines.md
 fileItemSection.appendChild(createMockFileItem("context-management-policy.md", "Pi documentation · 12.0 KB", "Read only"));
 fileItemSection.appendChild(createMockFileItem("quarterly-report.xlsx", "1.2 MB · Uploaded · 2h ago"));
 
-/* ── 3. Tool Cards ───────────────────────────────────── */
+/* ── 3. Turn group ───────────────────────────────────── */
+// One card per turn: the real <message-list> fed with fixture messages,
+// so the gallery exercises turn-model.ts and <turn-group> as shipped.
 
-const toolCardSection = section("tool-cards", "Tool Cards");
+const turnSection = section("turn-group", "Turn group");
 
-function createMockToolCard(state: string, action: string, detail: string): HTMLDivElement {
-  const card = document.createElement("div");
-  card.className = "pi-tool-card";
-  card.setAttribute("data-state", state);
-  card.setAttribute("data-tool-name", "fill_formula");
+const fixtureUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
+const fixtureMeta = { api: "openai-responses", provider: "openai", model: "gallery", usage: fixtureUsage } as const;
 
-  const header = document.createElement("div");
-  header.className = "pi-tool-card__header";
-
-  const toggle = document.createElement("div");
-  toggle.className = "pi-tool-card__toggle pi-tool-card__toggle--static";
-
-  const main = document.createElement("span");
-  main.className = "pi-tool-card__toggle-main";
-
-  const title = document.createElement("span");
-  title.className = "pi-tool-card__title";
-  setSafeInnerHTML(
-    title,
-    `<strong>${escapeHtml(action)}</strong> <span class="pi-tool-card__detail-text">${escapeHtml(detail)}</span>`,
-    "UI gallery mock tool-card markup with escaped demo labels",
-  );
-
-  main.appendChild(title);
-  toggle.appendChild(main);
-  header.appendChild(toggle);
-  card.appendChild(header);
-
-  return card;
+interface FixtureCall {
+  id: string;
+  name: string;
+  args: JsonObject;
+  result?: { text: string; details?: JsonObject; isError?: boolean };
 }
 
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D10:L10 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D13:L13 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("complete", "Filled", "'Cash Flow'!D14:L14 — 9 changes"));
-toolCardSection.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — error"));
+function fixtureTurn(tag: string, options: {
+  lead?: string;
+  calls: FixtureCall[];
+  answer?: string;
+  stopReason?: "stop" | "toolUse" | "aborted";
+  changes?: TurnChangesMessage["changes"];
+}): AgentMessage[] {
+  const base = options.answer ? 1_000 : Date.now() - 23_000;
+  const calls = options.calls.map((call) => ({ type: "toolCall" as const, id: `${tag}-${call.id}`, name: call.name, arguments: call.args }));
+  const messages: AgentMessage[] = [
+    { role: "user", content: "Fill the Q3 rows from the Inputs sheet and flag anything that doesn't reconcile.", timestamp: base },
+    {
+      role: "assistant",
+      content: [...(options.lead ? [{ type: "text" as const, text: options.lead }] : []), ...calls],
+      ...fixtureMeta, stopReason: options.answer ? "toolUse" : options.stopReason ?? "toolUse", timestamp: base + 1,
+    },
+    ...options.calls.flatMap((call, index): AgentMessage[] => call.result ? [{
+      role: "toolResult", toolCallId: `${tag}-${call.id}`, toolName: call.name,
+      content: [{ type: "text", text: call.result.text }], ...(call.result.details === undefined ? {} : { details: call.result.details }),
+      isError: call.result.isError ?? false, timestamp: base + 2_000 + index * 1_500,
+    }] : []),
+  ];
+  if (options.answer) {
+    messages.push({ role: "assistant", content: [{ type: "text", text: options.answer }], ...fixtureMeta, stopReason: "stop", timestamp: base + 8_200 });
+  }
+  if (options.changes) {
+    messages.push({ role: "turnChanges", turnId: `${tag}-turn`, timestamp: base + 8_300, outcome: "finished", changes: options.changes });
+  }
+  return messages;
+}
+
+const fillResult = (address: string, count: number) => ({
+  text: `Filled **${address}** — ${count} changed`,
+  details: { kind: "fill_formula", blocked: false, address, changes: { changedCount: count, truncated: false, sample: [
+    { address: address.replace(/:.*$/u, ""), beforeValue: "125,000", afterValue: "130,000", beforeFormula: "=C19+C24", afterFormula: "=Inputs!C4" },
+  ] } },
+});
+const readResult = (address: string, rows: number, cols: number) => ({ text: `**${address}** (${rows}×${cols})\n\n| | A | B |\n| --- | --- | --- |\n| 1 | Jan | 130 |` });
+
+const turnFixtures: Array<[string, AgentMessage[]]> = [
+  ["Working (live rows)", fixtureTurn("live", {
+    lead: "Inputs has monthly values in `Inputs!C4:K9`. I'll fill rows 10–15 with formulas, then check the totals.",
+    calls: [
+      { id: "r1", name: "read_range", args: { range: "Inputs!C4:K9" }, result: readResult("Inputs!C4:K9", 6, 9) },
+      { id: "f1", name: "fill_formula", args: { range: "'Cash Flow'!D10:L10", formula: "=Inputs!C4" }, result: fillResult("'Cash Flow'!D10:L10", 9) },
+      { id: "f2", name: "fill_formula", args: { range: "'Cash Flow'!D11:L11", formula: "=Inputs!C5" } },
+    ],
+  })],
+  ["Failed step, then recovery", fixtureTurn("fail", {
+    calls: [
+      { id: "r1", name: "read_range", args: { range: "Inputs!C4:K9" }, result: readResult("Inputs!C4:K9", 6, 9) },
+      { id: "f1", name: "fill_formula", args: { range: "'Cash Flow'!D12:L12", formula: "=Inputs!C6" },
+        result: { text: "Error: Inputs!C6 no longer exists, so the formula returns #REF!.", isError: true } },
+      { id: "f2", name: "fill_formula", args: { range: "'Cash Flow'!D12:L12", formula: "=Inputs!C7" }, result: fillResult("'Cash Flow'!D12:L12", 9) },
+      { id: "p1", name: "python_transform_range", args: { range: "'Cash Flow'!D10:L15", code: "df.sum()" },
+        result: { text: "Written to **Summary!B2:B7**", details: { kind: "python_transform_range", blocked: false, outputAddress: "Summary!B2:B7", changes: { changedCount: 6, truncated: false, sample: [] } } } },
+      { id: "w1", name: "web_search", args: { query: "UK CPI Q3 2026" },
+        result: { text: "1. ONS: CPI rose 3.1%", details: { kind: "web_search", ok: true, provider: "brave", query: "UK CPI Q3 2026", sentQuery: "UK CPI Q3 2026", maxResults: 10, resultCount: 6 } } },
+    ],
+    answer: "Filled rows 10–15. Five rows reconcile to Summary. **Row 12 (Opex)** returned `#REF!` because `Inputs!C6` was deleted, so I used C7 instead.",
+    changes: [{ address: "'Cash Flow'!D10:L15", changedCount: 54, backupIds: ["gallery-backup-1"] }, { address: "Summary!B2:B7", changedCount: 6, backupIds: ["gallery-backup-2"] }],
+  })],
+];
+
+turnFixtures.push(["Waiting for approval", fixtureTurn("approve", {
+  calls: [
+    { id: "f1", name: "fill_formula", args: { range: "'Cash Flow'!D10:L15", formula: "=Inputs!C4" }, result: fillResult("'Cash Flow'!D10:L15", 54) },
+    { id: "d1", name: "modify_structure", args: { action: "delete_rows", sheet: "Summary", start_row: 40, count: 13 } },
+  ],
+})]);
+
+for (const [label, messages] of turnFixtures) {
+  const caption = document.createElement("div");
+  caption.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 12px 0 4px;";
+  caption.textContent = label;
+  const list = document.createElement("message-list");
+  list.messages = messages;
+  list.isStreaming = label.startsWith("Working") || label.startsWith("Waiting");
+  list.pendingToolCalls = new Set(["live-f2", "approve-d1"]);
+  turnSection.append(caption, list);
+}
+
+// The approval row: the question is asked in the pending call's row.
+const approvalAbort = new AbortController();
+const approvalParams = { action: "delete_rows", sheet: "Summary", start_row: 40, count: 13 };
+const approvalDetails = humanizeToolInput("modify_structure", approvalParams);
+void requestApproval({
+  title: "Allow this change to the workbook?",
+  toolCallId: "approve-d1",
+  headline: describePendingToolCall("modify_structure", approvalParams) ?? "Delete rows",
+  ...(approvalDetails ? { details: approvalDetails } : {}),
+  note: "Confirm mode: Pi asks before each change to the workbook.",
+  confirmLabel: "Delete",
+  allowForTurn: true,
+  signal: approvalAbort.signal,
+}).then((approved) => { console.log(`[ui-gallery] approval answered: ${approved}`); });
 
 const commandCopyWrap = document.createElement("div");
 commandCopyWrap.style.cssText = "margin-top: 12px; display: flex; flex-direction: column; gap: 8px;";
@@ -170,52 +248,7 @@ commandCopyWrap.append(
   createCopyableCommand("npx pi-for-excel-proxy"),
   createCopyableCommand("npx pi-for-excel-python-bridge"),
 );
-toolCardSection.appendChild(commandCopyWrap);
-
-/* ── 4. Tool Card Group ──────────────────────────────── */
-
-const groupSection = section("tool-groups", "Grouped Tool Cards");
-
-const group = document.createElement("div");
-group.className = "pi-tool-group";
-
-// Real groups always carry a header (rendered by <assistant-message>).
-const groupHeader = document.createElement("button");
-groupHeader.type = "button";
-groupHeader.className = "pi-tool-group__header";
-groupHeader.setAttribute("aria-expanded", "true");
-const groupChevron = document.createElement("span");
-groupChevron.className = "pi-tool-group__chevron";
-groupChevron.textContent = "▸";
-const groupLabel = document.createElement("span");
-groupLabel.className = "pi-tool-group__label";
-groupLabel.textContent = "5 fill operations";
-groupHeader.append(groupChevron, groupLabel);
-groupHeader.addEventListener("click", () => {
-  const collapsed = group.classList.toggle("pi-tool-group--collapsed");
-  groupHeader.setAttribute("aria-expanded", collapsed ? "false" : "true");
-  // Shipped CSS hides direct-child <tool-message>; the gallery uses div
-  // stand-ins, so mirror the collapse manually.
-  for (const child of group.children) {
-    if (child !== groupHeader) {
-      (child instanceof HTMLElement ? child : null)?.style.setProperty(
-        "display",
-        collapsed ? "none" : "",
-      );
-    }
-  }
-});
-group.appendChild(groupHeader);
-
-for (let i = 10; i <= 14; i++) {
-  // Simulate tool-message wrapping — grouped-card CSS matches any
-  // descendant .pi-tool-card, so a plain div stands in for <tool-message>.
-  const wrapper = document.createElement("div");
-  const card = createMockToolCard("complete", "Filled", `'Cash Flow'!D${i}:L${i} — 9 changes`);
-  wrapper.appendChild(card);
-  group.appendChild(wrapper);
-}
-groupSection.appendChild(group);
+turnSection.appendChild(commandCopyWrap);
 
 /* ── 5. Changes Diff Table ───────────────────────────── */
 
@@ -422,215 +455,6 @@ answer.message = {
   stopReason: "stop", timestamp: 1,
 };
 answerSection.append(answer);
-
-/* ── 10. Activity Block (Phase 2 proposal — mockup only) ─ */
-// Condenses a run of tool calls between assistant messages into one
-// collapsible block. Proposal CSS lives in this <style> tag until the
-// direction is approved; it is NOT shipped in the taskpane bundle.
-
-const activitySection = section("activity-block", "Activity Block (Phase 2 proposal)");
-
-const activityStyles = document.createElement("style");
-activityStyles.textContent = `
-  /* Proposal: pi-activity — condensed tool-run block (mockup only) */
-  .pi-activity {
-    border: var(--pill-green-border);
-    background: var(--pill-green-bg);
-    border-radius: var(--pill-radius);
-    box-shadow: var(--pill-shadow);
-    overflow: hidden;
-    margin-bottom: 12px;
-  }
-  .pi-activity--working {
-    border: var(--pill-border);
-    background: var(--pill-bg);
-  }
-  .pi-activity__header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: var(--pill-padding-y) var(--pill-padding-x);
-    border: none;
-    background: none;
-    cursor: pointer;
-    font-family: var(--font-sans);
-    font-size: var(--text-base);
-    color: var(--muted-foreground);
-    text-align: left;
-    transition: color var(--duration-fast);
-  }
-  .pi-activity__header:hover { color: var(--foreground); }
-  .pi-activity__chevron {
-    font-size: var(--text-sm);
-    opacity: 0.55;
-    flex-shrink: 0;
-    width: 12px;
-    transition: transform var(--duration-fast);
-  }
-  .pi-activity__header:hover .pi-activity__chevron { opacity: 1; }
-  .pi-activity--open .pi-activity__chevron { transform: rotate(90deg); }
-  .pi-activity__summary {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .pi-activity__count {
-    margin-left: auto;
-    flex-shrink: 0;
-    font-size: var(--text-sm);
-    opacity: 0.7;
-  }
-  .pi-activity__count em {
-    font-style: normal;
-    color: var(--destructive);
-  }
-  .pi-activity__steps {
-    border-top: 1px solid var(--green-alpha-12);
-    padding: 4px 0 6px;
-  }
-  .pi-activity__step {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    padding: 3px var(--pill-padding-x);
-    border: none;
-    background: none;
-    cursor: pointer;
-    text-align: left;
-    font-family: var(--font-sans);
-    font-size: var(--text-sm);
-    color: var(--muted-foreground);
-  }
-  .pi-activity__step:hover { color: var(--foreground); }
-  .pi-activity__step-status {
-    flex-shrink: 0;
-    width: 12px;
-    font-size: var(--text-xs);
-    color: var(--pi-green);
-    opacity: 0.8;
-  }
-  .pi-activity__step-status--error { color: var(--destructive); }
-  .pi-activity__step-label {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .pi-activity__step-label strong { font-weight: 400; }
-  .pi-activity__step-detail { opacity: 0.7; }
-  .pi-activity__step--error .pi-activity__step-label { color: var(--destructive); }
-  .pi-activity__drilldown {
-    padding: 2px var(--pill-padding-x) 8px calc(var(--pill-padding-x) + 20px);
-  }
-`;
-activitySection.appendChild(activityStyles);
-
-const activityNote = document.createElement("p");
-activityNote.style.cssText = "font-size: 11px; color: var(--muted-foreground); margin: 0 0 12px;";
-activityNote.textContent =
-  "Proposal: one block per tool run instead of one card per call. States: live (working), collapsed (default when done), expanded with drill-in.";
-activitySection.appendChild(activityNote);
-
-type MockStep = { verb: string; detail: string; error?: boolean };
-
-const mockSteps: MockStep[] = [
-  { verb: "Read", detail: "'Cash Flow'!A1:N40" },
-  { verb: "Filled", detail: "'Cash Flow'!D10:L10 — 9 changes" },
-  { verb: "Filled", detail: "'Cash Flow'!D13:L13 — 9 changes" },
-  { verb: "Fill", detail: "'Cash Flow'!D15:L15 — #REF! error", error: true },
-  { verb: "Formatted", detail: "'Cash Flow'!D10:L15 — currency" },
-];
-
-function createActivityBlock(state: "working" | "collapsed" | "open"): HTMLDivElement {
-  const block = document.createElement("div");
-  block.className =
-    state === "working"
-      ? "pi-activity pi-activity--working"
-      : state === "open"
-        ? "pi-activity pi-activity--open"
-        : "pi-activity";
-
-  const header = document.createElement("button");
-  header.type = "button";
-  header.className = "pi-activity__header";
-
-  if (state === "working") {
-    const label = document.createElement("span");
-    // Reuses the real thinking-block shimmer + spinner affordance.
-    label.className = "pi-thinking-label--streaming pi-activity__summary";
-    label.textContent = "Working — formatting 'Cash Flow'!D10:L15";
-    const count = document.createElement("span");
-    count.className = "pi-activity__count";
-    count.textContent = "step 5";
-    header.append(label, count);
-  } else {
-    const chevron = document.createElement("span");
-    chevron.className = "pi-activity__chevron";
-    chevron.textContent = "▸";
-    const summary = document.createElement("span");
-    summary.className = "pi-activity__summary";
-    summary.textContent = "Worked for 8s";
-    const count = document.createElement("span");
-    count.className = "pi-activity__count";
-    setSafeInnerHTML(
-      count,
-      `5 steps · <em>1 issue</em>`,
-      "UI gallery mock activity count with static demo markup",
-    );
-    header.append(chevron, summary, count);
-  }
-  block.appendChild(header);
-
-  if (state === "open") {
-    const steps = document.createElement("div");
-    steps.className = "pi-activity__steps";
-    mockSteps.forEach((step, i) => {
-      const row = document.createElement("button");
-      row.type = "button";
-      row.className = step.error ? "pi-activity__step pi-activity__step--error" : "pi-activity__step";
-      const status = document.createElement("span");
-      status.className = step.error
-        ? "pi-activity__step-status pi-activity__step-status--error"
-        : "pi-activity__step-status";
-      status.textContent = step.error ? "✕" : "✓";
-      const label = document.createElement("span");
-      label.className = "pi-activity__step-label";
-      setSafeInnerHTML(
-        label,
-        `<strong>${escapeHtml(step.verb)}</strong> <span class="pi-activity__step-detail">${escapeHtml(step.detail)}</span>`,
-        "UI gallery mock activity step with escaped demo labels",
-      );
-      row.append(status, label);
-      steps.appendChild(row);
-
-      // Demonstrate drill-in: the error step expands to its full tool card.
-      if (i === 3) {
-        const drilldown = document.createElement("div");
-        drilldown.className = "pi-activity__drilldown";
-        drilldown.appendChild(createMockToolCard("error", "Fill", "'Cash Flow'!D15:L15 — #REF! error"));
-        steps.appendChild(drilldown);
-      }
-    });
-    block.appendChild(steps);
-  }
-
-  return block;
-}
-
-for (const [label, state] of [
-  ["Live (streaming)", "working"],
-  ["Done — collapsed (default)", "collapsed"],
-  ["Done — expanded with drill-in", "open"],
-] as const) {
-  const caption = document.createElement("div");
-  caption.style.cssText = "font-size: 10px; color: var(--muted-foreground); margin: 0 0 4px; opacity: 0.8;";
-  caption.textContent = label;
-  activitySection.appendChild(caption);
-  activitySection.appendChild(createActivityBlock(state));
-}
 
 /* ── 11. Live turn (real sidebar + Agent, scripted stream) ─ */
 

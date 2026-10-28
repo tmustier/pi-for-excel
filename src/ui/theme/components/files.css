@@ -281,7 +281,7 @@
   color: var(--muted-foreground);
   opacity: 0;
   transition: opacity var(--duration-fast);
-  font-weight: 300;
+  font-weight: 400;
 }
 
 .pi-files-item:hover .pi-files-item__arrow {

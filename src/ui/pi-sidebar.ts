@@ -2,16 +2,15 @@
  * Pi for Excel — Sidebar layout component.
  *
  * Replaces pi-web-ui's ChatPanel + AgentInterface with a purpose-built
- * layout for the ~350px Excel sidebar. Reuses pi-web-ui's content
- * components (message-list, streaming-message-container) for rendering.
+ * layout for the ~350px Excel sidebar. Uses the first-party transcript
+ * components (message-list, turn-group) for rendering.
  */
 
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
 import type { Agent, AgentEvent, AgentMessage } from "@earendil-works/pi-agent-core";
-import type { ToolResultMessage } from "@earendil-works/pi-ai";
-import type { StreamingMessageContainer } from "./messages/streaming-message-container.js";
+import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
@@ -144,14 +143,8 @@ const AUTO_SCROLL_REENGAGE_PX = 20;
 const INNER_SCROLL_DISENGAGE_PX = AUTO_SCROLL_DISENGAGE_PX;
 const INNER_SCROLL_REENGAGE_PX = AUTO_SCROLL_REENGAGE_PX;
 
-/**
- * CSS selector for inner scrollable areas inside the streaming message.
- *
- * - `thinking-block markdown-block` — thinking body (max-height 300 px)
- * - `.pi-tool-card__body--open`     — expanded tool card (max-height 2000 px)
- */
-const INNER_SCROLLABLE_SELECTOR =
-  "thinking-block markdown-block, .pi-tool-card__body--open";
+/** Inner scrollable areas inside the streaming message: the thinking body (max-height 300 px). */
+const INNER_SCROLLABLE_SELECTOR = "thinking-block markdown-block";
 
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
@@ -200,13 +193,20 @@ export class PiSidebar extends LitElement {
   @state() private _tabContextMenuPosition: { x: number; y: number } | null = null;
 
   @query(".pi-messages") private _scrollContainer?: HTMLElement;
-  @query("streaming-message-container") private _streamingContainer?: StreamingMessageContainer;
   @query("pi-input") private _input?: PiInput;
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
   private _unsubscribe: (() => void) | undefined;
   /** Results of tools that finished before their batch did (see MessageList.liveToolResults). */
   private _liveToolResults = new Map<string, ToolResultMessage>();
+  /**
+   * The response being streamed, drawn by <message-list> as part of its
+   * turn. Updates batch per frame and clone the message so Lit sees new
+   * identities for nested state (tool call arguments grow in place).
+   */
+  @state() private _streamingMessage: AssistantMessage | null = null;
+  private _pendingStreamingMessage: AssistantMessage | null = null;
+  private _streamingUpdateScheduled = false;
   private _autoScroll = true;
   private _lastScrollTop = 0;
   private _resizeObserver: ResizeObserver | undefined;
@@ -425,18 +425,35 @@ export class PiSidebar extends LitElement {
     }
   }
 
+  /** Clears at once; updates batch per frame. */
+  private _setStreamingMessage(message: AssistantMessage | null): void {
+    this._pendingStreamingMessage = message;
+    if (message === null) {
+      this._streamingMessage = null;
+      return;
+    }
+    if (this._streamingUpdateScheduled) return;
+    this._streamingUpdateScheduled = true;
+    requestAnimationFrame(() => {
+      this._streamingUpdateScheduled = false;
+      if (this._pendingStreamingMessage !== null) this._streamingMessage = structuredClone(this._pendingStreamingMessage);
+    });
+  }
+
   /**
    * One model of a streaming turn:
-   * - the response being streamed renders only in <streaming-message-container>;
+   * - the response being streamed is passed to <message-list> as
+   *   `streamingMessage`, so its turn group draws the calls as they stream;
    * - at message_end pi-agent-core has pushed the finished response into
    *   state.messages, so the streaming copy is cleared in the same update and
-   *   <message-list> alone draws it from then on, its tool cards spinning
-   *   until each one's result arrives;
-   * - each tool card finishes at its own tool_execution_end.
+   *   the list draws it from `messages` from then on, its rows live until
+   *   each one's result arrives;
+   * - each row finishes at its own tool_execution_end.
    */
   private _setupSubscription() {
     this._unsubscribe?.();
     this._liveToolResults = new Map();
+    this._setStreamingMessage(null);
     forgetOpenThinking();
     const agent = this.agent;
     if (!agent) return;
@@ -450,7 +467,7 @@ export class PiSidebar extends LitElement {
         case "message_end":
           if (ev.type === "message_end" && ev.message.role === "assistant") {
             endOpenThinking(ev.message, Date.now());
-            this._streamingContainer?.setMessage(null, true);
+            this._setStreamingMessage(null);
           }
           this._hasMessages = hasRenderableMessages(agent.state.messages);
           this._isStreaming = agent.state.isStreaming;
@@ -480,6 +497,7 @@ export class PiSidebar extends LitElement {
           // waits for the batch's toolResult message, as before.
           const raw: unknown = ev.result;
           if (!Value.Check(liveToolResultSchema, raw)) break;
+          this._liveToolResults = new Map(this._liveToolResults);
           this._liveToolResults.set(ev.toolCallId, {
             role: "toolResult",
             toolCallId: ev.toolCallId,
@@ -494,10 +512,7 @@ export class PiSidebar extends LitElement {
         }
         case "agent_end":
           this._isStreaming = false;
-          if (this._streamingContainer) {
-            this._streamingContainer.isStreaming = false;
-            this._streamingContainer.setMessage(null, true);
-          }
+          this._setStreamingMessage(null);
           this.requestUpdate();
           break;
         case "message_update": {
@@ -510,11 +525,7 @@ export class PiSidebar extends LitElement {
               recordThinkingEnd(thinkingKey(ev.message, update.contentIndex), Date.now());
             }
           }
-          if (this._streamingContainer) {
-            const streaming = agent.state.isStreaming;
-            this._streamingContainer.isStreaming = streaming;
-            this._streamingContainer.setMessage(ev.message, !streaming);
-          }
+          if (ev.message.role === "assistant") this._setStreamingMessage(ev.message);
           this.requestUpdate();
           break;
         }
@@ -596,8 +607,9 @@ export class PiSidebar extends LitElement {
     // element has its own detach/re-engage tracking via _innerScrollDetached.
     if (!this._scrollContainerEl) return;
 
+    // The streamed response is the last message or turn group in the list.
     const streaming = this._scrollContainerEl.querySelector(
-      "streaming-message-container",
+      ".pi-message-list > :last-child",
     );
     if (!streaming) return;
 
@@ -852,10 +864,6 @@ export class PiSidebar extends LitElement {
     const agent = this.agent;
     if (!agent) return html``;
     const state = agent.state;
-    const toolResultsById = new Map(this._liveToolResults);
-    for (const message of state.messages) {
-      if (message.role === "toolResult") toolResultsById.set(message.toolCallId, message);
-    }
 
     // Derive from agent state directly — _hasMessages may lag behind after
     // batch operations like replaceMessages() that don't fire per-message events.
@@ -876,20 +884,14 @@ export class PiSidebar extends LitElement {
           ${hasMessages ? html`
             <message-list
               .messages=${state.messages.slice()}
+              .streamingMessage=${state.isStreaming ? this._streamingMessage : null}
               .tools=${state.tools}
               .pendingToolCalls=${state.pendingToolCalls}
-              .liveToolResults=${toolResultsById}
+              .liveToolResults=${this._liveToolResults}
               .isStreaming=${state.isStreaming || this.tabBusy}
               .errorSummary=${this.turnError}
             ></message-list>
             ${this._renderContextPill()}
-            <streaming-message-container
-              class="${state.isStreaming ? "" : "hidden"}"
-              .tools=${state.tools}
-              .isStreaming=${state.isStreaming}
-              .pendingToolCalls=${state.pendingToolCalls}
-              .toolResultsById=${toolResultsById}
-            ></streaming-message-container>
           ` : ""}
         </div>
         ${!hasMessages ? this._renderEmptyState() : ""}

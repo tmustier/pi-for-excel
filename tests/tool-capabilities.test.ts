@@ -15,8 +15,7 @@ import {
 import { CORE_TOOL_NAMES } from "../src/tools/names.ts";
 import { buildSystemPrompt } from "../src/prompt/system-prompt.ts";
 import { humanizeToolInput } from "../src/ui/humanize-params.ts";
-import { getToolRenderer } from "../src/ui/messages/tool-renderer-registry.ts";
-import "../src/ui/tool-renderers.ts";
+import { isSupportedToolName } from "../src/ui/tool-renderers.ts";
 
 void test("core capability metadata covers all core tools", () => {
   assert.equal(CORE_TOOL_CAPABILITIES.length, CORE_TOOL_NAMES.length);
@@ -39,7 +38,7 @@ void test("system prompt core tool section is generated from capability metadata
   }
 });
 
-void test("every core tool has a specific renderer and humanized representative input", () => {
+void test("every core tool has a described row and humanized representative input", () => {
   const representativeInput = {
     action: "list",
     cell: "Sheet1!A1",
@@ -56,8 +55,7 @@ void test("every core tool has a specific renderer and humanized representative 
   };
 
   for (const name of CORE_TOOL_NAMES) {
-    const renderer = getToolRenderer(name);
-    assert.ok(renderer, `Core tool ${name} must have a registered renderer`);
+    assert.ok(isSupportedToolName(name), `Core tool ${name} must have a described row`);
     assert.notEqual(
       humanizeToolInput(name, representativeInput),
       null,
@@ -65,9 +63,9 @@ void test("every core tool has a specific renderer and humanized representative 
     );
   }
 
-  // Local-state tools behind a consent gate need a readable card too.
+  // Local-state tools behind a consent gate need a readable row too.
   for (const name of ["files", "extensions_manager"]) {
-    assert.ok(getToolRenderer(name), `${name} must have a registered renderer`);
+    assert.ok(isSupportedToolName(name), `${name} must have a described row`);
     assert.notEqual(humanizeToolInput(name, { action: "list" }), null);
   }
 

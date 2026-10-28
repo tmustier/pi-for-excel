@@ -91,9 +91,9 @@ void test("assistant tool Markdown renders all seven frontmatter forms correctly
         );
         sidebar.syncFromAgent();
       }, { index, markdown: row.markdown });
-      const card = page.locator('.pi-tool-card[data-tool-name="skills"]');
-      await card.locator(".pi-tool-card__header").click();
-      const rendered = card.locator(".pi-tool-card__markdown");
+      const skillRow = page.locator('.pi-turn-row[data-tool-name="skills"]');
+      await skillRow.locator(".pi-turn-row__line").click();
+      const rendered = skillRow.locator(".pi-tool-card__markdown");
       await rendered.getByText(row.visible, { exact: false }).first().waitFor({ state: "visible" });
       const text = await rendered.innerText();
       assert.equal(text.includes(row.visible), true, row.name);

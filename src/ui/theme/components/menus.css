@@ -6,15 +6,8 @@
 :is(.pi-cmd-menu, .pi-utilities-menu) {
   border-radius: var(--radius-md);
   border: var(--glass-border);
-  background:
-    linear-gradient(
-      180deg,
-      oklch(1 0 0 / 0.14) 0%,
-      oklch(1 0 0 / 0) 40%,
-      var(--alpha-2) 100%
-    ),
-    var(--menu-surface);
-  box-shadow: var(--glass-shadow-lg), var(--glass-highlight), var(--glass-inner-shadow);
+  background: var(--menu-surface);
+  box-shadow: var(--popover-shadow);
   padding: 4px;
 }
 
@@ -38,14 +31,7 @@
 }
 
 :is(.pi-cmd-item, .pi-utilities-menu__item):hover {
-  background:
-    linear-gradient(
-      180deg,
-      oklch(1 0 0 / 0.18) 0%,
-      oklch(1 0 0 / 0) 100%
-    ),
-    var(--white-alpha-45);
-  box-shadow: var(--glass-highlight), var(--glass-inner-shadow);
+  background: var(--surface-2);
 }
 
 :is(.pi-cmd-item, .pi-utilities-menu__item) {
@@ -60,7 +46,7 @@
 :is(.pi-cmd-item, .pi-utilities-menu__item, .pi-session-tab-context-menu__item, .pi-status-popover__item, .pi-status-popover__command):focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
-  background: var(--pi-green-light);
+  background: var(--surface-2);
 }
 
 .pi-utilities-menu__divider {
@@ -95,11 +81,11 @@
 }
 
 .pi-cmd-item.selected {
-  background: var(--pi-green-light);
+  background: var(--surface-2);
 }
 
 .pi-cmd-item.selected:hover {
-  background: var(--pi-green-light);
+  background: var(--surface-2);
 }
 
 .pi-cmd-name {
@@ -119,8 +105,8 @@
   letter-spacing: 0.04em;
   padding: 1px 5px;
   border-radius: var(--radius-xs);
-  background: var(--pi-green-light);
-  color: var(--pi-green);
+  background: var(--surface-2);
+  color: var(--fg-2);
   white-space: nowrap;
   flex-shrink: 0;
 }

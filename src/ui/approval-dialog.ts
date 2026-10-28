@@ -18,7 +18,6 @@ import {
   createOverlayButton,
   createOverlayDialog,
   createOverlayHeader,
-  type OverlayDialogController,
 } from "./overlay-dialog.js";
 import { TOOL_APPROVAL_OVERLAY_ID } from "./overlay-ids.js";
 import { t } from "../language/index.js";
@@ -26,6 +25,11 @@ import { announce } from "./announcer.js";
 
 export interface ApprovalRequest {
   title: string;
+  /**
+   * The tool call that asks. When the transcript shows that call's turn
+   * group, the question is asked in its row instead of a dialog.
+   */
+  toolCallId?: string;
   /** One line naming what will happen and where, e.g. "Write Sheet1!B2:C4". */
   headline?: string;
   /** Structured details (the tool card's humanized input). */
@@ -61,7 +65,68 @@ interface QueuedApproval {
 
 const queue: QueuedApproval[] = [];
 const allowedTurns = new WeakSet<AbortSignal>();
-let current: { entry: QueuedApproval; dialog: OverlayDialogController; setWaiting: (count: number) => void } | null = null;
+let current: { entry: QueuedApproval; answer: (approved: boolean) => void; setWaiting: (count: number) => void } | null = null;
+
+/* ── Inline approvals (turn group rows) ─────────────────── */
+
+/** A question asked in the transcript, in the row of the tool call that asks. */
+export interface InlineApproval {
+  toolCallId: string;
+  request: ApprovalRequest;
+  answer(approved: boolean): void;
+  /** Allow this and every eligible change for the rest of the run; only when `request.allowForTurn`. */
+  allowForTurn(): void;
+  /** Run `request.secondaryApproval` (a full backup first), then allow. Rejects if the preparation fails. */
+  prepareAndApprove(): Promise<void>;
+  preparing: boolean;
+}
+
+export interface InlineApprovalHost {
+  /** The host shows this call's turn group, so it can ask in the row. */
+  claims(toolCallId: string): boolean;
+  /** The set of inline questions changed. */
+  onChange(): void;
+}
+
+const inlineHosts = new Set<InlineApprovalHost>();
+/** Each question owns its transition back to the dialog queue. */
+const inline = new Map<InlineApproval, () => void>();
+
+export function getInlineApprovals(): readonly InlineApproval[] {
+  return [...inline.keys()];
+}
+
+function notifyInlineHosts(): void {
+  for (const host of inlineHosts) host.onChange();
+}
+
+function claimedInline(toolCallId: string): boolean {
+  for (const host of inlineHosts) {
+    if (host.claims(toolCallId)) return true;
+  }
+  return false;
+}
+
+/**
+ * Registers a transcript as a place to ask about tool calls it shows.
+ * Unregistering moves any unanswered question no other host shows back to
+ * a dialog, so a tab switch never hides a question.
+ */
+export function registerInlineApprovalHost(host: InlineApprovalHost): { refresh(): void; unregister(): void } {
+  const refresh = (): void => {
+    for (const [approval, release] of inline) {
+      if (!claimedInline(approval.toolCallId)) release();
+    }
+  };
+  inlineHosts.add(host);
+  return {
+    refresh,
+    unregister() {
+      inlineHosts.delete(host);
+      refresh();
+    },
+  };
+}
 
 function settle(entry: QueuedApproval, approved: boolean): void {
   if (entry.onAbort && entry.request.signal) {
@@ -71,15 +136,28 @@ function settle(entry: QueuedApproval, approved: boolean): void {
   entry.resolve(approved);
 }
 
+/** Consent also covers eligible questions already waiting in other rows. */
+function allowTurn(signal: AbortSignal): void {
+  allowedTurns.add(signal);
+  for (const approval of inline.keys()) {
+    if (approval.request.allowForTurn && approval.request.signal === signal) approval.answer(true);
+  }
+}
+
 /** Declines every request, shown or queued, and stops each turn that asked. */
 function stopAll(): void {
-  const entries = [...(current ? [current.entry] : []), ...queue.splice(0)];
+  const entries = queue.splice(0);
   const stops = new Set<() => void>();
-  for (const entry of entries) {
-    if (entry.request.onStop) stops.add(entry.request.onStop);
-    settle(entry, false);
+  for (const request of [
+    ...entries.map((entry) => entry.request),
+    ...(current ? [current.entry.request] : []),
+    ...[...inline.keys()].map((approval) => approval.request),
+  ]) {
+    if (request.onStop) stops.add(request.onStop);
   }
-  current?.dialog.close();
+  for (const approval of inline.keys()) approval.answer(false);
+  for (const entry of entries) settle(entry, false);
+  current?.answer(false);
   for (const stop of stops) stop();
 }
 
@@ -180,7 +258,7 @@ function showNext(): void {
     const turnButton = createOverlayButton({ text: t("approval.allowForTurn") });
     turnButton.addEventListener("click", () => {
       if (signal.aborted) return;
-      allowedTurns.add(signal);
+      allowTurn(signal);
       answer(true);
     });
     actions.append(turnButton);
@@ -211,7 +289,6 @@ function showNext(): void {
   if (request.onStop) {
     const stopButton = createOverlayButton({ text: t("approval.stop"), className: "pi-approval__stop" });
     stopButton.addEventListener("click", () => {
-      answered = true;
       stopAll();
     });
     actions.append(stopButton);
@@ -225,13 +302,13 @@ function showNext(): void {
       answered = true;
       settle(entry, false);
     }
-    if (current?.dialog === dialog) current = null;
+    if (current?.entry === entry) current = null;
     queueMicrotask(showNext);
   });
 
   current = {
     entry,
-    dialog,
+    answer,
     setWaiting: (count) => {
       waiting.textContent = count > 0 ? t("approval.waiting", { count }) : "";
       waiting.hidden = count === 0;
@@ -273,27 +350,78 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
 
   return new Promise<boolean>((resolve) => {
     const entry: QueuedApproval = { request, resolve, onAbort: null };
-
-    if (request.signal) {
-      entry.onAbort = () => {
-        if (current?.entry === entry) {
-          settle(entry, false);
-          current.dialog.close();
-          return;
-        }
-        const index = queue.indexOf(entry);
-        if (index >= 0) queue.splice(index, 1);
-        settle(entry, false);
-        updateWaitingCount();
+    if (request.toolCallId !== undefined && claimedInline(request.toolCallId)) {
+      const toolCallId = request.toolCallId;
+      let answered = false;
+      const finish = (approved: boolean): void => {
+        if (answered) return;
+        answered = true;
+        inline.delete(approval);
+        settle(entry, approved);
+        notifyInlineHosts();
       };
-      request.signal.addEventListener("abort", entry.onAbort, { once: true });
+      const approval: InlineApproval = {
+        toolCallId,
+        request: entry.request,
+        answer: finish,
+        allowForTurn() {
+          const { signal } = entry.request;
+          if (answered || !entry.request.allowForTurn || !signal || signal.aborted) return;
+          allowTurn(signal);
+        },
+        preparing: false,
+        async prepareAndApprove() {
+          const secondary = entry.request.secondaryApproval;
+          if (!secondary || answered || approval.preparing || entry.request.signal?.aborted) return;
+          approval.preparing = true;
+          notifyInlineHosts();
+          try {
+            await secondary.onApprove();
+            if (!answered && !entry.request.signal?.aborted) finish(true);
+          } finally {
+            approval.preparing = false;
+            notifyInlineHosts();
+          }
+        },
+      };
+      entry.onAbort = () => finish(false);
+      entry.request.signal?.addEventListener("abort", entry.onAbort, { once: true });
+      inline.set(approval, () => {
+        if (answered) return;
+        answered = true;
+        inline.delete(approval);
+        if (entry.onAbort && entry.request.signal) entry.request.signal.removeEventListener("abort", entry.onAbort);
+        entry.onAbort = null;
+        enqueue(entry);
+      });
+      notifyInlineHosts();
+      return;
     }
-
-    queue.push(entry);
-    if (current) {
-      updateWaitingCount();
-    } else {
-      showNext();
-    }
+    enqueue(entry);
   });
+}
+
+/** Queues a question for the dialog, withdrawing it if its turn is stopped first. */
+function enqueue(entry: QueuedApproval): void {
+  const { request } = entry;
+  if (request.signal) {
+    entry.onAbort = () => {
+      if (current?.entry === entry) {
+        current.answer(false);
+        return;
+      }
+      const index = queue.indexOf(entry);
+      if (index >= 0) queue.splice(index, 1);
+      settle(entry, false);
+      updateWaitingCount();
+    };
+    request.signal.addEventListener("abort", entry.onAbort, { once: true });
+  }
+
+  queue.push(entry);
+  if (current) {
+    updateWaitingCount();
+  } else {
+    showNext();
+  }
 }

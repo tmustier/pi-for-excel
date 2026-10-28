@@ -169,7 +169,7 @@
   padding: 0 2px;
   font-family: var(--font-sans);
   font-size: var(--text-xs);
-  font-weight: 700;
+  font-weight: 600;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted-foreground);
