@@ -12,7 +12,10 @@ screen and the ribbon icon. When the first implementation slice lands, the
 
 Mockups are static HTML under [`sidebar-redesign/`](./sidebar-redesign/).
 Open them in a browser; each accepts `?w=320` (pane width), `?only=2,5`
-(which states) and `?zoom=2`. Always review at 320 and 360, zoomed.
+(which states) and `?zoom=2`. On macOS use the `file://` form so `open` keeps
+the query string:
+`open "file://$PWD/docs/proposals/sidebar-redesign/02-turn-group.html?w=320&zoom=2"`.
+Always review at 320 and 360, zoomed.
 
 ## 1. Why
 
