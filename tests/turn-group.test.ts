@@ -159,14 +159,28 @@ void test("trailing prose is not an answer while its tool calls still run", () =
     ["group[r1:done] answered", "assistant[1,2]"]);
 });
 
-/** The text a template renders, ignoring markup. */
+/** The words a template shows: text between tags and the string values bound there (not attribute values). */
 function textOf(template: TemplateResult): string {
   const isTemplate = (value: unknown): value is TemplateResult =>
     typeof value === "object" && value !== null && "strings" in value && "values" in value;
-  return template.strings.reduce((text, part, index) => {
-    const value = template.values[index - 1];
-    return text + (isTemplate(value) ? textOf(value) : typeof value === "string" ? value : "") + part;
-  }).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+  let text = "";
+  let inTag = false;
+  const walk = (node: TemplateResult): void => {
+    node.strings.forEach((literal, index) => {
+      if (index > 0) {
+        const value = node.values[index - 1];
+        if (isTemplate(value)) walk(value);
+        else if (!inTag && typeof value === "string") text += value;
+      }
+      for (const char of literal) {
+        if (char === "<") inTag = true;
+        else if (char === ">") inTag = false;
+        else if (!inTag) text += char;
+      }
+    });
+  };
+  walk(template);
+  return text.replace(/\s+/g, " ").trim();
 }
 
 void test("a row conjugates the call's verb for its state and keeps one fact about the result", () => {
