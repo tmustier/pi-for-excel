@@ -103,7 +103,7 @@
 .pi-status-model__mark {
   font-family: var(--font-sans);
   font-size: var(--text-base);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--primary);
   line-height: 1;
   flex-shrink: 0;
@@ -216,25 +216,25 @@
 }
 
 .pi-status-mode--auto {
-  border: 1px solid oklch(0.66 0.19 145 / 0.38);
-  background: oklch(0.66 0.19 145 / 0.12);
-  color: oklch(0.45 0.15 145);
+  border: 1px solid var(--line);
+  background: var(--surface-1);
+  color: var(--fg-2);
 }
 
 .pi-status-mode--auto:hover {
-  background: oklch(0.66 0.19 145 / 0.2);
-  border-color: oklch(0.66 0.19 145 / 0.48);
+  background: var(--surface-2);
+  border-color: var(--line-strong);
 }
 
+/* Confirm is the mode that will interrupt you; it earns the amber. */
 .pi-status-mode--confirm {
-  border: 1px solid oklch(0.65 0.17 40 / 0.38);
-  background: oklch(0.65 0.17 40 / 0.12);
-  color: oklch(0.48 0.12 40);
+  border: 1px solid var(--amber-alpha-30);
+  background: var(--amber-soft);
+  color: var(--amber);
 }
 
 .pi-status-mode--confirm:hover {
-  background: oklch(0.65 0.17 40 / 0.2);
-  border-color: oklch(0.65 0.17 40 / 0.48);
+  border-color: var(--amber);
 }
 
 /* Context debug pill — collapsible block matching thinking-block style. */
@@ -478,7 +478,7 @@
   border: 1px solid var(--alpha-14);
   background: var(--menu-surface);
   color: var(--popover-foreground);
-  box-shadow: 0 12px 24px oklch(0 0 0 / 0.2);
+  box-shadow: var(--popover-shadow);
   max-height: calc(100vh - 16px);
   overflow: hidden;
   padding: 10px;
@@ -566,7 +566,7 @@
 }
 
 .pi-status-popover__item.is-active {
-  border-color: oklch(0.45 0.12 160 / 0.36);
+  border-color: var(--line-strong);
   background: var(--green-alpha-12);
 }
 

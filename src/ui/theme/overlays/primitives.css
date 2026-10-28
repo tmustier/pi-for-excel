@@ -491,7 +491,7 @@
   margin: 0;
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--foreground);
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -597,7 +597,7 @@
 .pi-conventions-format-card-title {
   font-family: var(--font-sans);
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--foreground);
 }
 

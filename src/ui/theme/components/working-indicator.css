@@ -75,8 +75,8 @@ pi-working-indicator {
   width: 12px;
   height: 12px;
   border-radius: var(--radius-full);
-  border: 2px solid oklch(0.55 0.1 160 / 0.25);
-  border-top-color: oklch(0.55 0.12 160);
+  border: 2px solid var(--line-strong);
+  border-top-color: var(--fg-1);
   animation: pi-spin 0.85s linear infinite;
 }
 

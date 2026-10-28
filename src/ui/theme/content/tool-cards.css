@@ -246,14 +246,14 @@
   cursor: pointer;
   color: inherit;
   text-decoration: underline;
-  text-decoration-color: oklch(0.45 0.12 160 / 0.35);
+  text-decoration-color: var(--line-strong);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
   transition: text-decoration-color var(--duration-fast), color var(--duration-fast);
 }
 .pi-cell-ref:hover {
-  color: var(--pi-green);
-  text-decoration-color: oklch(0.45 0.12 160 / 0.6);
+  color: var(--fg-1);
+  text-decoration-color: var(--fg-3);
 }
 
 /* Data preview — mini table for write_cells values */

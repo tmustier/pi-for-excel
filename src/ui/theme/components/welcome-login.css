@@ -2,7 +2,7 @@
 .pi-welcome-logo {
   font-family: var(--font-sans);
   font-size: var(--text-display);
-  font-weight: 700;
+  font-weight: 600;
   color: var(--pi-green);
   opacity: 0.25;
   margin-bottom: 4px;

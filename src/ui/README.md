@@ -78,7 +78,7 @@ visibility utilities that shell components toggle.
 
 | Section | What it does |
 |---|---|
-| 1. CSS Variables | Colors, fonts, glass tokens — consumed everywhere via `var(--background)` etc. |
+| 1. CSS Variables | Palette, fonts, radii, elevation — consumed everywhere via `var(--background)` etc. Plain sRGB; see `docs/proposals/sidebar-redesign.md` §3 |
 | 1b. Preflight | First-party base reset (`theme/preflight.css`) |
 | 2. Global | Body background (spreadsheet grid texture), scrollbars |
 | 3–5. Our components | `.pi-messages`, `.pi-input-card`, `.pi-empty` — fully ours, no overrides needed |
@@ -97,34 +97,35 @@ visibility utilities that shell components toggle.
 > - `theme/content-overrides.css` (11) → imports `theme/content/{messages,tool-cards,csv-table,dependency-tree,tool-card-markdown,message-components}.css`
 > - `theme/dialogs.css` (12, stable selectors)
 > - `theme/queue.css` (13)
-> - `theme/legacy-webview.css` (14, sRGB fallbacks under `@supports not (color: oklch(...))`)
+> - `theme/legacy-webview.css` (14, sRGB stand-ins under `@supports not (color: oklch(...))` for component rules that still hardcode OKLCH; tokens need none)
 
-### Radius system
+### Radius and elevation
 
 All radii come from the token scale in `theme/tokens.css` — never hardcode.
 Tiers, by surface role:
 
 | Token | Value | Used for |
 |---|---|---|
-| `--radius-xl` | 20px | Overlay dialogs (outermost surfaces) |
-| `--pill-radius` (= `--radius-lg`) | 16px | Transcript units: standalone tool cards, tool groups, user bubble, input card |
-| `--radius-md` | 12px | Cards *inside* another surface (list cards in overlays, rows inside 16px pills) |
-| `--radius-sm` | 8px | Buttons, command blocks, small interactive chrome |
-| `--radius-xs` | 4px | Chips, badges, tiny inline elements |
-| `--radius-full` | round | Circular buttons, pill badges, toggle knobs |
+| `--radius-lg` / `--radius-xl` | 10px | Composer, popovers (sheets are flat) |
+| `--pill-radius` (= `--radius-md`) | 8px | Turn group, user message, search input, toast |
+| `--radius-sm` | 6px | Buttons, code blocks, chips in the composer, icon buttons |
+| `--radius-xs` | 3px | Inline code, chips in text |
+| `--radius-full` | round | Toggle knobs, the tool-kind icon stack |
 
-**Concentric rule for nesting:** when an element with a visible
-background/border sits inside a rounded parent, its radius should be
-*parent radius − inset*, clamped to the nearest token. Examples:
+Elevation is declared once per element, border or shadow, never both:
 
-- Grouped tool-card rows sit 4px inside a 16px group → 12px (`--radius-md`).
-- List cards sit ~8px inside a 20px dialog → 12px (`--radius-md`).
-- Matching the parent's radius on a nested element (16 inside 16) reads
-  wrong at the corners — avoid it.
+- Border only (`--line`, `--line-strong`): composer, turn group, code block,
+  chips, outlined buttons.
+- Shadow only (`--popover-shadow`): popovers and dialogs.
+- Lists are hairline rows at full width; a bordered surface exists only
+  around a unit the user acts on as a whole. Do not nest cards.
 
-Standalone vs grouped tool cards intentionally share the same outer
-language: **one 16px pill per transcript unit** (a lone card or a whole
-group), with grouped rows demoted to inset 12px rows inside the pill.
+Colour is semantic: `--pi-green` (`--accent-data`) marks changed values and
+connected state, `--amber` marks waiting on the user, `--red` marks failed.
+Chrome, hover and selection states use the neutral `--surface-*`, `--line*`
+and `--alpha-*` tokens. The `--green-alpha-*`, `--white-alpha-*` and
+`--glass-*` names remain defined for older consumers but resolve to neutral
+or inert values; do not add new references to them.
 
 ### Styling message components
 

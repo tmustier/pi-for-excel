@@ -1,238 +1,227 @@
 /* ═══════════════════════════════════════════════════════
    1. CSS VARIABLES — theme + component tokens
-   ═══════════════════════════════════════════════════════ */
+   ═══════════════════════════════════════════════════════
 
-/*
- * Light theme palette.
- */
+   Palette and rules: docs/proposals/sidebar-redesign.md §3.
+
+   Warm-tinted neutrals so the pane sits beside a white Excel canvas without
+   reading grey or blue. One accent (--pi-green) for changed values and
+   connected state; amber for waiting on the user; red for failed. Nothing
+   else is coloured. All values are plain sRGB so older WebViews (WPS) render
+   the same palette without fallbacks.
+
+   Token names from the previous theme are kept so every consumer keeps
+   resolving; several are now aliases of the semantic set at the top of each
+   block. Glass tokens are inert (transparent shadows, no blur) until the
+   files that reference them are reworked.
+*/
 :root {
-  --background: oklch(0.985 0.002 90);
-  --foreground: oklch(0.18 0 0);
-  --card: oklch(1 0 0 / 0.75);
-  --card-foreground: oklch(0.18 0 0);
-  --popover: oklch(1 0 0 / 0.85);
-  --popover-foreground: oklch(0.18 0 0);
-  --primary: oklch(0.45 0.12 160); /* teal-green */
-  --primary-foreground: oklch(0.98 0 0);
-  --secondary: oklch(0.96 0.004 90);
-  --secondary-foreground: oklch(0.25 0 0);
-  --muted: oklch(0.96 0.003 90);
-  --muted-foreground: oklch(0.50 0 0);
-  --accent: oklch(0.97 0.006 90);
-  --accent-foreground: oklch(0.30 0.08 160);
-  --destructive: oklch(0.55 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.92 0.004 90);
-  --input: oklch(0.95 0.003 90);
-  --ring: oklch(0.50 0.10 160);
+  /* ── Semantic palette ───────────────────────────────── */
+  --surface-0: #faf9f7;   /* pane background */
+  --surface-1: #ffffff;   /* composer, popovers, groups, code */
+  --surface-2: #f1efeb;   /* user message, highlighted row, live row */
+  --line: #e6e3de;        /* hairlines */
+  --line-strong: #d3cfc8; /* input borders, outlined buttons */
+  --fg-1: #1c1b19;
+  --fg-2: #55524d;
+  --fg-3: #6b6862;        /* tertiary text and icons; 4.6:1 on --surface-0 */
+  --accent-data: #1e6f55;
+  --accent-data-soft: #e3efe9;
+  --amber: #9a6b12;
+  --amber-soft: #fbf3e3;
+  --red: #b4421f;
+  --red-soft: #f9ebe5;
+  --selection: #d9e9e1;
 
-  --sidebar: oklch(0.98 0.002 90);
-  --sidebar-foreground: oklch(0.18 0 0);
-  --sidebar-border: oklch(0.92 0.004 90);
+  /* ── Shadcn-style names used across components ──────── */
+  --background: var(--surface-0);
+  --foreground: var(--fg-1);
+  --card: var(--surface-1);
+  --card-foreground: var(--fg-1);
+  --popover: var(--surface-1);
+  --popover-foreground: var(--fg-1);
+  /* Primary actions are ink on paper, not brand green. */
+  --primary: var(--fg-1);
+  --primary-foreground: var(--surface-0);
+  --secondary: var(--surface-2);
+  --secondary-foreground: var(--fg-2);
+  --muted: var(--surface-2);
+  --muted-foreground: var(--fg-3);
+  --accent: var(--surface-2);
+  --accent-foreground: var(--fg-1);
+  --destructive: var(--red);
+  --destructive-foreground: #ffffff;
+  --border: var(--line);
+  --input: var(--line-strong);
+  --ring: var(--fg-2);
 
-  --font-sans: 'DM Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --radius: 0.625rem;
+  --sidebar: var(--surface-0);
+  --sidebar-foreground: var(--fg-1);
+  --sidebar-border: var(--line);
+
+  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  --radius: 8px;
 
   /* ── Scale tokens ───────────────────────────────────── */
-  --radius-xs: 4px;
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
+  --radius-xs: 3px;    /* inline code */
+  --radius-sm: 6px;    /* buttons, code blocks, chips, icon buttons */
+  --radius-md: 8px;    /* turn group, user message, search, toast */
+  --radius-lg: 10px;   /* composer, popovers */
+  --radius-xl: 10px;   /* sheets are flat; kept for overlay consumers */
   --radius-full: 999px;
 
-  --text-xs: 10px;
+  --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
-  --text-md: 15px;
-  --text-lg: 18px;
-  /* Display size — logo glyphs / hero marks only, never body text */
-  --text-display: 40px;
+  --text-md: 13.5px;
+  --text-lg: 20px;
+  /* One headline per screen (workbook name, product name). */
+  --text-display: 22px;
 
   /* ── Layers (low → high). See src/ui/README.md "Layers". ── */
-  --z-sticky: 20;      /* sticky chrome inside the column */
-  --z-popover: 150;    /* menus and popovers anchored to a control */
-  --z-overlay: 200;    /* modal overlays */
-  --z-toast: 1000;     /* toasts: above everything, overlays included */
+  --z-sticky: 20;
+  --z-popover: 150;
+  --z-overlay: 200;
+  --z-toast: 1000;
 
-  /* Menus and popovers are opaque: content must not show through a layer the
-     next click lands on (HINTS-08). */
-  --menu-surface: oklch(0.995 0.002 90);
+  /* Menus and popovers are opaque (HINTS-08). */
+  --menu-surface: var(--surface-1);
 
   --duration-fast: 0.12s;
-  --duration-normal: 0.2s;
+  --duration-normal: 0.18s;
 
-  /* ── Alpha palette tokens ───────────────────────────── */
-  --alpha-2: oklch(0 0 0 / 0.02);
-  --alpha-3: oklch(0 0 0 / 0.03);
-  --alpha-4: oklch(0 0 0 / 0.04);
-  --alpha-5: oklch(0 0 0 / 0.05);
-  --alpha-6: oklch(0 0 0 / 0.06);
-  --alpha-8: oklch(0 0 0 / 0.08);
-  --alpha-10: oklch(0 0 0 / 0.10);
-  --alpha-12: oklch(0 0 0 / 0.12);
-  --alpha-14: oklch(0 0 0 / 0.14);
-  --alpha-15: oklch(0 0 0 / 0.15);
-  --alpha-20: oklch(0 0 0 / 0.20);
-  --alpha-25: oklch(0 0 0 / 0.25);
+  /* ── Alpha ladders (neutral ink) ────────────────────── */
+  --alpha-2: rgba(28, 27, 25, 0.02);
+  --alpha-3: rgba(28, 27, 25, 0.03);
+  --alpha-4: rgba(28, 27, 25, 0.04);
+  --alpha-5: rgba(28, 27, 25, 0.05);
+  --alpha-6: rgba(28, 27, 25, 0.06);
+  --alpha-8: rgba(28, 27, 25, 0.08);
+  --alpha-10: rgba(28, 27, 25, 0.10);
+  --alpha-12: rgba(28, 27, 25, 0.12);
+  --alpha-14: rgba(28, 27, 25, 0.14);
+  --alpha-15: rgba(28, 27, 25, 0.15);
+  --alpha-20: rgba(28, 27, 25, 0.20);
+  --alpha-25: rgba(28, 27, 25, 0.25);
 
-  --white-alpha-20: oklch(1 0 0 / 0.20);
-  --white-alpha-25: oklch(1 0 0 / 0.25);
-  --white-alpha-35: oklch(1 0 0 / 0.35);
-  --white-alpha-40: oklch(1 0 0 / 0.40);
-  --white-alpha-45: oklch(1 0 0 / 0.45);
-  --white-alpha-50: oklch(1 0 0 / 0.50);
-  --white-alpha-55: oklch(1 0 0 / 0.55);
-  --white-alpha-60: oklch(1 0 0 / 0.60);
-  --white-alpha-65: oklch(1 0 0 / 0.65);
-  --white-alpha-70: oklch(1 0 0 / 0.70);
-  --white-alpha-80: oklch(1 0 0 / 0.80);
-  --white-alpha-90: oklch(1 0 0 / 0.90);
+  /* White alphas were specular highlights; now inert. */
+  --white-alpha-20: transparent;
+  --white-alpha-25: transparent;
+  --white-alpha-35: transparent;
+  --white-alpha-40: transparent;
+  --white-alpha-45: transparent;
+  --white-alpha-50: transparent;
+  --white-alpha-55: transparent;
+  --white-alpha-60: transparent;
+  --white-alpha-65: transparent;
+  --white-alpha-70: transparent;
+  --white-alpha-80: transparent;
+  --white-alpha-90: transparent;
 
-  --green-alpha-6: oklch(0.45 0.12 160 / 0.06);
-  --green-alpha-12: oklch(0.45 0.12 160 / 0.12);
-  --green-alpha-14: oklch(0.45 0.12 160 / 0.14);
-  --green-alpha-20: oklch(0.45 0.12 160 / 0.20);
-  --green-alpha-25: oklch(0.45 0.12 160 / 0.25);
-  --green-alpha-30: oklch(0.45 0.12 160 / 0.30);
+  /* Green alphas were decorative tints on cards and chrome. They now resolve
+     to the neutral ladder so hover/active states stay visible but uncoloured.
+     The data accent is --pi-green. */
+  --green-alpha-6: var(--alpha-4);
+  --green-alpha-12: var(--alpha-6);
+  --green-alpha-14: var(--alpha-8);
+  --green-alpha-20: var(--alpha-10);
+  --green-alpha-25: var(--alpha-12);
+  --green-alpha-30: var(--alpha-15);
 
   /* ── Our custom tokens ───────────────────────────────── */
-  --pi-green: var(--primary);
-  --pi-green-strong: oklch(0.40 0.12 160);
-  --pi-green-light: oklch(0.45 0.12 160 / 0.08);
-  --pi-green-lighter: oklch(0.45 0.12 160 / 0.04);
-  --pi-yellow: oklch(0.72 0.16 84);
-  --pi-amber: var(--pi-yellow);
-  --amber-alpha-8: oklch(0.72 0.16 84 / 0.08);
-  --amber-alpha-16: oklch(0.72 0.16 84 / 0.16);
-  --amber-alpha-30: oklch(0.72 0.16 84 / 0.30);
-  /* Readable amber for text on light amber surfaces (warnings, waiting). */
-  --pi-amber-text: oklch(0.48 0.11 70);
-  --pi-red-text: oklch(0.45 0.17 25);
-  --red-alpha-8: oklch(0.55 0.22 25 / 0.08);
-  --red-alpha-20: oklch(0.55 0.22 25 / 0.20);
-  --pi-surface: var(--sidebar);
+  --pi-green: var(--accent-data);
+  --pi-green-strong: var(--accent-data);
+  --pi-green-light: var(--accent-data-soft);
+  --pi-green-lighter: var(--accent-data-soft);
+  --pi-yellow: var(--amber);
+  --pi-amber: var(--amber);
+  --amber-alpha-8: var(--amber-soft);
+  --amber-alpha-16: var(--amber-soft);
+  --amber-alpha-30: #f1dfb3;
+  --pi-amber-text: var(--amber);
+  --pi-red-text: var(--red);
+  --red-alpha-8: var(--red-soft);
+  --red-alpha-20: #f0c9b8;
+  --pi-surface: var(--surface-0);
 
-  --pi-surface-translucent: oklch(0.98 0.002 90 / 0.85);
-  --pi-divider: 1px solid var(--alpha-6);
-  --pi-inner-bg: oklch(0.99 0.002 90);
-  /* Composer dock tray (working line + queue) */
-  --pi-tray-bg: oklch(0.965 0.006 160 / 0.92);
-  --pi-grid-line: oklch(0.45 0.08 160 / 0.04);
-  --pi-surface-inset-shadow: inset 4px 0 12px -3px var(--alpha-5);
+  --pi-surface-translucent: var(--surface-0);
+  --pi-divider: 1px solid var(--line);
+  --pi-inner-bg: var(--surface-1);
+  --pi-tray-bg: var(--surface-0);
+  --pi-grid-line: transparent;
+  --pi-surface-inset-shadow: none;
 
-  /* ── Pill tokens — shared across all card-like components ── */
-  --pill-radius: var(--radius-lg);
+  /* ── Pill tokens — bordered units in the transcript ── */
+  --pill-radius: var(--radius-md);
   --pill-border-width: 1px;
-  --pill-border: var(--pill-border-width) solid var(--alpha-8);
-  --pill-bg: oklch(1 0 0 / 0.85);
-  --pill-shadow: 0 1px 4px var(--alpha-4), inset 0 1px 0 0 var(--white-alpha-50);
-  --pill-hover-border: var(--alpha-12);
-  /* Layout — asymmetric inset for user vs assistant alignment */
-  --pill-inset: 15%;
-  /* Header sizing */
+  --pill-border: var(--pill-border-width) solid var(--line);
+  --pill-bg: var(--surface-1);
+  --pill-shadow: none;
+  --pill-hover-border: var(--line-strong);
+  --pill-inset: 0;
   --pill-padding-x: 12px;
   --pill-padding-y: 8px;
-  /* Prose indent — aligns assistant text with pill header text */
   --pill-text-indent: calc(var(--pill-border-width) + var(--pill-padding-x));
-  /* Green tint — complete tools, tool groups, thinking */
-  --pill-green-border: var(--pill-border-width) solid oklch(0.45 0.12 160 / 0.10);
-  --pill-green-bg: oklch(0.45 0.12 160 / 0.04);
-  --pill-green-hover-border: oklch(0.45 0.12 160 / 0.18);
-  /* Red tint — error tools */
-  --pill-red-border: var(--pill-border-width) solid oklch(0.55 0.22 25 / 0.10);
-  --pill-red-bg: oklch(0.55 0.22 25 / 0.04);
-  --pill-red-hover-border: oklch(0.55 0.22 25 / 0.18);
+  /* Completed tools are not tinted; errors keep a quiet red line. */
+  --pill-green-border: var(--pill-border);
+  --pill-green-bg: var(--surface-1);
+  --pill-green-hover-border: var(--line-strong);
+  --pill-red-border: var(--pill-border-width) solid #ebc7b8;
+  --pill-red-bg: var(--surface-1);
+  --pill-red-hover-border: #e0ae9a;
 
-  /* ── Liquid Glass tokens ────────────────────────────── */
-  /* Light blur + brightness/saturate for refraction feel */
-  --glass-blur: blur(3px) saturate(1.6) brightness(1.04);
-  --glass-blur-dropdown: blur(16px) saturate(1.5) brightness(1.03);
-  /* Heavier blur for backdrops/overlays where content should be obscured */
-  --glass-blur-heavy: blur(10px) saturate(1.5) brightness(1.02);
-  /* Surface: semi-transparent white */
-  --glass-bg: oklch(1 0 0 / 0.55);
-  --glass-bg-solid: oklch(1 0 0 / 0.78);
-  /* Specular edge highlight — bright white top/left */
-  --glass-highlight: inset 0 1px 0 0 var(--white-alpha-70), inset 1px 0 0 0 var(--white-alpha-40);
-  /* Inner depth shadow — bottom/right */
-  --glass-inner-shadow: inset 0 -1px 0 0 var(--alpha-4), inset -1px 0 0 0 var(--alpha-2);
-  /* Outer drop shadow */
-  --glass-shadow: 0 2px 8px var(--alpha-6), 0 0.5px 0 var(--alpha-4);
-  /* Outer drop shadow — elevated (dialogs, overlays) */
-  --glass-shadow-lg: 0 12px 40px var(--alpha-10), 0 2px 6px var(--alpha-6);
-  /* Border: subtle, semi-transparent */
-  --glass-border: 1px solid var(--white-alpha-50);
+  /* ── Glass tokens — inert ───────────────────────────── */
+  --glass-blur: none;
+  --glass-blur-dropdown: none;
+  --glass-blur-heavy: none;
+  --glass-bg: var(--surface-1);
+  --glass-bg-solid: var(--surface-1);
+  --glass-highlight: 0 0 0 0 transparent;
+  --glass-inner-shadow: 0 0 0 0 transparent;
+  --glass-shadow: 0 0 0 0 transparent;
+  /* The one real shadow: popovers and dialogs. */
+  --glass-shadow-lg: 0 6px 20px -6px rgba(0, 0, 0, 0.18);
+  --glass-border: 1px solid var(--line-strong);
+  --popover-shadow: var(--glass-shadow-lg);
 }
 
 .dark {
-  --background: oklch(0.19 0.01 260);
-  --foreground: oklch(0.94 0.005 260);
-  --card: oklch(0.24 0.015 260 / 0.88);
-  --card-foreground: oklch(0.94 0.005 260);
-  --popover: oklch(0.22 0.014 260 / 0.92);
-  --popover-foreground: oklch(0.94 0.005 260);
-  --primary: oklch(0.66 0.11 160);
-  --primary-foreground: oklch(0.14 0.02 260);
-  --secondary: oklch(0.28 0.01 260);
-  --secondary-foreground: oklch(0.9 0.004 260);
-  --muted: oklch(0.27 0.01 260);
-  --muted-foreground: oklch(0.72 0.01 260);
-  --accent: oklch(0.31 0.02 260);
-  --accent-foreground: oklch(0.92 0.01 260);
-  --destructive: oklch(0.63 0.22 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(0.33 0.01 260);
-  --input: oklch(0.29 0.01 260);
-  --ring: oklch(0.64 0.11 160);
+  --surface-0: #171614;
+  --surface-1: #1e1d1a;
+  --surface-2: #262420;
+  --line: #2d2b26;
+  --line-strong: #3b3832;
+  --fg-1: #ecebe7;
+  --fg-2: #b3b0a9;
+  --fg-3: #99958d;
+  --accent-data: #5fc294;
+  --accent-data-soft: #1d3a2e;
+  --amber: #e0b24a;
+  --amber-soft: #2e2718;
+  --red: #f08a66;
+  --red-soft: #3a221a;
+  --selection: #244237;
 
-  --sidebar: oklch(0.2 0.012 260);
-  --sidebar-foreground: oklch(0.94 0.005 260);
-  --sidebar-border: oklch(0.31 0.01 260);
+  --destructive-foreground: #171614;
 
-  --alpha-2: oklch(1 0 0 / 0.02);
-  --alpha-3: oklch(1 0 0 / 0.03);
-  --alpha-4: oklch(1 0 0 / 0.04);
-  --alpha-5: oklch(1 0 0 / 0.05);
-  --alpha-6: oklch(1 0 0 / 0.06);
-  --alpha-8: oklch(1 0 0 / 0.08);
-  --alpha-10: oklch(1 0 0 / 0.10);
-  --alpha-12: oklch(1 0 0 / 0.12);
-  --alpha-14: oklch(1 0 0 / 0.14);
-  --alpha-15: oklch(1 0 0 / 0.15);
-  --alpha-20: oklch(1 0 0 / 0.20);
-  --alpha-25: oklch(1 0 0 / 0.25);
+  --alpha-2: rgba(236, 235, 231, 0.02);
+  --alpha-3: rgba(236, 235, 231, 0.03);
+  --alpha-4: rgba(236, 235, 231, 0.04);
+  --alpha-5: rgba(236, 235, 231, 0.05);
+  --alpha-6: rgba(236, 235, 231, 0.06);
+  --alpha-8: rgba(236, 235, 231, 0.08);
+  --alpha-10: rgba(236, 235, 231, 0.10);
+  --alpha-12: rgba(236, 235, 231, 0.12);
+  --alpha-14: rgba(236, 235, 231, 0.14);
+  --alpha-15: rgba(236, 235, 231, 0.15);
+  --alpha-20: rgba(236, 235, 231, 0.20);
+  --alpha-25: rgba(236, 235, 231, 0.25);
 
-  --pi-green-strong: oklch(0.58 0.13 160);
-  --pi-green-light: oklch(0.66 0.12 160 / 0.18);
-  --pi-green-lighter: oklch(0.66 0.12 160 / 0.10);
-  --pi-yellow: oklch(0.79 0.14 84);
-  --pi-amber: var(--pi-yellow);
-  --amber-alpha-8: oklch(0.79 0.14 84 / 0.14);
-  --amber-alpha-16: oklch(0.79 0.14 84 / 0.24);
-  --amber-alpha-30: oklch(0.79 0.14 84 / 0.36);
-  --pi-amber-text: oklch(0.84 0.12 84);
-  --pi-red-text: oklch(0.8 0.12 25);
-  --red-alpha-8: oklch(0.63 0.22 25 / 0.16);
-  --red-alpha-20: oklch(0.63 0.22 25 / 0.32);
-  --pi-surface-translucent: oklch(0.2 0.012 260 / 0.88);
-  --pi-inner-bg: oklch(0.24 0.012 260);
-  --pi-tray-bg: oklch(0.27 0.02 200 / 0.92);
-  --pi-grid-line: oklch(0.8 0.05 160 / 0.08);
-  --pi-surface-inset-shadow: inset 4px 0 14px -3px oklch(0 0 0 / 0.45);
+  --amber-alpha-30: #4a3c1a;
+  --red-alpha-20: #5a2e20;
+  --pill-red-border: var(--pill-border-width) solid #5a2e20;
+  --pill-red-hover-border: #7a3f2c;
 
-  --pill-border: var(--pill-border-width) solid var(--alpha-12);
-  --pill-bg: oklch(0.25 0.015 260 / 0.88);
-  --pill-shadow: 0 1px 6px oklch(0 0 0 / 0.35), inset 0 1px 0 0 oklch(1 0 0 / 0.06);
-  --pill-hover-border: var(--alpha-20);
-
-  --glass-bg: oklch(0.24 0.014 260 / 0.7);
-  --glass-bg-solid: oklch(0.22 0.014 260 / 0.86);
-  --menu-surface: oklch(0.23 0.014 260);
-  --glass-highlight: inset 0 1px 0 0 oklch(1 0 0 / 0.15), inset 1px 0 0 0 oklch(1 0 0 / 0.05);
-  --glass-inner-shadow: inset 0 -1px 0 0 oklch(0 0 0 / 0.35), inset -1px 0 0 0 oklch(0 0 0 / 0.25);
-  --glass-shadow: 0 3px 10px oklch(0 0 0 / 0.35), 0 1px 0 oklch(0 0 0 / 0.2);
-  --glass-shadow-lg: 0 16px 44px oklch(0 0 0 / 0.45), 0 4px 10px oklch(0 0 0 / 0.3);
-  --glass-border: 1px solid oklch(1 0 0 / 0.14);
+  --glass-shadow-lg: 0 8px 24px -6px rgba(0, 0, 0, 0.5);
 }
