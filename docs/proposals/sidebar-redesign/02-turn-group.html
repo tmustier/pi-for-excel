@@ -111,7 +111,7 @@ const states={
 };
 const params=new URLSearchParams(location.search);
 const w=Number(params.get('w')||360), only=params.get('only');
-const keys=only?only.split(','):Object.keys(states);
+const keys=(only?only.split(','):Object.keys(states)).filter(k=>Object.hasOwn(states,k));
 document.body.innerHTML+=keys.map(k=>`<div class="col" style="width:${w}px"><div class="cap">${k}  ${states[k][0]}  ${w}px</div>${states[k][1]}</div>`).join('');
 if(params.get('zoom')) document.body.style.zoom=params.get('zoom');
 </script>
