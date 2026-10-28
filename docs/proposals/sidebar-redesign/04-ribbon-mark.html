@@ -1,0 +1,48 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  body { margin: 0; padding: 28px; font: 12px 'IBM Plex Sans', sans-serif; color: #333; background: #fff; }
+  h2 { font-size: 12px; font-weight: 500; margin: 0 0 10px; color: #666; }
+  .row { display: grid; grid-template-columns: 150px repeat(4, 1fr); align-items: center; gap: 18px; padding: 14px 0; border-top: 1px solid #e5e5e5; }
+  .lbl { color: #333; }
+  .lbl small { display: block; color: #777; margin-top: 3px; line-height: 1.4; }
+  .sizes { display: flex; align-items: flex-end; gap: 14px; }
+  .ribbon { background: #f3f2f1; padding: 10px 14px; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: #242424; }
+  .ribbon.dark { background: #2b2b2b; color: #eee; }
+  svg { display: block; }
+  .tile { border-radius: 22%; }
+</style></head><body>
+
+<h2>Ribbon icon candidates, rendered at 80 / 32 / 16, then in a light and dark ribbon at 16</h2>
+
+<script>
+const GREEN = '#1e6f55';
+const marks = {
+  current: (c, bg) => `<rect width="80" height="80" rx="18" fill="${c}"/><text x="40" y="58" text-anchor="middle" font-family="IBM Plex Sans" font-weight="600" font-size="52" fill="${bg}">π</text>`,
+  // D: pi as a table — top rule + two column strokes
+  pitable: (c, bg) => `<rect x="14" y="20" width="52" height="9" rx="2" fill="${c}"/><rect x="24" y="29" width="9" height="32" rx="2" fill="${c}"/><rect x="47" y="29" width="9" height="32" rx="2" fill="${c}"/>`,
+  // A: range — 2x2 grid, one cell filled
+  range: (c, bg) => `<rect x="15" y="15" width="22" height="22" rx="3" fill="none" stroke="${c}" stroke-width="6"/><rect x="43" y="15" width="22" height="22" rx="3" fill="none" stroke="${c}" stroke-width="6"/><rect x="15" y="43" width="22" height="22" rx="3" fill="none" stroke="${c}" stroke-width="6"/><rect x="43" y="43" width="22" height="22" rx="3" fill="${c}"/>`,
+  // B: fill handle — a cell with Excel's drag handle at the corner
+  handle: (c, bg) => `<rect x="14" y="14" width="46" height="46" rx="4" fill="none" stroke="${c}" stroke-width="7"/><rect x="50" y="50" width="18" height="18" rx="3" fill="${c}" stroke="${bg}" stroke-width="4"/>`,
+};
+const tileOf = (inner) => (c, bg) => `<rect width="80" height="80" rx="18" fill="${c}"/>` + inner(bg, c);
+const svg = (fn, size, c, bg) => `<svg width="${size}" height="${size}" viewBox="0 0 80 80" shape-rendering="geometricPrecision">${fn(c, bg)}</svg>`;
+const rows = [
+  ['Current', 'π on a green tile', marks.current, GREEN, '#fff'],
+  ['D  Pi as a table', 'π reduced to its structure: a header rule and two columns. Keeps the name, says spreadsheet.', marks.pitable, GREEN, '#fff'],
+  ['D  on tile', 'same, white on green for the 80px / store listing', tileOf(marks.pitable), GREEN, '#fff'],
+  ['A  Range', '2×2 grid, one cell filled: the thing Pi acts on', marks.range, GREEN, '#fff'],
+  ['B  Fill handle', 'a cell with Excel\u2019s own drag handle: "act on this"', marks.handle, GREEN, '#fff'],
+  ['D  monochrome', 'as a Fluent-style ribbon glyph, no brand colour', marks.pitable, '#242424', '#fff'],
+];
+document.body.insertAdjacentHTML('beforeend', rows.map(([name, note, fn, c, bg]) => `
+<div class="row">
+  <div class="lbl">${name}<small>${note}</small></div>
+  <div class="sizes">${svg(fn,80,c,bg)}${svg(fn,32,c,bg)}${svg(fn,16,c,bg)}</div>
+  <div class="ribbon">${svg(fn,16,c,bg)} Open Pi</div>
+  <div class="ribbon dark">${svg(fn,16,c==='#242424'?'#eee':c,bg==='#fff'&&c!=='#242424'?'#fff':'#2b2b2b')} Open Pi</div>
+  <div></div>
+</div>`).join(''));
+</script>
+</body></html>
