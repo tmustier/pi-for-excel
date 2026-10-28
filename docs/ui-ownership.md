@@ -177,10 +177,9 @@ Steps (each a coherent commit):
 
 Known risk areas and how they are handled:
 
-- **Streaming re-render performance** — StreamingMessageContainer re-renders
-  the in-flight assistant message on deltas; keep the same
-  "only the last message re-renders" contract and verify with a long
-  streaming session.
+- **Streaming re-render performance** — the streamed response is passed to
+  `<message-list>` once per animation frame as a clone; only the last turn's
+  elements re-render on deltas. Verify with a long streaming session.
 - **Scroll anchoring** — preserve MessageList's pin-to-bottom behavior
   (stick when at bottom, don't yank when scrolled up).
 - **Markdown incremental rendering** — `<pi-markdown>` re-parses on each

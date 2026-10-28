@@ -1,18 +1,16 @@
 /**
- * Tool renderers for Pi-for-Excel.
+ * What a tool call did, in words and in detail.
  *
- * Renders Excel tool calls as compact, collapsed-by-default cards with
- * human-readable descriptions. Expand to see raw Input/Output.
+ * `describeToolCall` gives the verb and reference a turn group row is built
+ * from (tool-rows.ts); `renderToolCardBody` is the row's drill-in: the
+ * humanized input and the result.
  */
 
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
-import { registerToolRenderer } from "./messages/tool-renderer-registry.js";
-import type { ToolRenderer, ToolRenderResult } from "./messages/tool-renderer-registry.js";
 import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
 import { ref } from "lit/directives/ref.js";
-import { renderDisclosureToolCardHeader, renderToolCardHeader, type ToolCardDisclosure } from "./tool-card-header.js";
-import { cellRef, cellRefDisplay, cellRefs } from "./cell-link.js";
+import { cellRef, cellRefs } from "./cell-link.js";
 import { humanizeToolInput } from "./humanize-params.js";
 import { humanizeColorsInText } from "./color-names.js";
 import { stripYamlFrontmatter } from "./markdown-preprocess.js";
@@ -42,7 +40,6 @@ import { renderDepTree } from "./render-dep-tree.js";
 
 // The taskpane registers <markdown-block> and <code-block> through register-components.
 
-type ToolState = "inprogress" | "complete" | "error";
 type SupportedToolName = UiToolName;
 
 /* ── Helpers ────────────────────────────────────────────────── */
@@ -1260,103 +1257,26 @@ export function renderToolCardBody(
  */
 export function renderToolSetupCards(result: ToolResultMessage | undefined): TemplateResult | null {
   const details = decodeToolDetails(result?.details);
-  const searchSetupDetails = details !== undefined && shouldShowSearchSetupCard(details) ? details : null;
-  const initSearchSetup = (el: Element | undefined): void => {
-    if (el instanceof HTMLElement && searchSetupDetails) {
-      mountSearchSetupCard(el, searchSetupDetails);
-    }
-  };
-  const bridgeSetupDetails = details !== undefined && shouldShowBridgeSetupCard(details) ? details : null;
-  if (!searchSetupDetails && !bridgeSetupDetails) return null;
-  const initBridgeSetup = (el: Element | undefined): void => {
-    if (el instanceof HTMLElement && bridgeSetupDetails) {
-      mountBridgeSetupCard(el, bridgeSetupDetails);
-    }
-  };
-  return html`
-    ${searchSetupDetails !== null ? html`<div ${ref(initSearchSetup)}></div>` : html``}
-    ${bridgeSetupDetails !== null ? html`<div ${ref(initBridgeSetup)}></div>` : html``}
-  `;
+  if (details === undefined) return null;
+  const mount = shouldShowSearchSetupCard(details) ? (el: HTMLElement) => mountSearchSetupCard(el, details)
+    : shouldShowBridgeSetupCard(details) ? (el: HTMLElement) => mountBridgeSetupCard(el, details)
+    : null;
+  if (!mount) return null;
+  return html`<div ${ref((el) => { if (el instanceof HTMLElement) mount(el); })}></div>`;
 }
 
-function createExcelMarkdownRenderer(toolName: SupportedToolName): ToolRenderer {
-  return {
-    render(
-      params: unknown,
-      result: ToolResultMessage | undefined,
-      isStreaming: boolean,
-      disclosure: ToolCardDisclosure,
-    ): ToolRenderResult {
-      const resultText = result ? splitToolResultContent(result).text : undefined;
-      const state: ToolState = result
-        ? (isFailedToolResult(result) ? "error" : "complete")
-        : isStreaming
-          ? "inprogress"
-          : "complete";
-
-      const paramsJson = formatParamsJson(params);
-      const bodyClass = disclosure.expanded
-        ? "pi-tool-card__body"
-        : "pi-tool-card__body pi-tool-card__body--collapsed";
-
-      // `details` is unknown at this seam: older persisted sessions may carry any shape.
-      const details = decodeToolDetails(result?.details);
-      const desc = describeToolCall(toolName, params, resultText, details);
-      const detailContent = desc.address
-        ? (desc.detail && desc.detail !== desc.address
-          ? cellRefDisplay(desc.detail, desc.address)
-          : cellRefs(desc.address))
-        : desc.detail;
-      const title = html`<span class="pi-tool-card__title"><strong>${desc.action}</strong>${desc.detail ? html` <span class="pi-tool-card__detail-text">${detailContent}</span>` : ""}</span>`;
-
-      // ── No params or result yet ──────────────────────────
-      if (!result && !paramsJson) {
-        return {
-          content: html`
-            <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
-              <div class="pi-tool-card__header">
-                ${renderToolCardHeader(state, title)}
-              </div>
-            </div>
-          `,
-          isCustom: true,
-        };
-      }
-
-      return {
-        content: html`
-          <div class="pi-tool-card" data-state=${state} data-tool-name=${toolName}>
-            <div class="pi-tool-card__header">
-              ${renderDisclosureToolCardHeader(state, title, disclosure)}
-            </div>
-            <div class=${bodyClass}>${renderToolCardBody(toolName, params, result)}</div>
-          </div>
-          ${renderToolSetupCards(result)}
-        `,
-        isCustom: true,
-      };
-    },
-  };
-}
-
-const CUSTOM_RENDERED_TOOL_NAMES: readonly SupportedToolName[] = TOOL_NAMES_WITH_RENDERER;
-const CUSTOM_RENDERED_TOOL_NAME_SET = new Set<string>(CUSTOM_RENDERED_TOOL_NAMES);
+const SUPPORTED_TOOL_NAMES = new Set<string>(TOOL_NAMES_WITH_RENDERER);
 
 export function isSupportedToolName(name: string): name is SupportedToolName {
-  return CUSTOM_RENDERED_TOOL_NAME_SET.has(name);
+  return SUPPORTED_TOOL_NAMES.has(name);
 }
 
 /**
- * One-line description of a tool call that has not run yet, as its tool
- * card shows it (for example "Write Sheet1!B2:C4"). Approvals use it so the
- * user sees the same words they will see on the card.
+ * One-line description of a tool call that has not run yet ("Write
+ * Sheet1!B2:C4"), in the words its row will use.
  */
 export function describePendingToolCall(toolName: string, params: unknown): string | null {
   if (!isSupportedToolName(toolName)) return null;
   const desc = describeToolCall(toolName, params, undefined, undefined);
   return desc.detail ? `${desc.action} ${desc.detail}` : desc.action;
-}
-
-for (const name of CUSTOM_RENDERED_TOOL_NAMES) {
-  registerToolRenderer(name, createExcelMarkdownRenderer(name));
 }

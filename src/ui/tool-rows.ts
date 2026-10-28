@@ -10,13 +10,12 @@
  */
 
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
-import { html, type TemplateResult } from "lit";
+import { html, nothing, type TemplateResult } from "lit";
 import { Code, Globe, Puzzle, Table, Terminal, type IconNode } from "lucide";
 
 import { t } from "../language/index.js";
 import { decodeToolDetails, type ExcelToolDetails } from "../tools/tool-details.js";
 import { cellRefDisplay, cellRefs } from "./cell-link.js";
-import { renderTool } from "./messages/tool-renderer-registry.js";
 import {
   describeToolCall,
   extractResultError,
@@ -136,17 +135,14 @@ const TOOL_KINDS: Record<string, ToolKind> = {
   extensions_manager: "extension",
 };
 
-const KIND_ICONS: Record<ToolKind, IconNode> = {
-  sheet: Table,
-  python: Terminal,
-  web: Globe,
-  code: Code,
-  extension: Puzzle,
-};
-
-export function toolKindIcon(kind: ToolKind): IconNode {
-  return KIND_ICONS[kind];
-}
+/** In the order the group header stacks them. */
+export const TOOL_KIND_ICONS: ReadonlyMap<ToolKind, IconNode> = new Map([
+  ["sheet", Table],
+  ["python", Terminal],
+  ["web", Globe],
+  ["code", Code],
+  ["extension", Puzzle],
+]);
 
 export function toolKind(toolName: string): ToolKind {
   return TOOL_KINDS[toolName] ?? (isSupportedToolName(toolName) ? "sheet" : "extension");
@@ -269,8 +265,29 @@ export function describeToolRow(
   };
 }
 
-/** The row's expanded body: the tool card's input and result sections. */
+function formatJson(value: unknown): { code: string; language: string } {
+  const text = typeof value === "string" ? value : JSON.stringify(value, null, 2) ?? String(value);
+  try {
+    return { code: JSON.stringify(JSON.parse(text), null, 2), language: "json" };
+  } catch {
+    return { code: text, language: "text" };
+  }
+}
+
+/**
+ * The row's expanded body: the tool card's input and result sections for a
+ * workbook tool; the raw input and output for an extension tool.
+ */
 export function renderToolRowDetail(toolName: string, params: ToolCall["arguments"], result: ToolResultMessage | undefined): TemplateResult {
   if (isSupportedToolName(toolName)) return renderToolCardBody(toolName, params, result);
-  return renderTool(toolName, params, result, false, { expanded: true, toggle: () => {} }).content;
+  const input = params === undefined || params === null ? null : formatJson(params);
+  const output = result ? formatJson(result.content.filter((part) => part.type === "text").map((part) => part.text).join("\n") || t("messages.noOutput")) : null;
+  const section = (label: string, { code, language }: { code: string; language: string }) => html`<div>
+    <div class="pi-tool-fallback__label">${label}</div>
+    <code-block .code=${code} language=${language}></code-block>
+  </div>`;
+  return html`<div class="pi-tool-fallback">
+    ${input ? section(t("messages.toolInput"), input) : nothing}
+    ${output ? section(t("messages.toolOutput"), output) : nothing}
+  </div>`;
 }

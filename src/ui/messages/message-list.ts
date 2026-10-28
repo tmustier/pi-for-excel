@@ -12,7 +12,7 @@
 
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
-import { html, LitElement, type TemplateResult } from "lit";
+import { html, LitElement, nothing, type TemplateResult } from "lit";
 import { property } from "lit/decorators.js";
 import { repeat } from "lit/directives/repeat.js";
 
@@ -22,17 +22,10 @@ import { buildTranscriptBlocks, type TranscriptBlock } from "./turn-model.js";
 import "./messages.js";
 import "./turn-group.js";
 
-interface RenderItem {
-  key: string;
-  template: TemplateResult;
-}
-
-const EMPTY_PENDING = new Set<string>();
-
 export class MessageList extends LitElement {
   @property({ type: Array }) messages: AgentMessage[] = [];
   @property({ type: Array }) tools: AgentTool[] = [];
-  @property({ type: Object }) pendingToolCalls?: ReadonlySet<string>;
+  @property({ type: Object }) pendingToolCalls: ReadonlySet<string> = new Set();
   /** The turn is running: tool calls without a result are still to come. */
   @property({ type: Boolean }) isStreaming = false;
   @property({ type: String }) errorSummary: string | null = null;
@@ -41,7 +34,7 @@ export class MessageList extends LitElement {
    * each tool finishes on its own, but its toolResult message is only added
    * once the whole batch is done; these let each row finish as it happens.
    */
-  @property({ type: Object }) liveToolResults?: ReadonlyMap<string, ToolResultMessage>;
+  @property({ type: Object }) liveToolResults: ReadonlyMap<string, ToolResultMessage> = new Map();
   /** The response being streamed, which pi-agent-core adds to `messages` only when it ends. */
   @property({ type: Object }) streamingMessage: AssistantMessage | null = null;
 
@@ -72,7 +65,7 @@ export class MessageList extends LitElement {
   }
 
   private _blocks(): TranscriptBlock[] {
-    const results = new Map<string, ToolResultMessage>(this.liveToolResults ?? []);
+    const results = new Map(this.liveToolResults);
     for (const message of this.messages) {
       if (message.role === "toolResult") results.set(message.toolCallId, message);
     }
@@ -81,59 +74,44 @@ export class MessageList extends LitElement {
       streamingMessage: this.streamingMessage,
       tools: this.tools,
       results,
-      pendingToolCalls: this.pendingToolCalls ?? EMPTY_PENDING,
+      pendingToolCalls: this.pendingToolCalls,
       running: this.isStreaming,
     });
   }
 
-  private _buildRenderItems(): RenderItem[] {
-    const items: RenderItem[] = [];
+  override render() {
     const lastMessage = this.streamingMessage ?? this.messages.at(-1);
 
-    for (const block of this._blocks()) {
-      if (block.type === "turnGroup") {
-        items.push({ key: block.key, template: html`<turn-group .model=${block.group}></turn-group>` });
-        continue;
+    const render = (block: TranscriptBlock): TemplateResult | typeof nothing => {
+      if (block.type === "turnGroup") return html`<turn-group .model=${block.group}></turn-group>`;
+      const custom = renderMessage(block.message);
+      if (custom) return custom;
+      if (block.type === "message") {
+        const { message } = block;
+        return message.role === "user" || message.role === "user-with-attachments"
+          ? html`<user-message .message=${message}></user-message>`
+          : nothing;
       }
-
       const { message } = block;
-      const customTemplate = renderMessage(message);
-      if (customTemplate) {
-        items.push({ key: block.key, template: customTemplate });
-        continue;
-      }
+      const isLast = message === lastMessage;
+      const tail = block.contentTo >= message.content.length;
+      return html`
+        <assistant-message
+          .message=${message}
+          .contentFrom=${block.contentFrom}
+          .contentTo=${block.contentTo}
+          .isStreaming=${block.streaming}
+          .copyable=${tail}
+          .hideError=${!tail || (this.isStreaming && isLast)}
+          .canRetry=${tail && !this.isStreaming && isLast}
+          .errorSummary=${tail && isLast ? this.errorSummary : null}
+        ></assistant-message>
+      `;
+    };
 
-      if (message.role === "user" || message.role === "user-with-attachments") {
-        items.push({ key: block.key, template: html`<user-message .message=${message}></user-message>` });
-      } else if (message.role === "assistant") {
-        const isLast = message === lastMessage;
-        const tail = block.contentTo === undefined || block.contentTo >= message.content.length;
-        items.push({
-          key: block.key,
-          template: html`
-            <assistant-message
-              .message=${message}
-              .contentFrom=${block.contentFrom ?? 0}
-              .contentTo=${block.contentTo ?? message.content.length}
-              .isStreaming=${block.streaming}
-              .copyable=${tail}
-              .hideError=${!tail || (this.isStreaming && isLast)}
-              .canRetry=${tail && !this.isStreaming && isLast}
-              .errorSummary=${tail && isLast ? this.errorSummary : null}
-            ></assistant-message>
-          `,
-        });
-      }
-    }
-
-    return items;
-  }
-
-  override render() {
-    const items = this._buildRenderItems();
     return html`
       <div class="pi-message-list">
-        ${repeat(items, (item) => item.key, (item) => item.template)}
+        ${repeat(this._blocks(), (block) => block.type === "turnGroup" ? block.group.key : block.key, render)}
       </div>
     `;
   }

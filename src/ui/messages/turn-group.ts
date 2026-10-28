@@ -23,14 +23,12 @@ import { t } from "../../language/index.js";
 import { getInlineApprovals, type InlineApproval } from "../approval-dialog.js";
 import { icon } from "../icons.js";
 import { renderToolSetupCards } from "../tool-renderers.js";
-import { describeToolRow, renderToolRowDetail, toolKind, toolKindIcon, type ToolKind } from "../tool-rows.js";
+import { describeToolRow, renderToolRowDetail, TOOL_KIND_ICONS, toolKind } from "../tool-rows.js";
 import { renderTurnChangesReceipt } from "./turn-changes-receipt.js";
 import { getThinkingDurationMs, isDisclosureExpanded, setDisclosureExpanded, subscribeDisclosure } from "./transcript-state.js";
 import type { TurnGroupModel, TurnNoteStep, TurnToolStep } from "./turn-model.js";
 import "./markdown-block.js";
 import "./thinking-block.js";
-
-const KIND_ORDER: readonly ToolKind[] = ["sheet", "python", "web", "code", "extension"];
 
 const STATUS_ICONS: Record<TurnToolStep["state"] | "waiting", { icon: IconNode; className: string }> = {
   live: { icon: Loader, className: "pi-turn-row__status pi-turn-row__status--live" },
@@ -46,6 +44,7 @@ export class TurnGroup extends LitElement {
 
   private _unsubscribe: (() => void) | undefined;
   private _ticker: number | undefined;
+  private _preparationFailed: InlineApproval | null = null;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -87,7 +86,7 @@ export class TurnGroup extends LitElement {
     const toolSteps = model.steps.filter((step): step is TurnToolStep => step.type === "tool");
     const failed = toolSteps.filter((step) => step.state === "failed").length;
     const waiting = toolSteps.some((step) => this._approvalFor(step.toolCall.id) !== undefined);
-    const kinds = KIND_ORDER.filter((kind) => toolSteps.some((step) => toolKind(step.toolCall.name) === kind));
+    const kinds = new Set(toolSteps.map((step) => toolKind(step.toolCall.name)));
     const state = waiting ? "waiting" : model.endedAt === null ? "live" : "done";
     const seconds = Math.max(0, Math.round(((model.endedAt ?? Date.now()) - model.startedAt) / 1000));
     const elapsed = seconds < 60 ? `${seconds}s` : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
@@ -106,7 +105,7 @@ export class TurnGroup extends LitElement {
           @click=${() => setDisclosureExpanded(model.key, !expanded)}
         >
           <span class="pi-turn__stack" aria-hidden="true">
-            ${kinds.map((kind) => html`<span class="pi-turn__kind">${icon(toolKindIcon(kind), "xs")}</span>`)}
+            ${[...TOOL_KIND_ICONS].filter(([kind]) => kinds.has(kind)).map(([, kindIcon]) => html`<span class="pi-turn__kind">${icon(kindIcon, "xs")}</span>`)}
           </span>
           <span class="pi-turn__title">${title}</span>
           ${state === "live" ? html`<span class="pi-turn__spinner" aria-hidden="true">${icon(Loader, "sm")}</span>` : nothing}
@@ -200,8 +199,6 @@ export class TurnGroup extends LitElement {
       </div>
     `;
   }
-
-  private _preparationFailed: InlineApproval | null = null;
 }
 
 declare global {

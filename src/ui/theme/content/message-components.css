@@ -1,29 +1,9 @@
-/* Fallback wrapper for tool messages that don't use custom renderers. */
-.pi-tool-card-fallback {
-  padding: 10px;
-  border: 1px solid var(--border);
-  background: var(--pi-inner-bg);
-  border-radius: var(--radius-sm);
-  box-shadow: 0 1px 3px var(--alpha-4);
-}
-
-/* Default JSON tool renderer (no registered custom renderer) */
+/* Extension tool drill-in: raw input and output */
 .pi-tool-fallback {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
-
-.pi-tool-fallback__header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: var(--text-sm);
-  color: var(--muted-foreground);
-}
-
-.pi-tool-fallback__header[data-state="complete"] svg { color: var(--pi-green-strong); }
-.pi-tool-fallback__header[data-state="error"] svg { color: var(--destructive); }
 
 .pi-tool-fallback__label {
   margin-bottom: 4px;

@@ -143,14 +143,8 @@ const AUTO_SCROLL_REENGAGE_PX = 20;
 const INNER_SCROLL_DISENGAGE_PX = AUTO_SCROLL_DISENGAGE_PX;
 const INNER_SCROLL_REENGAGE_PX = AUTO_SCROLL_REENGAGE_PX;
 
-/**
- * CSS selector for inner scrollable areas inside the streaming message.
- *
- * - `thinking-block markdown-block` — thinking body (max-height 300 px)
- * - `.pi-tool-card__body--open`     — expanded tool card (max-height 2000 px)
- */
-const INNER_SCROLLABLE_SELECTOR =
-  "thinking-block markdown-block, .pi-tool-card__body--open";
+/** Inner scrollable areas inside the streaming message: the thinking body (max-height 300 px). */
+const INNER_SCROLLABLE_SELECTOR = "thinking-block markdown-block";
 
 @customElement("pi-sidebar")
 export class PiSidebar extends LitElement {
@@ -207,8 +201,8 @@ export class PiSidebar extends LitElement {
   private _liveToolResults = new Map<string, ToolResultMessage>();
   /**
    * The response being streamed, drawn by <message-list> as part of its
-   * turn. Updates batch per frame and deep-clone the message so Lit sees
-   * new identities for nested state (tool call arguments grow in place).
+   * turn. Updates batch per frame and clone the message so Lit sees new
+   * identities for nested state (tool call arguments grow in place).
    */
   @state() private _streamingMessage: AssistantMessage | null = null;
   private _pendingStreamingMessage: AssistantMessage | null = null;
@@ -431,23 +425,18 @@ export class PiSidebar extends LitElement {
     }
   }
 
-  /** Update the streamed response, batching non-immediate updates per frame. */
-  private _setStreamingMessage(message: AssistantMessage | null, immediate = false): void {
+  /** Clears at once; updates batch per frame. */
+  private _setStreamingMessage(message: AssistantMessage | null): void {
     this._pendingStreamingMessage = message;
-    if (immediate || message === null) {
-      this._streamingMessage = message;
-      this._pendingStreamingMessage = null;
-      this._streamingUpdateScheduled = false;
+    if (message === null) {
+      this._streamingMessage = null;
       return;
     }
     if (this._streamingUpdateScheduled) return;
     this._streamingUpdateScheduled = true;
     requestAnimationFrame(() => {
       this._streamingUpdateScheduled = false;
-      if (this._pendingStreamingMessage !== null) {
-        this._streamingMessage = structuredClone(this._pendingStreamingMessage);
-      }
-      this._pendingStreamingMessage = null;
+      if (this._pendingStreamingMessage !== null) this._streamingMessage = structuredClone(this._pendingStreamingMessage);
     });
   }
 
@@ -464,7 +453,7 @@ export class PiSidebar extends LitElement {
   private _setupSubscription() {
     this._unsubscribe?.();
     this._liveToolResults = new Map();
-    this._setStreamingMessage(null, true);
+    this._setStreamingMessage(null);
     forgetOpenThinking();
     const agent = this.agent;
     if (!agent) return;
@@ -478,7 +467,7 @@ export class PiSidebar extends LitElement {
         case "message_end":
           if (ev.type === "message_end" && ev.message.role === "assistant") {
             endOpenThinking(ev.message, Date.now());
-            this._setStreamingMessage(null, true);
+            this._setStreamingMessage(null);
           }
           this._hasMessages = hasRenderableMessages(agent.state.messages);
           this._isStreaming = agent.state.isStreaming;
@@ -523,7 +512,7 @@ export class PiSidebar extends LitElement {
         }
         case "agent_end":
           this._isStreaming = false;
-          this._setStreamingMessage(null, true);
+          this._setStreamingMessage(null);
           this.requestUpdate();
           break;
         case "message_update": {
@@ -536,9 +525,7 @@ export class PiSidebar extends LitElement {
               recordThinkingEnd(thinkingKey(ev.message, update.contentIndex), Date.now());
             }
           }
-          if (ev.message.role === "assistant") {
-            this._setStreamingMessage(ev.message, !agent.state.isStreaming);
-          }
+          if (ev.message.role === "assistant") this._setStreamingMessage(ev.message);
           this.requestUpdate();
           break;
         }

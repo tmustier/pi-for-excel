@@ -104,8 +104,8 @@ export class AssistantMessage extends LitElement {
     const message = this.message;
     if (!message) return html``;
 
-    const from = Math.max(0, this.contentFrom);
-    const to = Math.min(message.content.length, this.contentTo ?? message.content.length);
+    const from = this.contentFrom;
+    const to = this.contentTo ?? message.content.length;
     const tail = to >= message.content.length;
 
     // Render content in the order it appears. Only the last block of a

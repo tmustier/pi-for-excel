@@ -7,8 +7,10 @@ import { test } from "node:test";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 
+import type { TemplateResult } from "lit";
+
 import { buildTranscriptBlocks } from "../src/ui/messages/turn-model.ts";
-import { toolActionVerb } from "../src/ui/tool-rows.ts";
+import { describeToolRow, toolActionVerb } from "../src/ui/tool-rows.ts";
 
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
@@ -155,6 +157,40 @@ void test("trailing prose is not an answer while its tool calls still run", () =
   assert.deepEqual(shape(build([response], { running: true })), ["group[r1:live] live", "assistant[1,2]"]);
   assert.deepEqual(shape(build([response, result("r1", "ok", 20)], { running: true })),
     ["group[r1:done] answered", "assistant[1,2]"]);
+});
+
+/** The text a template renders, ignoring markup. */
+function textOf(template: TemplateResult): string {
+  const isTemplate = (value: unknown): value is TemplateResult =>
+    typeof value === "object" && value !== null && "strings" in value && "values" in value;
+  return template.strings.reduce((text, part, index) => {
+    const value = template.values[index - 1];
+    return text + (isTemplate(value) ? textOf(value) : typeof value === "string" ? value : "") + part;
+  }).replace(/<[^>]*>/g, "").replace(/\s+/g, " ").trim();
+}
+
+void test("a row conjugates the call's verb for its state and keeps one fact about the result", () => {
+  const params = { range: "'Cash Flow'!D10:L10", formula: "=B10*2" };
+  const done = result("f", "Filled 'Cash Flow'!D10:L10", 2, { toolName: "fill_formula", details: { kind: "fill_formula", blocked: false, changes: { changedCount: 9, truncated: false, sample: [] } } });
+  assert.equal(textOf(describeToolRow("fill_formula", params, undefined, "live").sentence), "Filling 'Cash Flow'!D10:L10");
+  assert.deepEqual(
+    { ...describeToolRow("fill_formula", params, done, "done"), sentence: textOf(describeToolRow("fill_formula", params, done, "done").sentence) },
+    { sentence: "Filled 'Cash Flow'!D10:L10", meta: "9 cells", reason: null },
+  );
+  assert.equal(textOf(describeToolRow("fill_formula", params, undefined, "stopped").sentence), "Stopped filling 'Cash Flow'!D10:L10");
+
+  const failed = result("f", "Error: Sheet \"Cash Flow\" not found.", 2, { toolName: "fill_formula", isError: true });
+  const row = describeToolRow("fill_formula", params, failed, "failed");
+  assert.equal(textOf(row.sentence), "Could not fill 'Cash Flow'!D10:L10");
+  assert.equal(row.meta, null);
+  assert.equal(row.reason, "Sheet \"Cash Flow\" not found.");
+});
+
+void test("a result summary's full stop and an extension tool's label do not leak into the row", () => {
+  const added = result("m", "Added sheet \"Q3\".", 2, { toolName: "modify_structure" });
+  assert.equal(textOf(describeToolRow("modify_structure", { action: "add_sheet", name: "Q3" }, added, "done").sentence), "Added sheet \"Q3\"");
+  assert.equal(textOf(describeToolRow("sum_rows", {}, undefined, "live", "Sum rows").sentence), "Running Sum rows");
+  assert.equal(textOf(describeToolRow("sum_rows", {}, result("s", "oops", 2, { isError: true }), "failed").sentence), "Could not run sum_rows");
 });
 
 void test("approval buttons name the action, falling back for extension tools", () => {

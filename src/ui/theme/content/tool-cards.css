@@ -63,10 +63,6 @@
   flex-shrink: 0;
 }
 
-.pi-tool-card__toggle--static {
-  cursor: default;
-}
-
 .pi-tool-card__spinner {
   display: inline-flex;
   align-items: center;

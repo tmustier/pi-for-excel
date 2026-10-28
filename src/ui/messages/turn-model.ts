@@ -41,7 +41,7 @@ export interface TurnNoteStep {
 export type TurnStep = TurnToolStep | TurnNoteStep;
 
 export interface TurnGroupModel {
-  /** Disclosure key for the group's open state. */
+  /** Disclosure key for the group's open state; also the block key. */
   key: string;
   steps: TurnStep[];
   startedAt: number;
@@ -52,20 +52,11 @@ export interface TurnGroupModel {
   changes: TurnChangesMessage | null;
 }
 
-/** A response, or the slice of one, drawn as a message. */
-export interface MessageBlock {
-  type: "message";
-  key: string;
-  message: AgentMessage;
-  streaming: boolean;
-  /** Content blocks to draw, for a response split around its tool calls. */
-  contentFrom?: number;
-  contentTo?: number;
-}
-
 export type TranscriptBlock =
-  | MessageBlock
-  | { type: "turnGroup"; key: string; group: TurnGroupModel };
+  | { type: "message"; key: string; message: Exclude<AgentMessage, AssistantMessage>; }
+  /** A response, or the slice of one around its tool calls, drawn as prose. */
+  | { type: "response"; key: string; message: AssistantMessage; streaming: boolean; contentFrom: number; contentTo: number; }
+  | { type: "turnGroup"; group: TurnGroupModel };
 
 export interface BuildTurnsOptions {
   messages: readonly AgentMessage[];
@@ -102,9 +93,7 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
     if (!message) break;
     if (message.role !== "assistant") {
       // Tool results are drawn with their turn; artifacts are persistence-only.
-      if (message.role !== "toolResult" && message.role !== "artifact") {
-        blocks.push({ type: "message", key: `msg:${index}`, message, streaming: false });
-      }
+      if (message.role !== "toolResult" && message.role !== "artifact") blocks.push({ type: "message", key: `msg:${index}`, message });
       index++;
       continue;
     }
@@ -131,13 +120,11 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
     }
 
     const draw = (response: Response, contentFrom: number, contentTo: number): void => {
-      if (contentFrom >= contentTo && contentFrom > 0) {
-        // An empty tail is drawn only for the response's error or stop marker.
-        const { stopReason } = response.message;
-        if (contentTo < response.message.content.length || (stopReason !== "error" && stopReason !== "aborted")) return;
-      }
+      // An empty tail is drawn only for the response's error or stop marker.
+      const { stopReason } = response.message;
+      if (contentFrom > 0 && contentFrom >= contentTo && stopReason !== "error" && stopReason !== "aborted") return;
       blocks.push({
-        type: "message",
+        type: "response",
         key: `msg:${response.index}:${contentFrom}`,
         message: response.message,
         streaming: response.index === streamingIndex,
@@ -151,7 +138,7 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
     const last = responses[responses.length - 1];
     if (!firstTool || !lastTool || !last) {
       for (const response of responses) draw(response, 0, response.message.content.length);
-      if (changes) blocks.push({ type: "message", key: `msg:${index}:changes`, message: changes, streaming: false });
+      if (changes) blocks.push({ type: "message", key: `msg:${index}:changes`, message: changes });
       index = end;
       continue;
     }
@@ -219,7 +206,6 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
 
     blocks.push({
       type: "turnGroup",
-      key: `turn:${firstTool.message.timestamp}`,
       group: {
         key: `turn:${firstTool.message.timestamp}`,
         steps,

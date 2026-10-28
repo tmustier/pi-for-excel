@@ -66,7 +66,6 @@ itself once the answer starts.
 | `transcript-state.ts` | View state that outlives elements: details mode (Ctrl/Cmd+O, saved), hand toggles of groups/rows/blocks, observed thinking durations |
 | `attachment-tile.ts` | `<attachment-tile>` — defensive rendering for restored attachment messages |
 | `message-renderer-registry.ts` | `registerMessageRenderer()` / `renderMessage()` by role |
-| `tool-renderer-registry.ts` | `registerToolRenderer()` / `renderTool()` + JSON fallback renderer |
 
 Security invariants for `<markdown-block>` live in `src/compat/marked-safety.ts`
 (prototype-level link/image hardening) — keep both in sync.
@@ -159,7 +158,7 @@ Message components use Light DOM (`createRenderRoot() { return this; }`), so the
 |---|---|---|
 | `pi-sidebar.ts` | ChatPanel + AgentInterface | Owns layout, subscribes to Agent, renders message-list + streaming container + working indicator |
 | `pi-input.ts` | MessageEditor | Auto-growing textarea, send/abort buttons, `+` input actions menu, file import affordances; fires `pi-send` / `pi-abort` / `pi-files-drop` / `pi-input-action` events |
-| `messages/*` | pi-web-ui Messages, MessageList, StreamingMessageContainer, ThinkingBlock, AttachmentTile + mini-lit MarkdownBlock/CodeBlock | First-party message rendering (see table above) |
+| `messages/*` | pi-web-ui Messages, MessageList, StreamingMessageContainer, ThinkingBlock, AttachmentTile + mini-lit MarkdownBlock/CodeBlock | First-party message rendering by turn (see table above) |
 | `icons.ts` | mini-lit `icon`/`iconDOM` | Lucide icon helpers sized via SVG attributes |
 | `model-selector-dialog.ts` | pi-web-ui ModelSelector | First-party model picker (active-provider filter, featured ordering, search, keyboard nav) |
 | `api-key-dialog.ts` | pi-web-ui ApiKeyPromptDialog | First-party provider connect prompt (reuses `provider-login.ts` rows, so OAuth works too) |
