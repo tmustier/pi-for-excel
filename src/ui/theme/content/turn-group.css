@@ -86,7 +86,7 @@ turn-group {
 .pi-turn__spinner {
   display: inline-flex;
   flex-shrink: 0;
-  color: var(--fg-3);
+  color: var(--accent-data);
   animation: pi-think-spin 0.9s linear infinite;
 }
 
@@ -176,7 +176,7 @@ turn-group {
 .pi-turn-row__status--failed { color: var(--red); }
 .pi-turn-row__status--waiting { color: var(--amber); }
 .pi-turn-row__status--live {
-  color: var(--fg-2);
+  color: var(--accent-data);
   animation: pi-think-spin 0.9s linear infinite;
 }
 
@@ -318,9 +318,10 @@ turn-group {
   overflow-wrap: anywhere;
 }
 
+/* The totals line of the ledger: a heavier rule than the rows above it. */
 .pi-turn-changes--footer {
   padding: 6px 10px 6px 12px;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-strong);
 }
 
 .pi-turn-changes--standalone {

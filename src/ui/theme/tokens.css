@@ -5,8 +5,10 @@
    Palette and rules: docs/proposals/sidebar-redesign.md §3.
 
    Warm-tinted neutrals so the pane sits beside a white Excel canvas without
-   reading grey or blue. One accent (--pi-green) for changed values and
-   connected state; amber for waiting on the user; red for failed. Nothing
+   reading grey or blue. One accent (--accent-data, a bottle green) with one
+   rule: it marks cells Pi touched (done ticks, changed values, the receipt,
+   cell references under the pointer) and the one action that asks Pi to
+   touch them (Send). Amber for waiting on the user; red for failed. Nothing
    else is coloured. All values are plain sRGB so older WebViews (WPS) render
    the same palette without fallbacks.
 
@@ -25,7 +27,9 @@
   --fg-1: #1c1b19;
   --fg-2: #55524d;
   --fg-3: #6b6862;        /* tertiary text and icons; 4.6:1 on --surface-0 */
-  --accent-data: #1e6f55;
+  --accent-data: #155e4b;        /* 7.3:1 on --surface-0 */
+  --accent-data-strong: #0f4a3a; /* hover on green fills */
+  --accent-data-foreground: #ffffff;
   --accent-data-soft: #e3efe9;
   --amber: #9a6b12;
   --amber-soft: #fbf3e3;
@@ -196,6 +200,8 @@
   --fg-2: #b3b0a9;
   --fg-3: #99958d;
   --accent-data: #5fc294;
+  --accent-data-strong: #7ad1a8;
+  --accent-data-foreground: #171614;
   --accent-data-soft: #1d3a2e;
   --amber: #e0b24a;
   --amber-soft: #2e2718;

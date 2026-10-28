@@ -44,9 +44,11 @@ into Excel. Specific problems, from screenshots of the shipped build:
 1. **The pane is an instrument next to the sheet, not a chat app.** Operate
    mode: scanability, consistency and native expectations outrank expression.
    Brand lives in precision, not in a mark.
-2. **Colour means something.** One accent for changed values and connected
-   state. Amber for waiting on the user. Red for failed. Nothing else is
-   coloured.
+2. **Colour means something.** One accent, a bottle green, with one rule: it
+   marks cells Pi touched (done ticks, changed values, the receipt, a cell
+   reference under the pointer, the live spinner) and the one action that asks
+   Pi to touch them (Send). Amber for waiting on the user. Red for failed.
+   Nothing else is coloured, and primary buttons stay ink.
 3. **Rows, not cards.** Lists are hairline-separated rows at full width. A
    bordered surface exists only when it contains a unit the user acts on as a
    whole: the composer, a popover, the turn group, a code block.
@@ -78,7 +80,8 @@ looking grey or blue. Every text colour meets 4.5:1 on its surface.
 | `fg` | `#1c1b19` | `#ecebe7` | primary text |
 | `fg-2` | `#55524d` | `#b3b0a9` | secondary text |
 | `fg-3` | `#6b6862` | `#99958d` | tertiary text, icons |
-| `accent` | `#1e6f55` | `#5fc294` | changed values, connected, success glyph |
+| `accent` | `#155e4b` | `#5fc294` | cells Pi touched; Send |
+| `accent-strong` | `#0f4a3a` | `#7ad1a8` | hover on green fills |
 | `amber` | `#9a6b12` | `#e0b24a` | waiting for approval, context warning |
 | `amber-soft` | `#fbf3e3` | `#2e2718` | approval row surface |
 | `red` | `#b4421f` | `#f08a66` | failed |
@@ -338,8 +341,9 @@ range icon is custom (a 3×3 grid with the centre filled).
 
 ## 8. What is removed
 
-Tab strip, status bar, π in the pane, spreadsheet-grid background, glass
-tokens, green-tinted tool and thinking cards, 16px pill radii, right-aligned
+Tab strip, status bar, π in the pane, spreadsheet-grid background behind the
+transcript (an empty sheet of 64×20 cells remains behind the empty state, the
+one place the motif appears), glass tokens, green-tinted tool and thinking cards, 16px pill radii, right-aligned
 user bubble, floating overlays and their blur, nested cards inside overlays,
 card-per-option popovers, starter descriptions, the slogan, the context ring,
 per-row tool timings, "Retry" on tool rows, the approval overlay.
