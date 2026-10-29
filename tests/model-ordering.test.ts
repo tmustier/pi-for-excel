@@ -15,7 +15,7 @@ import { installProcessEnvShim } from "../src/compat/process-env-shim.ts";
 import { orderModelsForSelector } from "../src/models/featured-models.ts";
 import {
   compareModels,
-  parseMajorMinor,
+  parseLeadingMajorMinor,
 } from "../src/models/model-ordering.ts";
 import { getThinkingLevelsForModel } from "../src/models/thinking-levels.ts";
 import { pickDefaultModel as pickDefaultModelFromRuntime } from "../src/taskpane/default-model.ts";
@@ -42,24 +42,45 @@ const OPENAI_PROVIDERS: OpenAiProvider[] = ["openai", "openai-codex"];
 
 const GPT_56_IDS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"];
 
-void test("parseMajorMinor handles registry version formats", () => {
+void test("parseLeadingMajorMinor reads the leading major.minor of registry id formats", () => {
   const cases: Array<[string, number]> = [
     ["claude-opus-4-6", 46],
-    ["anthropic/claude-fable-5", 50],
-    ["anthropic.claude-opus-4-1-20250805-v1:0", 41],
-    ["claude-opus-4-20250514", 40],
+    ["claude-opus-4.7", 47],
     ["gpt-5.6-sol", 56],
+    ["gpt-5.5", 55],
     ["gemini-2.5-pro", 25],
-    ["gpt-4o-2024-11-20", 40],
-    ["gemini-2.5-pro-preview-06-05", 25],
+    ["google/gemini-3.1-pro-preview", 31],
     ["gpt-5.12", 512],
-    ["gemma-4-31b-it", 40],
+    ["MiniMax-M2.7", 27],
+    ["Qwen/Qwen3.5", 35],
     ["zai.glm-4.7", 47],
     ["deepseek.v3.2", 32],
+  ];
+
+  for (const [id, expected] of cases) assert.equal(parseLeadingMajorMinor(id), expected, id);
+});
+
+void test("parseLeadingMajorMinor packs a major without a minor as major * 10", () => {
+  const cases: Array<[string, number]> = [
+    ["anthropic/claude-fable-5", 50],
+    ["gemini-3-pro-preview", 30],
+    ["gemma-4-31b-it", 40],
+    ["zai.glm-5", 50],
+  ];
+
+  for (const [id, expected] of cases) assert.equal(parseLeadingMajorMinor(id), expected, id);
+});
+
+void test("parseLeadingMajorMinor ignores date suffixes after the leading version", () => {
+  const cases: Array<[string, number]> = [
+    ["anthropic.claude-opus-4-1-20250805-v1:0", 41],
+    ["claude-opus-4-20250514", 40],
+    ["gpt-4o-2024-11-20", 40],
+    ["gemini-2.5-pro-preview-06-05", 25],
     ["unknown-model-2024-11-20", 0],
   ];
 
-  for (const [id, expected] of cases) assert.equal(parseMajorMinor(id), expected, id);
+  for (const [id, expected] of cases) assert.equal(parseLeadingMajorMinor(id), expected, id);
 });
 
 void test("model selector orders all GPT-5.6 tiers as Sol, Terra, Luna", () => {
@@ -149,10 +170,38 @@ void test("Bedrock provider uses the browser-safe unsupported-provider stub", as
   assert.match(selected.errorMessage ?? "", /Amazon Bedrock is not supported/);
 });
 
-void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default", () => {
+void test("pickDefaultModel falls back to the OpenAI default when no provider is available", () => {
   const selected = pickDefaultModel([]);
   assert.equal(selected.provider, "openai");
   assert.equal(selected.id, "gpt-6.1-sol");
+});
+
+void test("pickDefaultModel fallback follows the OpenAI catalogue instead of a fixed id", () => {
+  const openai = modelsRuntime.getProvider("openai");
+  assert.ok(openai);
+  const runtime = createModels();
+  runtime.setProvider({
+    ...openai,
+    getModels: () => ["gpt-6-luna", "gpt-5.3-codex", "gpt-6-sol"].map((id) => getModel("openai", id)),
+  });
+
+  const selected = pickDefaultModelFromRuntime(runtime, []);
+  assert.equal(selected.provider, "openai");
+  assert.equal(selected.id, "gpt-6-sol");
+});
+
+void test("pickDefaultModel falls back to the newest registered model when OpenAI has none", () => {
+  const anthropic = modelsRuntime.getProvider("anthropic");
+  assert.ok(anthropic);
+  const runtime = createModels();
+  runtime.setProvider({
+    ...anthropic,
+    getModels: () => ["claude-sonnet-4-5", "claude-opus-5-5"].map((id) => getModel("anthropic", id)),
+  });
+
+  const selected = pickDefaultModelFromRuntime(runtime, []);
+  assert.equal(selected.provider, "anthropic");
+  assert.equal(selected.id, "claude-opus-5-5");
 });
 
 void test("pickDefaultModel never picks an unusable provider while a configured provider has models (#553)", () => {

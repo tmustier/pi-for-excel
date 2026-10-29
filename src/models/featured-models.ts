@@ -7,7 +7,7 @@ import {
   isOpenAiCodexModelId,
   isOpenAiGeneralGptModelId,
   modelRecencyScore,
-  parseMajorMinor,
+  parseLeadingMajorMinor,
   providerPriority,
   shouldPreferOpenAiGeneralModel,
 } from "./model-ordering.js";
@@ -108,8 +108,8 @@ export function orderModelsForSelector(
       const bestSonnet = pickBestByRecency(models, (m) => m.id.startsWith("claude-sonnet-"));
 
       if (bestOpus && bestSonnet) {
-        const opusVer = parseMajorMinor(bestOpus.id);
-        const sonnetVer = parseMajorMinor(bestSonnet.id);
+        const opusVer = parseLeadingMajorMinor(bestOpus.id);
+        const sonnetVer = parseLeadingMajorMinor(bestSonnet.id);
         if (sonnetVer >= opusVer) {
           featured.push(bestSonnet, bestOpus);
           continue;

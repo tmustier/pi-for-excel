@@ -127,7 +127,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   Featured rules (current desired behavior):
   - **Anthropic:** latest **Fable** first (post-4.x flagship family, e.g. `claude-fable-5`), then latest **Sonnet** *if* its version >= latest **Opus**, then latest **Opus**
     - This is picker ordering only; default selection currently skips Fable because it is in the registry but unavailable for normal Anthropic use.
-    - Version compare uses `parseMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
+    - Version compare uses `parseLeadingMajorMinor()` where `claude-opus-4-6` → `46`, `claude-opus-4-7` → `47`, `claude-fable-5` → `50`.
     - Important: IDs like `claude-opus-4-20250514` are treated as **major only** (`40`) and the `YYYYMMDD` part is considered a separate date suffix by `modelRecencyScore()`.
   - **OpenAI (`openai` + `openai-codex`):** latest general GPT (`gpt-5.x`, `gpt-6.x`, and later majors) *if* its version >= latest Codex, then latest Codex
     - GPT-5.6 and GPT-6 have named tiers and no bare alias. Same-version tier order is Sol, Astra, Terra, Luna, so GPT-5.6 orders as `gpt-5.6-sol` → `gpt-5.6-terra` → `gpt-5.6-luna`.
@@ -141,7 +141,7 @@ We intentionally avoid pinning exact versioned IDs now. Instead we:
   - `providerPriority()` (Anthropic → OpenAI Codex → OpenAI → Google → …)
   - `familyPriority()` / `openAiFamilyPriority()` (Opus/Sonnet/Haiku, GPT vs Codex, etc.)
   - `openAiVariantPriority()` (explicit same-version GPT tier order)
-  - `parseMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.6` as `56`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
+  - `parseLeadingMajorMinor()` + `modelRecencyScore()` (treats `4-6` / `4.6` as `46`, `5.6` as `56`, keeps embedded date suffixes such as `YYYYMMDD` separate, and ignores later date-like suffixes such as `gpt-4o-2024-11-20` or `gemini-2.5-pro-preview-06-05` when extracting the family version)
   - `compareModels()` (provider + family + recency tie-breaks; deterministic sorting)
 
   UI: the model picker is opened from the footer status bar (click the π model button).

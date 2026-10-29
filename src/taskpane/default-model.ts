@@ -33,6 +33,16 @@ function compareByRecency(a: Model<Api>, b: Model<Api>): number {
   return modelRecencyScore(b.id) - modelRecencyScore(a.id) || a.id.localeCompare(b.id);
 }
 
+function pickOpenAiDefault(providerModels: readonly Model<Api>[]): Model<Api> | undefined {
+  const models = [...providerModels].sort((a, b) => compareOpenAiModelIds(a.id, b.id));
+  const bestGpt = models.find((m) => isOpenAiGeneralGptModelId(m.id));
+  const bestCodex = models.find((m) => isOpenAiCodexModelId(m.id));
+  if (bestGpt && bestCodex) {
+    return shouldPreferOpenAiGeneralModel(bestGpt.id, bestCodex.id) ? bestGpt : bestCodex;
+  }
+  return bestGpt ?? bestCodex ?? models[0];
+}
+
 export function pickDefaultModel(
   modelsRuntime: Models,
   availableProviders: string[],
@@ -40,14 +50,7 @@ export function pickDefaultModel(
 ): Model<Api> {
   for (const provider of ["openai-codex", "openai"] as const) {
     if (!availableProviders.includes(provider)) continue;
-    const models = [...modelsRuntime.getModels(provider)]
-      .sort((a, b) => compareOpenAiModelIds(a.id, b.id));
-    const bestGpt = models.find((m) => isOpenAiGeneralGptModelId(m.id));
-    const bestCodex = models.find((m) => isOpenAiCodexModelId(m.id));
-    if (bestGpt && bestCodex) {
-      return shouldPreferOpenAiGeneralModel(bestGpt.id, bestCodex.id) ? bestGpt : bestCodex;
-    }
-    const best = bestGpt ?? bestCodex ?? models[0];
+    const best = pickOpenAiDefault(modelsRuntime.getModels(provider));
     if (best) return best;
   }
 
@@ -77,10 +80,10 @@ export function pickDefaultModel(
     if (best) return best;
   }
 
-  const preferredFallback = modelsRuntime.getModel("openai", "gpt-6.1-sol");
-  if (preferredFallback) return preferredFallback;
+  const openAiFallback = pickOpenAiDefault(modelsRuntime.getModels("openai"));
+  if (openAiFallback) return openAiFallback;
 
-  const firstKnownModel = modelsRuntime.getModels()[0];
-  if (firstKnownModel) return firstKnownModel;
+  const newestKnownModel = [...modelsRuntime.getModels()].sort(compareByRecency)[0];
+  if (newestKnownModel) return newestKnownModel;
   throw new Error("No models are registered.");
 }
