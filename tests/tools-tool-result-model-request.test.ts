@@ -81,7 +81,6 @@ void test("model request compacts an older large tool result but preserves recen
   ]);
 
   assert.match(textOf(requestToolResult(request, "1")), /^\[Compacted tool result\] read_range/u);
-  // The model is told the output left its context, not that it can still see it (B-16).
   assert.doesNotMatch(textOf(requestToolResult(request, "1")), /visible in chat history/u);
   assert.match(textOf(requestToolResult(request, "1")), /no longer in your context/u);
   assert.equal(textOf(requestToolResult(request, "3")), large);
@@ -130,7 +129,6 @@ void test("model request replaces an older image tool result with a text-only su
 });
 
 void test("a growing tool loop rewrites earlier tool results only once every few results, keeping the prompt cache", () => {
-  // 200k window: the 6 newest results are always whole.
   const convert = createConvertToLlm({ getContextWindow: () => 200_000 });
   const history: AgentMessage[] = [];
   let previous: ReturnType<typeof convert> = [];
@@ -141,10 +139,8 @@ void test("a growing tool loop rewrites earlier tool results only once every few
     const whole = request.filter((message) => message.role === "toolResult" && textOf(message).length === 2_000);
     assert.ok(whole.length >= Math.min(n, 6), `request ${n}: ${whole.length} whole`);
     assert.ok(whole.some((message) => message.role === "toolResult" && message.toolCallId === String(n)), "newest result is whole");
-    // Each request's messages are the previous request's plus new ones, except at a step.
     if (JSON.stringify(request.slice(0, previous.length)) !== JSON.stringify(previous)) rewrites += 1;
     previous = request;
   }
-  // Results 12, 18 and 24 each move the boundary by 6; moving it every time would rewrite 18 times.
   assert.equal(rewrites, 3);
 });

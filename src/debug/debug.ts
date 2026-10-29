@@ -1,10 +1,3 @@
-/**
- * Lightweight debug flags.
- *
- * Keep this module dependency-free and synchronous so UI code (status bar)
- * can read flags without awaiting IndexedDB.
- */
-
 import type { Usage } from "@earendil-works/pi-ai";
 
 const STORAGE_KEY = "pi-excel.debug";
@@ -25,7 +18,6 @@ function safeSetItem(key: string, value: string): void {
   try {
     window.localStorage.setItem(key, value);
   } catch {
-    // ignore (private mode / disabled storage)
   }
 }
 
@@ -36,7 +28,6 @@ function readState(): DebugState {
   if (raw === "1" || raw === "true") return { enabled: true };
   if (raw === "0" || raw === "false") return { enabled: false };
 
-  // Backwards/forward compatibility for potential JSON expansion.
   try {
     const parsed = JSON.parse(raw) as unknown;
     if (typeof parsed === "object" && parsed !== null && "enabled" in parsed) {
@@ -44,7 +35,6 @@ function readState(): DebugState {
       return { enabled: enabled === true };
     }
   } catch {
-    // ignore
   }
 
   return { enabled: false };
@@ -60,9 +50,7 @@ export function isDebugEnabled(): boolean {
 
 export function setDebugEnabled(enabled: boolean): void {
   writeState({ enabled });
-  // Status bar listens to this.
   document.dispatchEvent(new Event("pi:status-update"));
-  // For future use by other UI components.
   document.dispatchEvent(new Event("pi:debug-changed"));
 }
 
@@ -81,6 +69,5 @@ export function formatK(n: number): string {
 }
 
 export function formatUsageDebug(usage: Usage): string {
-  // Keep this short — it renders in the status bar.
   return `in:${formatK(usage.input)} out:${formatK(usage.output)} cr:${formatK(usage.cacheRead)} cw:${formatK(usage.cacheWrite)}`;
 }

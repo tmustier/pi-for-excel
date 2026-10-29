@@ -90,7 +90,6 @@ void test("execute_office_js after a timeout: the code's later Excel calls never
   const { runMutation } = await import("../src/tools/mutation/run-mutation.ts");
   const host = new FakeExcelHost();
   await withFakeExcel(host, async () => {
-    // As #792's excelRun does: race the whole Excel.run against a timeout. The run itself goes on.
     const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
     Reflect.set(globalThis, "Excel", {
       run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
@@ -100,9 +99,8 @@ void test("execute_office_js after a timeout: the code's later Excel calls never
         }, 30); }),
       ]),
     });
-    host.delaySync = { at: 1, ms: 80 }; // the code's first sync is answered after the timeout
+    host.delaySync = { at: 1, ms: 80 };
     const tool = createExecuteOfficeJsTool({
-      // User code that writes in two steps, run the way the default runner runs it.
       runCode: () => runMutation(async (context) => {
         const sheet = context.workbook.worksheets.getItem("Sheet1");
         sheet.getRange("A1").values = [["first"]];
@@ -117,7 +115,7 @@ void test("execute_office_js after a timeout: the code's later Excel calls never
 
     assert.equal(result.isError, true);
     assert.match(firstText(result), /Pi cannot stop Office\.js code once it runs\. It blocked this code's later Excel calls/u);
-    assert.equal(host.sheet("Sheet1").value("A1"), "first"); // the unanswered step still landed
-    assert.equal(host.sheet("Sheet1").value("A2"), ""); // nothing after it reached Excel
+    assert.equal(host.sheet("Sheet1").value("A1"), "first");
+    assert.equal(host.sheet("Sheet1").value("A2"), "");
   });
 });

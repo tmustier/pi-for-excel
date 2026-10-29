@@ -1,7 +1,3 @@
-/**
- * Workbook cell change diff helpers.
- */
-
 import { Type, type Static } from "typebox";
 
 import { cellAddress, parseCell, qualifiedAddress } from "../excel/helpers.js";

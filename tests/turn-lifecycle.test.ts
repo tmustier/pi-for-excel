@@ -17,7 +17,6 @@ import { describeTurnFailure } from "../src/taskpane/turn-error.ts";
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import { streamWithProviderFailure } from "../src/auth/provider-failure.ts";
 
-/** Texts of the user messages in a request the model received. */
 function requestUserTexts(context: Context): string[] {
   return context.messages.flatMap((message) => {
     if (message.role !== "user") return [];
@@ -27,7 +26,6 @@ function requestUserTexts(context: Context): string[] {
   });
 }
 
-/** A response that streams until the run is stopped. */
 const untilStopped: FauxResponseStep = (_context, options) => new Promise((resolve) => {
   const finish = () => resolve(fauxAssistantMessage("partial", { stopReason: "aborted" }));
   if (options?.signal?.aborted) finish();
@@ -104,7 +102,6 @@ void test("Stop keeps each waiting steer, follow-up and queued prompt as its own
   assert.equal(tab.tab.draft, "half-typed");
   assert.equal(tab.agent.hasQueuedMessages(), false);
 
-  // Alt+Up edits one row at a time, newest first; the others stay separate.
   assert.equal(tab.queue.editLast(), true);
   assert.equal(tab.tab.draft, "Then say MANGO.\n\nhalf-typed");
   assert.deepEqual(tab.tab.held, ["Then say BANANA."]);
@@ -142,8 +139,6 @@ void test("a failed turn keeps its undelivered steers as unsent rows instead of 
 });
 
 void test("a transient provider failure is retried with a visible countdown and the turn completes", async () => {
-  // A per-request message (like the workbook selection) is sent last on every
-  // request, including the retry, and never stored in the transcript.
   const selection: AgentMessage = { role: "user", content: [{ type: "text", text: "SELECTION A1" }], timestamp: 0 };
   const tab = createTab([
     fauxAssistantMessage("", { stopReason: "error", errorMessage: "503 Service Unavailable" }),
@@ -206,7 +201,6 @@ void test("a partial answer that failed mid-stream survives a retry that fails b
 });
 
 void test("a quota or usage-limit failure is not retried", async () => {
-  // The ChatGPT login reports every 429 as a usage limit that resets after minutes or hours.
   for (const errorMessage of ["insufficient_quota: billing", "You have hit your ChatGPT usage limit (plus plan). Try again in ~42 min."]) {
     const tab = createTab([fauxAssistantMessage("", { stopReason: "error", errorMessage })]);
     tab.queue.enqueuePrompt("hello");
@@ -341,7 +335,6 @@ void test("inline error summaries explain recovery without repeating provider de
     /through the proxy at https:\/\/localhost:3003/u,
   );
   assert.match(describeTurnFailure({ ...base, messages: failed("Failed to fetch") }) ?? "", /likely CORS/u);
-  // Where the browser blocks localhost, neither enabling nor starting the proxy helps, whether it is on or off.
   for (const proxyUrl of [null, "https://localhost:3003"]) {
     assert.match(
       describeTurnFailure({ ...base, messages: failed("Failed to fetch"), proxyUrl, proxyBlockedByBrowser: true }) ?? "",

@@ -20,7 +20,6 @@ type ParameterOwner =
 	| ESTree.TSFunctionType
 	| ESTree.TSMethodSignature;
 
-/** Ban the broad object type on function inputs, including local aliases to object. */
 export const noObjectParametersRule = defineRule({
 	meta: {
 		type: "problem",

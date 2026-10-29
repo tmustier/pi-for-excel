@@ -1,7 +1,3 @@
-/**
- * Helpers for custom OpenAI-compatible gateway providers.
- */
-
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { CustomProvider } from "../storage/local/custom-providers-store.js";
 import { isLoopbackProxyUrl } from "./proxy-validation.js";
@@ -42,9 +38,7 @@ export interface SaveOpenAiGatewayInput {
   modelId: string;
   apiKey?: string;
   contextWindow?: number;
-  /** Explicit output-token limit; omitted means registry metadata or the unknown-model default. */
   maxTokens?: number;
-  /** Skip the CORS proxy for this gateway; the endpoint must allow CORS itself. */
   connectDirectly?: boolean;
 }
 
@@ -90,10 +84,6 @@ export function normalizeGatewayEndpointUrl(endpointUrl: string): string {
   return normalized.endsWith("/") ? normalized.slice(0, -1) : normalized;
 }
 
-/**
- * True for plain-http endpoints on another machine. Office serves the taskpane over HTTPS,
- * so its webview blocks these requests as mixed content unless the proxy relays them.
- */
 export function isPlainHttpRemoteEndpoint(url: string): boolean {
   let parsed: URL;
   try {
@@ -151,7 +141,6 @@ function deriveDisplayName(rawName: string | undefined, endpointUrl: string): st
       return host;
     }
   } catch {
-    // noop — endpoint URL is validated before this runs.
   }
 
   return "Custom gateway";
@@ -235,7 +224,6 @@ function createGatewayModel(args: {
   registryModel?: Model<Api>;
 }): Model<"openai-completions"> {
   const registryModel = args.registryModel;
-  // Output can never exceed the context window, so an explicit limit is clamped like the defaults.
   const maxTokens = Math.min(
     args.maxTokens ?? registryModel?.maxTokens ?? DEFAULT_OPENAI_GATEWAY_MAX_TOKENS,
     args.contextWindow,

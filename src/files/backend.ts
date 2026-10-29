@@ -1,7 +1,3 @@
-/**
- * Workspace storage backends.
- */
-
 import { t } from "../language/index.js";
 import { base64ToBytes, bytesToBase64, decodeTextUtf8, encodeTextUtf8 } from "./encoding.js";
 import { inferFileKind, inferMimeType } from "./mime.js";

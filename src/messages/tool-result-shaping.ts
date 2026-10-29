@@ -4,20 +4,12 @@ interface ToolResultShapingConfig {
   recentToolResultsToKeep: number;
   maxCharsBeforeCompaction: number;
   previewChars: number;
-  /**
-   * Tool calls whose results are compacted even when recent: large results
-   * of answered requests kept after a compaction summary.
-   */
   compactToolCallIds?: ReadonlySet<string>;
 }
 
 export const DEFAULT_TOOL_RESULT_SHAPING: Readonly<ToolResultShapingConfig> = {
-  // Keep recent tool outputs fully intact so immediate follow-up reasoning stays high quality.
-  // Primary payload safety comes from execution-time tool-output truncation.
   recentToolResultsToKeep: 6,
-  // Older tool results above this size are compacted for model-facing context.
   maxCharsBeforeCompaction: 1200,
-  // Keep a short deterministic preview for grounding.
   previewChars: 500,
 };
 
@@ -87,14 +79,6 @@ function collectToolResultIndices(messages: readonly AgentMessage[]): number[] {
   return indices;
 }
 
-/**
- * The newest results kept whole. The boundary moves in steps of `keep`: the
- * oldest results are compacted `keep` at a time, so between `keep` and
- * `2 * keep - 1` stay whole. A boundary that moved with every new result
- * rewrote an earlier, already-sent result on each request, which breaks the
- * provider's prompt cache from that message on; now that happens once every
- * `keep` results.
- */
 function buildRecentIndexSet(indices: readonly number[], keep: number): Set<number> {
   const compacted = Math.floor(Math.max(0, indices.length - keep) / keep) * keep;
   return new Set<number>(indices.slice(compacted));
@@ -103,8 +87,6 @@ function buildRecentIndexSet(indices: readonly number[], keep: number): Set<numb
 function normalizeToolResultContent(message: ToolResultMessage): ToolResultMessage["content"] {
   const rawContent: unknown = message.content;
 
-  // Backwards compatibility: older persisted sessions may still carry string
-  // tool-result payloads.
   if (typeof rawContent === "string") {
     return [{ type: "text", text: rawContent }];
   }
@@ -218,7 +200,6 @@ export function shapeToolResultsForLlm(
   });
 }
 
-/** A tool result as the model sees it once compacted (its preview). */
 export function compactToolResult(message: ToolResultMessage): ToolResultMessage {
   const normalized: ToolResultMessage = { ...message, content: normalizeToolResultContent(message) };
   const payload = collectToolResultPayload(normalized.content);

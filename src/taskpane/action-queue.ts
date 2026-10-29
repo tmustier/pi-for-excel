@@ -1,30 +1,3 @@
-/**
- * Per-tab ordered action queue and turn lifecycle.
- *
- * Needed because some actions (notably `/compact`) run outside the Agent loop
- * (they call `agent.streamFunction(...)` directly) and therefore don't set
- * `agent.state.isStreaming`. Without a queue, user input can be lost when
- * compaction rewrites the message list.
- *
- * The queue owns, for its own agent (never "whichever tab is active"):
- * - queued prompts and commands, run one at a time when the tab is idle;
- *   a queued `/compact` compacts this tab's agent
- * - automatic context protection (#566): pre-prompt and mid-turn
- *   auto-compaction, and one compact-and-retry after a context overflow
- * - bounded retries of transient provider failures (rate limits, 5xx,
- *   dropped connections), shown as the tab's activity line
- * - Stop: one behavior whatever the trigger. The run and any compaction or
- *   retry wait are cancelled, and every message the user queued that has not
- *   been delivered stays above the composer as its own "Not sent" row, never
- *   sent automatically and never merged with other messages. Queued commands
- *   are cancelled (and reported), since they are work Pi would have done,
- *   not text the user wrote.
- * - when a turn ends, steers and follow-ups it never delivered become "Not
- *   sent" rows the same way instead of leaking into the next turn.
- * - each queue row's Edit (puts that one row's text back in the composer)
- *   and Remove; Alt+Up edits the last row.
- */
-
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import { retryDelayMs, type AssistantMessage } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
@@ -47,27 +20,20 @@ export type QueuedAction =
   | { type: "prompt"; text: string }
   | { type: "command"; name: string; args: string };
 
-/** What a stop or a take-back removed from the queue. */
 export interface TakenBack {
-  /** Steer, follow-up and queued prompt texts, oldest first. */
   texts: string[];
-  /** Labels of queued commands that were cancelled (e.g. "/compact"). */
   cancelledCommands: string[];
 }
 
 export interface TurnOutcome {
-  /** True when the run ended in a context overflow after compact-and-retry. */
   overflowAfterRecovery: boolean;
 }
 
 export interface ActionQueue {
   enqueuePrompt: (text: string) => void;
   enqueueCommand: (name: string, args: string) => void;
-  /** Retries the failed point without adding another user message. */
   retry: () => boolean;
-  /** Alt+Up: puts the last row holding the user's text back in the composer; false when there is none. */
   editLast: () => boolean;
-  /** Stops the tab: cancels the run, compaction or retry wait; queued messages become "Not sent" rows. */
   stop: () => TakenBack;
   isBusy: () => boolean;
   shutdown: () => void;
@@ -80,7 +46,6 @@ type ActionQueueDisplay = Pick<
 
 type ActivityHost = Pick<TabState, "setActivity" | "setBusy" | "returnToDraft" | "held" | "setHeld" | "hold">;
 
-/** Six bounded waits span about a minute without server guidance. */
 export const PROVIDER_RETRY_LIMIT = 6;
 const PROVIDER_RETRY_BASE_DELAY_MS = 2_000;
 
@@ -118,11 +83,8 @@ export function createActionQueue(opts: {
   tab: ActivityHost;
   queueDisplay: ActionQueueDisplay;
   autoCompactEnabled: boolean;
-  /** Runs compaction for this queue's agent (not the active tab's agent). */
   runCompact: (args: string, signal: AbortSignal) => Promise<void>;
-  /** Called after each queued prompt's turn has fully settled (retries and recovery included). */
   onTurnSettled?: (outcome: TurnOutcome) => void;
-  /** Called when a turn ended with steers/follow-ups it never delivered (now "Not sent" rows). */
   onLeftUnsent?: (count: number) => void;
 }): ActionQueue {
   const { agent, tab, queueDisplay, autoCompactEnabled } = opts;
@@ -131,7 +93,6 @@ export function createActionQueue(opts: {
   let running = false;
   let retryRequested = false;
   let closed = false;
-  /** Aborted by stop(); renewed for each queue item so a stop only cancels what is running. */
   let stopController = new AbortController();
 
   const syncDisplay = () => {
@@ -154,9 +115,6 @@ export function createActionQueue(opts: {
     }
   };
 
-  // Mid-turn auto-compaction: checked between tool-loop continuations so a
-  // single tool-heavy turn can't overflow a small context window. The run's
-  // own signal cancels it on Stop.
   agent.prepareNextTurn = async (signal) => {
     if (closed) return undefined;
     return maybeAutoCompactBeforeContinuation({
@@ -166,7 +124,6 @@ export function createActionQueue(opts: {
     });
   };
 
-  /** Removes undelivered steers/follow-ups from the strip and from the agent. */
   const drainMessages = (): string[] => {
     const texts = queueDisplay.drainQueuedMessages().map((item) => item.text);
     agent.clearAllQueues();
@@ -191,7 +148,6 @@ export function createActionQueue(opts: {
     return action.type === "prompt" ? action.text : null;
   };
 
-  /** Edit puts that one row's text back in the composer, above any draft. */
   const editRow = (row: QueueRow): boolean => {
     if (row.kind === "action" && actions[row.index]?.type !== "prompt") return false;
     const text = removeRow(row);
@@ -238,7 +194,6 @@ export function createActionQueue(opts: {
     }
   }
 
-  /** Preserve readable partial answers and continue only after the visible wait. */
   async function retryTransientFailure(signal: AbortSignal): Promise<void> {
     for (let attempt = 1; attempt <= PROVIDER_RETRY_LIMIT; attempt++) {
       const failure = lastAssistant(agent.state.messages);
@@ -272,12 +227,6 @@ export function createActionQueue(opts: {
     }
   }
 
-  /**
-   * A turn that ends (stopped, failed or finished) never keeps steers and
-   * follow-ups it did not deliver; they become "Not sent" rows rather than
-   * going into the next turn. Only a message sent while the turn was already
-   * ending can still be here.
-   */
   function returnLeftovers(): void {
     const leftovers = drainMessages();
     if (leftovers.length === 0) return;
@@ -292,7 +241,6 @@ export function createActionQueue(opts: {
 
     try {
       while (!closed && (actions.length > 0 || retryRequested)) {
-        // Never start queued actions while the agent is still streaming.
         await agent.waitForIdle();
         if (closed) break;
 
@@ -307,7 +255,6 @@ export function createActionQueue(opts: {
           actions.shift();
           syncDisplay();
           try {
-            // Compaction belongs to this tab, not the active one.
             if (next.name === "compact") {
               await runCompactWithIndicator(next.args, signal);
             } else {
@@ -321,8 +268,6 @@ export function createActionQueue(opts: {
           continue;
         }
 
-        // The prompt stays in the queue strip (and can be taken back or
-        // stopped) while pre-prompt compaction runs.
         if (next?.type === "prompt") await maybeAutoCompactBeforePrompt({
           agent,
           nextUserText: next.text,
@@ -348,7 +293,6 @@ export function createActionQueue(opts: {
 
           let overflowAfterRecovery = false;
           if (autoCompactEnabled) {
-            // Recover once; a second overflow stays in the transcript.
             const retried = await recoverFromContextOverflow({
               agent,
               runCompact: () => runCompactWithIndicator("", signal),

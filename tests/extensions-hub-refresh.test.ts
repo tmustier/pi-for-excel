@@ -39,12 +39,10 @@ void test("refresh controller defers while input is active and flushes when edit
   controller.requestRefresh();
   assert.equal(refreshCount, 0);
 
-  // User tabs from one input to another — still editing, no flush.
   controller.onConnectionsFocusOut();
   await nextTick();
   assert.equal(refreshCount, 0);
 
-  // Editing ends, next focusout flushes deferred refresh.
   activeInput = false;
   controller.onConnectionsFocusOut();
   await nextTick();

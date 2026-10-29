@@ -1,5 +1,3 @@
-// Static contract: vercel.json must remain wired to the deploy-policy script;
-// script behavior alone cannot detect a missing or redirected configuration dependency.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
@@ -30,7 +28,6 @@ test("vercel.json wires ignoreCommand to the deploy policy script", async () => 
 
 test("only main creates automatic deployments", async () => {
   const config = await readVercelConfig();
-  // "**" matches branch names with slashes; Vercel deploys when any matching rule is true.
   assert.deepEqual(config.git, {
     deploymentEnabled: {
       "**": false,

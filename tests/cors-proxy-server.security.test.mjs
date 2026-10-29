@@ -177,7 +177,6 @@ async function waitForHttpStatus(url, expectedStatus) {
         return;
       }
     } catch {
-      // Server may not be listening yet.
     }
 
     await delay(50);
@@ -367,8 +366,6 @@ test("proxy can allow local targets with explicit overrides", async (t) => {
 
 test("proxy keeps its own CORS headers when upstream sends conflicting ones", async (t) => {
   const target = await startMockTarget("upstream-cors", {
-    // llama.cpp-style upstream: empty/incorrect CORS headers that would break
-    // the browser integration if forwarded verbatim.
     "Access-Control-Allow-Origin": "",
     "Access-Control-Allow-Methods": "GET",
     "Access-Control-Allow-Headers": "x-upstream-only",
@@ -396,7 +393,6 @@ test("proxy keeps its own CORS headers when upstream sends conflicting ones", as
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "upstream-cors");
 
-  // Our CORS policy must win over upstream values.
   assert.equal(response.headers.get("access-control-allow-origin"), ORIGIN);
   assert.equal(
     response.headers.get("access-control-allow-methods"),
@@ -405,7 +401,6 @@ test("proxy keeps its own CORS headers when upstream sends conflicting ones", as
   assert.equal(response.headers.get("access-control-max-age"), "86400");
   assert.equal(response.headers.get("vary"), "Origin");
 
-  // Unrelated upstream headers still pass through.
   assert.equal(response.headers.get("x-upstream-custom"), "passthrough");
 });
 
@@ -421,7 +416,6 @@ test("proxy cancels the upstream request when the client disconnects mid-stream"
     res.setHeader("Content-Type", "text/event-stream");
     res.write("data: first\n\n");
     const ticker = setInterval(() => res.write("data: tick\n\n"), 25);
-    // A generation that never finishes on its own; only a cancelled upstream request ends it.
     req.on("close", () => {
       clearInterval(ticker);
       upstreamClosed(Date.now());
@@ -468,7 +462,6 @@ test("proxy cancels the upstream request when the client disconnects mid-stream"
   assert.notEqual(closedAt, null, "upstream request kept running after the client disconnected");
   assert.ok(closedAt - abortedAt < 3000);
 
-  // The proxy must stay healthy and must not report the cancellation as an upstream error.
   await delay(100);
   const health = await fetch(`http://127.0.0.1:${proxy.port}/healthz`);
   assert.equal(health.status, 200);
@@ -484,7 +477,6 @@ test("proxy cancels an upstream request the client abandons before any response 
   const upstreamStartedPromise = new Promise((resolve) => { upstreamStarted = resolve; });
   const server = http.createServer((req, res) => {
     upstreamStarted();
-    // Provider still "thinking": no headers yet. Only a cancelled request ends this.
     const pending = setTimeout(() => res.end("late"), 10_000);
     req.on("close", () => {
       clearTimeout(pending);
@@ -620,8 +612,6 @@ test("proxy captures OAuth callbacks for supported localhost providers", async (
     },
   ];
 
-  // Idle proxy must not hold provider callback ports (other apps, e.g. the
-  // Codex CLI on 1455, need them for their own logins).
   for (const entry of cases) {
     await assert.rejects(fetch(`http://127.0.0.1:${entry.port}/not-found`));
   }
@@ -650,7 +640,6 @@ test("proxy captures OAuth callbacks for supported localhost providers", async (
     assert.equal(payload.url, callbackUrl);
     assert.equal(typeof payload.receivedAt, "number");
 
-    // A completed capture hands the port back without waiting for the idle timeout.
     await waitForPortClosed(entry.port);
   }
 
@@ -692,7 +681,6 @@ test("proxy releases an OAuth callback port once login polling stops", async (t)
   assert.deepEqual(await poll(), { status: "pending" });
   await waitForHttpStatus(`http://127.0.0.1:${callbackPort}/not-found`, 404);
 
-  // Each poll extends the deadline, so the port stays bound past one idle period.
   for (let i = 0; i < 4; i += 1) {
     await delay(250);
     assert.deepEqual(await poll(), { status: "pending" });
@@ -700,7 +688,6 @@ test("proxy releases an OAuth callback port once login polling stops", async (t)
   const stillBound = await fetch(`http://127.0.0.1:${callbackPort}/not-found`);
   assert.equal(stillBound.status, 404);
 
-  // The user abandoned the login: no more polls, so the port is released.
   await delay(600);
   await waitForPortClosed(callbackPort);
 });
@@ -729,7 +716,6 @@ test("proxy /healthz responds without an Origin header and never proxies", async
   assert.equal(browserHealth.headers.get("x-pi-for-excel-codex-websocket-bridge"), "1");
   assert.equal(await browserHealth.text(), "ok");
 
-  // Query strings (including ?url=) must not turn /healthz into a proxy path.
   const withUrl = await fetch(
     `http://127.0.0.1:${proxy.port}/healthz?url=${encodeURIComponent("https://api.openai.com/")}`,
   );
@@ -891,7 +877,6 @@ test("configured ALLOWED_TARGET_HOSTS is enforced even with loopback/private ove
     await target.stop();
   });
 
-  // Loopback target not in the configured allowlist → blocked despite override flags.
   const blocked = await fetch(
     `http://127.0.0.1:${proxy.port}/?url=${encodeURIComponent(`http://127.0.0.1:${target.port}/`)}`,
     { headers: { Origin: ORIGIN } },

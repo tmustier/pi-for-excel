@@ -1,12 +1,3 @@
-/**
- * Screen-reader announcements for events that have no visible notification of
- * their own: a run finishing or failing (in this or another tab), a retry, an
- * approval waiting. See src/ui/README.md, "Notifications".
- *
- * Toasts and error banners already announce themselves; do not announce the
- * same event twice.
- */
-
 type Politeness = "polite" | "assertive";
 
 const regions = new Map<Politeness, HTMLElement>();
@@ -26,24 +17,17 @@ function ensureRegion(politeness: Politeness): HTMLElement {
   return region;
 }
 
-/**
- * Announce `message`. Assertive interrupts the user (use only when they must
- * act, e.g. an approval is waiting); polite waits for a pause.
- * The returned cleanup withdraws this announcement without clearing a newer one.
- */
 export function announce(message: string, opts: { assertive?: boolean } = {}): () => void {
   if (typeof document === "undefined") return () => {};
   const politeness: Politeness = opts.assertive ? "assertive" : "polite";
   const region = ensureRegion(politeness);
 
-  // Clear first so the same text announced twice in a row is read again.
   region.textContent = "";
   const pending = timers.get(politeness);
   if (pending !== undefined) clearTimeout(pending);
   const timer = setTimeout(() => {
     region.textContent = message;
   }, 60);
-  // Keep the handle after delivery: it identifies the announcement this cleanup owns.
   timers.set(politeness, timer);
   return () => {
     clearTimeout(timer);

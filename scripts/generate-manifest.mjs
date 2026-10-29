@@ -1,19 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Generate a production manifest from the dev manifest.
- *
- * Usage:
- *   ADDIN_BASE_URL="https://pi-for-excel.vercel.app" node scripts/generate-manifest.mjs
- *   ADDIN_BASE_URL="https://pi-for-excel.example.com" OUT=manifest.prod.xml node scripts/generate-manifest.mjs
- *
- * Replaces all occurrences of the dev base URL (https://localhost:3141) with ADDIN_BASE_URL.
- *
- * Notes:
- * - Office add-ins require HTTPS.
- * - Keep the production SourceLocation stable so hosted builds can update automatically.
- */
-
 import fs from "node:fs";
 import path from "node:path";
 
@@ -65,7 +49,6 @@ const replaced = xml.split(DEV_BASE_URL).join(baseUrl);
 fs.writeFileSync(outPath, replaced);
 console.log(`[pi-for-excel] Wrote ${outPath}`);
 
-// Also publish to public/ so the hosted site can offer a one-click download.
 fs.mkdirSync(path.dirname(publicOutPath), { recursive: true });
 fs.writeFileSync(publicOutPath, replaced);
 console.log(`[pi-for-excel] Wrote ${publicOutPath}`);

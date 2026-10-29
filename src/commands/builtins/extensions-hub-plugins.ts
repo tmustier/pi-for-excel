@@ -1,9 +1,3 @@
-/**
- * Extensions hub — Plugins tab.
- *
- * Installed plugins and install from URL.
- */
-
 import type {
   ExtensionRuntimeManager,
   ExtensionRuntimeStatus,
@@ -40,8 +34,6 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { lucide, AlertTriangle, Puzzle } from "../../ui/lucide-icons.js";
 
-// ── Constants ───────────────────────────────────────
-
 const HIGH_RISK_CAPABILITIES = new Set<ExtensionCapability>([
   "tools.register",
   "agent.read",
@@ -55,8 +47,6 @@ const HIGH_RISK_CAPABILITIES = new Set<ExtensionCapability>([
   "connections.readwrite",
   "connections.secrets.read",
 ]);
-
-// ── Helpers ─────────────────────────────────────────
 
 function getHighRiskGranted(status: ExtensionRuntimeStatus): ExtensionCapability[] {
   return listAllExtensionCapabilities().filter(
@@ -84,12 +74,9 @@ async function confirmEnable(status: ExtensionRuntimeStatus): Promise<boolean> {
   });
 }
 
-// ── Main render ─────────────────────────────────────
-
 export function renderPluginsTab(args: {
   container: HTMLElement;
   manager: ExtensionRuntimeManager;
-  /** Runs one user action at a time; returns false when another is in flight. */
   runExclusive: (action: () => Promise<void>) => Promise<boolean>;
   onChanged: () => Promise<void>;
 }): void {
@@ -98,7 +85,6 @@ export function renderPluginsTab(args: {
 
   const statuses = manager.list();
 
-  // ── Installed section ─────────────────────────
   container.appendChild(createSectionHeader({
     label: t("ext-hub-plugins.installed"),
     count: statuses.length,
@@ -118,7 +104,6 @@ export function renderPluginsTab(args: {
     container.appendChild(list);
   }
 
-  // ── Install from URL ───────────────────────────
   container.appendChild(createSectionHeader({ label: t("ext-hub-plugins.install") }));
 
   const installForm = createAddForm();
@@ -139,8 +124,6 @@ export function renderPluginsTab(args: {
   installForm.appendChild(urlRow);
   container.appendChild(installForm);
 }
-
-// ── Plugin card ─────────────────────────────────────
 
 function renderPluginCard(
   status: ExtensionRuntimeStatus,
@@ -182,13 +165,11 @@ function renderPluginCard(
     rightContent: enableToggle.root,
   });
 
-  // Commands
   if (status.commandNames.length > 0) {
     const cmds = status.commandNames.map((c: string) => `/${c}`).join(", ");
     card.body.appendChild(createConfigRow(t("ext-hub-plugins.commands"), createConfigValue(cmds)));
   }
 
-  // Permissions grid
   const allCaps = listAllExtensionCapabilities();
   if (allCaps.length > 0) {
     card.body.appendChild(createSectionHeader({ label: t("ext-hub-plugins.permissions") }));
@@ -216,8 +197,6 @@ function renderPluginCard(
           });
         },
       });
-      // Use sublabel styling for compact grid.
-      // Avoid querySelector so this remains compatible with fake test DOMs.
       const labels = row.root.firstElementChild;
       if (labels instanceof HTMLElement) {
         const labelEl = labels.firstElementChild;
@@ -230,7 +209,6 @@ function renderPluginCard(
     card.body.appendChild(grid);
   }
 
-  // Uninstall
   card.body.appendChild(createActionsRow(
     createButton(t("ext-hub-plugins.uninstall"), {
       danger: true,
@@ -259,15 +237,12 @@ function renderPluginCard(
     }),
   ));
 
-  // Error callout
   if (status.lastError) {
     card.body.appendChild(createCallout("warn", lucide(AlertTriangle), t("ext-hub-plugins.lastError", { error: status.lastError }), { compact: true }));
   }
 
   return card.root;
 }
-
-// ── Install helpers ─────────────────────────────────
 
 async function installFromUrl(
   url: string,

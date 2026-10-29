@@ -1,7 +1,3 @@
-/**
- * Builtin command overlays (aggregator).
- */
-
 export {
   openSettings,
   configureSettingsPages,

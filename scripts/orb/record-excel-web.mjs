@@ -1,4 +1,3 @@
-// Record the already-open Excel workbook while a command runs. See docs/orb-excel-web.md.
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import fs from "node:fs";
@@ -35,8 +34,6 @@ try {
   const page = workbooks[0];
   const session = await page.context().newCDPSession(page);
   await page.bringToFront();
-  // agent-default (not a user rule): 2026-10-27 — 1600×1000, JPEG 70;
-  // silent H.264 at 15 fps, CRF 28, 2 Mb/s ceiling (about 15 MB/minute).
   const frames = [];
   let recordingError;
   session.on("Page.screencastFrame", ({ data, metadata, sessionId }) => {
@@ -50,7 +47,6 @@ try {
     session.send("Page.screencastFrameAck", { sessionId }).catch((error) => { recordingError = error; });
   });
   await session.send("Page.startScreencast", { format: "jpeg", quality: 70, maxWidth: 1600, maxHeight: 1000 });
-  // A screenshot also covers commands that finish before the first screencast event.
   const initial = await session.send("Page.captureScreenshot", { format: "jpeg", quality: 70 });
   fs.writeFileSync(path.join(temporary, "initial.jpg"), Buffer.from(initial.data, "base64"));
   const started = Date.now() / 1000;
@@ -85,7 +81,6 @@ try {
 } finally {
   process.removeListener("SIGINT", forwardSignal);
   process.removeListener("SIGTERM", forwardSignal);
-  // close() disconnects a connectOverCDP client; the existing Chrome stays open.
   await browser?.close();
   fs.rmSync(temporary, { recursive: true, force: true });
 }

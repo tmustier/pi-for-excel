@@ -2,8 +2,6 @@ function isConditionalFormatHandlersBasicPayloadShape(value: unknown): value is 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Basic conditional-format rule handlers shared by recovery capture/apply flow. */
-
 import {
   isRecoveryConditionalCellValueOperator,
   isRecoveryConditionalPresetCriterion,
@@ -38,11 +36,6 @@ export type ConditionalFormatRuleCaptureResult<T extends RecoveryConditionalForm
   | ConditionalFormatRuleCaptureSuccess<T>
   | ConditionalFormatRuleCaptureFailure;
 
-/**
- * Capture and apply for one rule type. `apply` receives the rule variant for
- * its type, so the required fields are present by construction: the codec
- * already rejected persisted rules that lack them.
- */
 export interface ConditionalFormatRuleHandler<T extends RecoveryConditionalFormatRuleType> {
   loadForCapture: (conditionalFormat: Excel.ConditionalFormat) => void;
   capture: (

@@ -1,6 +1,5 @@
 import type { ESTree, Scope, SourceCode, Variable } from "@oxlint/plugins";
 
-/** Unwrap syntax-only wrappers when inspecting array methods and accumulator references. */
 export function unwrapArrayExpression(node: ESTree.Node): ESTree.Node {
   while (
     node.type === "ParenthesizedExpression" ||
@@ -15,7 +14,6 @@ export function unwrapArrayExpression(node: ESTree.Node): ESTree.Node {
   return node;
 }
 
-/** Resolve a local binding by scope, not by identifier spelling. */
 export function resolveArrayBinding(sourceCode: SourceCode, node: ESTree.Node): Variable | null {
   node = unwrapArrayExpression(node);
   if (node.type !== "Identifier") return null;
@@ -28,7 +26,6 @@ export function resolveArrayBinding(sourceCode: SourceCode, node: ESTree.Node): 
   return null;
 }
 
-/** Read static method names, including computed string literals, without evaluating expressions. */
 export function arrayMethodTarget(
   node: ESTree.Node,
 ): { readonly name: string; readonly object: ESTree.Node } | null {
@@ -56,7 +53,6 @@ function isArrayAnnotation(type: ESTree.TSType): boolean {
   );
 }
 
-/** Recognize local array evidence; unknown receivers and iterator pipelines are deliberately excluded. */
 export function isKnownArrayExpression(
   sourceCode: SourceCode,
   node: ESTree.Node,

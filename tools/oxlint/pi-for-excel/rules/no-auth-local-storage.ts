@@ -1,6 +1,5 @@
 import { defineRule } from "@oxlint/plugins";
 
-/** OAuth credentials must stay behind the encrypted OAuth storage boundary. */
 export const noAuthLocalStorageRule = defineRule({
   meta: {
     type: "problem",

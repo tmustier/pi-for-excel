@@ -1,13 +1,3 @@
-/**
- * External Agent Skills discovery store.
- *
- * Managed external installs:
- * - skills/external/<name>/SKILL.md
- *
- * Workspace-discovered skills (auto-discovery):
- * - skills/<name>/SKILL.md
- */
-
 import { getFilesWorkspace, type FilesWorkspace } from "../files/workspace.js";
 import type { WorkspaceFileEntry } from "../files/types.js";
 import type {
@@ -202,10 +192,6 @@ async function loadAllWorkspaceDiscoveredAgentSkillDefinitions(args: {
   });
 }
 
-/**
- * Loads managed external skills from the canonical Files workspace location:
- * `skills/external/<name>/SKILL.md`.
- */
 export async function loadExternalAgentSkillsFromWorkspace(
   workspace: ExternalSkillWorkspace,
 ): Promise<AgentSkillDefinition[]> {
@@ -213,10 +199,6 @@ export async function loadExternalAgentSkillsFromWorkspace(
   return dedupeSkillsByName(loaded, "managed external");
 }
 
-/**
- * Loads auto-discovered workspace skills from:
- * `skills/<name>/SKILL.md` (excluding `skills/external/*`).
- */
 export async function loadWorkspaceAgentSkillsFromWorkspace(
   workspace: ExternalSkillWorkspace,
 ): Promise<AgentSkillDefinition[]> {
@@ -224,13 +206,6 @@ export async function loadWorkspaceAgentSkillsFromWorkspace(
   return dedupeSkillsByName(loaded, "workspace-discovered");
 }
 
-/**
- * Loads all discoverable non-bundled skills.
- *
- * Precedence on name collisions:
- * 1) managed external (`skills/external/<name>/SKILL.md`)
- * 2) workspace-discovered (`skills/<name>/SKILL.md`)
- */
 export async function loadDiscoverableAgentSkillsFromWorkspace(
   workspace: ExternalSkillWorkspace,
 ): Promise<AgentSkillDefinition[]> {

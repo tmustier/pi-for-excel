@@ -1,7 +1,3 @@
-/**
- * Welcome/login overlay shown when no providers are configured.
- */
-
 import { t, initLanguage, getLanguage } from "../language/index.js";
 
 import type { ModelRefreshOwner } from "../models/model-refresh-owner.js";
@@ -40,7 +36,6 @@ async function testLocalHttpsProxy(proxyUrl: string): Promise<boolean> {
 export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Promise<void> {
   const { VISIBLE_PROVIDERS, buildProviderRow } = await import("../ui/provider-login.js");
 
-  // Make OAuth flows usable even before the user can access /settings.
   try {
     const storage = getAppStorage();
     const proxySettings = await readTaskpaneProxySettings(storage.settings);
@@ -50,7 +45,6 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       await storage.settings.set("proxy.url", currentUrl);
     }
 
-    // Auto-enable if a local HTTPS proxy is actually reachable.
     if (!proxySettings.enabled) {
       const ok = await testLocalHttpsProxy(currentUrl);
       if (ok) {
@@ -58,7 +52,6 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       }
     }
   } catch {
-    // ignore — welcome overlay should still show
   }
 
   closeOverlayById(WELCOME_LOGIN_OVERLAY_ID);
@@ -173,7 +166,6 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
     proxyPanel.append(proxyTopRow, proxyUrlRow, proxyHint);
 
 
-    // Language bar at the top
     const langBar = createElement("div", "pi-welcome-lang-bar");
     langBar.setAttribute("role", "group");
     langBar.setAttribute("aria-label", t("welcome.language.aria"));
@@ -186,8 +178,6 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       button.addEventListener("click", () => {
         if (getLanguage() === lang) return;
         void (async () => {
-          // Save first: switching in memory before a failed save would leave a
-          // mixed-language pane until the next reload.
           try {
             await getAppStorage().settings.set("language", lang);
           } catch {
@@ -258,7 +248,6 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       const storage = getAppStorage();
       let proxyUrl: string;
       try {
-        // Same validation as Settings → Proxy: an unusable URL is never stored.
         proxyUrl = validateOfficeProxyUrl(proxyUrlEl.value.trim() || DEFAULT_PROXY_URL);
       } catch (error) {
         showToast(t("welcome.toast.proxy_url_not_saved", { error: getErrorMessage(error) }), { variant: "error" });

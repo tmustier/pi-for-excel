@@ -1,9 +1,3 @@
-/**
- * Keeps each tab's composer draft and its "Not sent" rows with its session in
- * settings, so a reload, a crash or reopening a closed tab brings the unsent
- * text back.
- */
-
 import type { SettingsAccess } from "../storage/local/settings-store.js";
 import type { TabState } from "./tab-state.js";
 
@@ -18,7 +12,6 @@ interface SessionIdentity {
 }
 
 export interface DraftStore {
-  /** Loads the session's saved draft into the tab and saves later edits. */
   bind(tab: TabState, session: SessionIdentity): () => void;
 }
 
@@ -76,8 +69,6 @@ export function createDraftStore(settings: SettingsAccess): DraftStore {
         timer = setTimeout(flush, SAVE_DELAY_MS);
       });
 
-      // A tab that restores or resumes another session picks up that
-      // session's draft; text typed before it moves with the tab.
       const unsubscribeSession = session.subscribe(() => {
         const next = session.getSessionId();
         if (next === sessionId) return;

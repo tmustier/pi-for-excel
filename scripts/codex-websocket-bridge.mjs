@@ -119,12 +119,6 @@ function buildWebSocketRequestBody(requestBody) {
   return JSON.stringify({ ...payload, type: "response.create" });
 }
 
-/**
- * Convert one authenticated HTTP POST from the browser into an upstream Codex
- * WebSocket request, then expose each upstream JSON frame as an SSE data event.
- *
- * The caller must apply origin/client/target policy before invoking this helper.
- */
 export async function bridgeCodexWebSocketToSse({
   req,
   res,
@@ -155,8 +149,6 @@ export async function bridgeCodexWebSocketToSse({
     let settled = false;
     let handlingUnexpectedResponse = false;
     let receivedTerminalEvent = false;
-    // Never connect to the request URL directly: it is validated above for
-    // request semantics, while the network sink stays a compile-time constant.
     const socket = new WebSocketConstructor(CODEX_WEBSOCKET_TARGET_URL, {
       headers: websocketHeaders(outboundHeaders),
       perMessageDeflate: false,
@@ -172,7 +164,6 @@ export async function bridgeCodexWebSocketToSse({
       try {
         socket.close(1000, reason);
       } catch {
-        // Best-effort cleanup only.
       }
     };
 

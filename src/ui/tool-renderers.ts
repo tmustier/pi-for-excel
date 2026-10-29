@@ -1,11 +1,3 @@
-/**
- * What a tool call did, in words and in detail.
- *
- * `describeToolCall` gives the verb and reference a turn group row is built
- * from (tool-rows.ts); `renderToolCardBody` is the row's drill-in: the
- * humanized input and the result.
- */
-
 import type { ImageContent, TextContent, ToolResultMessage } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
 import { html, type TemplateResult } from "lit";
@@ -38,11 +30,7 @@ import { computeRangeAddress, parseRangeRef } from "../excel/helpers.js";
 import { renderCsvTable } from "./render-csv-table.js";
 import { renderDepTree } from "./render-dep-tree.js";
 
-// The taskpane registers <markdown-block> and <code-block> through register-components.
-
 type SupportedToolName = UiToolName;
-
-/* ── Helpers ────────────────────────────────────────────────── */
 
 function formatParamsJson(params: unknown): string {
   if (params === undefined) return "";
@@ -100,34 +88,17 @@ function tryFormatJsonOutput(text: string): { isJson: boolean; formatted: string
   }
 }
 
-/**
- * Heuristic: does the text contain markdown syntax that benefits from
- * rendering via `<markdown-block>` rather than plain text?
- *
- * Checks for: tables, headers, lists, bold/italic, links, code fences,
- * blockquotes, horizontal rules, and emoji sentinels (✅ ⛔ etc.).
- */
 function looksLikeMarkdown(text: string): boolean {
-  // Table rows: "| ... | ... |"
   if (/^\s*\|.+\|/m.test(text)) return true;
-  // ATX headers: "# ", "## ", etc.
   if (/^#{1,6}\s+\S/m.test(text)) return true;
-  // Unordered list items: "- item" or "* item"
   if (/^[ \t]*[-*]\s+\S/m.test(text)) return true;
-  // Ordered list items: "1. item"
   if (/^[ \t]*\d+\.\s+\S/m.test(text)) return true;
-  // Bold / italic
   if (/\*\*[^*]+\*\*/.test(text)) return true;
   if (/__[^_]+__/.test(text)) return true;
-  // Links: [text](url)
   if (/\[[^\]]+\]\([^)]+\)/.test(text)) return true;
-  // Fenced code blocks
   if (/^```/m.test(text)) return true;
-  // Blockquotes: "> "
   if (/^>\s+\S/m.test(text)) return true;
-  // Horizontal rules: "---" or "***" or "___" (alone on a line)
   if (/^[-*_]{3,}\s*$/m.test(text)) return true;
-  // Common sentinels our tools emit (emoji prefixes)
   if (/^(?:✅|⛔|⚠️|ℹ️|📊|📋|🔍)/m.test(text)) return true;
 
   return false;
@@ -551,18 +522,10 @@ function renderChangeExplanationSection(
   `;
 }
 
-/* ── Human-readable descriptions ────────────────────────────── */
-
-/** Strip "(N×M)" / "(NxM)" dimension notation — not intuitive for users. */
 export function stripDimensions(text: string): string {
   return text.replace(/\s*\(\d+[×x]\d+\)/gi, "").trim();
 }
 
-/**
- * Compact multi-range addresses by factoring out a shared sheet prefix.
- *   "Summary!A3,Summary!A13,Summary!A22" → "Summary!A3,A13,A22"
- *   "Costs!A18:C18, Costs!A19:C19"       → "Costs!A18:C18,A19:C19"
- */
 function compactRange(range: string): string {
   const parts = range.split(/\s*,\s*/);
   if (parts.length <= 1) return range;
@@ -587,60 +550,43 @@ function qualifyRangeAddress(range: string | undefined, sheet: string | undefine
   return sheet ? `${sheet}!${range}` : range;
 }
 
-/**
- * Compact sheet-qualified ranges inside bold markdown markers.
- *   "Formatted **Sheet1!A1,Sheet1!B2**: ..." → "Formatted **Sheet1!A1, B2**: ..."
- */
 function compactRangesInMarkdown(text: string): string {
   return text.replace(/\*\*([^*]+)\*\*/g, (_match, inner: string) => {
     if (!inner.includes("!")) return `**${inner}**`;
     const compacted = compactRange(inner);
-    // Add spaces after commas for readability
     const spaced = compacted.replace(/,(?!\s)/g, ", ");
     return `**${spaced}**`;
   });
 }
 
-/** Extract target address from write_cells / fill_formula result text. */
 function extractWrittenAddress(text: string): string | null {
-  // "Written to **Sheet1!A1:C10** (…)" or "Filled formula across **Sheet1!A1:B20** (…)"
   const m = /(?:Written to|Filled formula across)\s+\*\*([^*]+)\*\*/.exec(text);
   return m?.[1] ?? null;
 }
 
-/** Count formula errors mentioned in tool result text. */
 function countResultErrors(text: string): number {
   const m = /(\d+)\s+formula error/i.exec(text);
   return m?.[1] ? parseInt(m[1], 10) : 0;
 }
 
-/** True when result text starts with the blocked sentinel. */
 function isBlocked(text: string): boolean {
   return text.trimStart().startsWith("⛔");
 }
 
-/**
- * Tools whose success result just echoes the Input section.
- * For these, we show a compact "✓ Done" instead of the full text.
- * Only applies when the result isn't an error/block/warning.
- */
 const ECHO_RESULT_PATTERNS: Record<string, RegExp> = {
   format_cells: /^Formatted\s+\*\*/,
   conditional_format: /^(?:Added|Cleared) conditional format/,
 };
 
-/** True when the result is a redundant success echo of the input. */
 function isEchoResult(toolName: string, text: string): boolean {
   const pattern = ECHO_RESULT_PATTERNS[toolName];
   if (!pattern) return false;
   const trimmed = text.trim();
-  // Don't suppress if there are warnings or errors
   if (/⚠️|error|warning/i.test(trimmed)) return false;
   if (isBlocked(trimmed)) return false;
   return pattern.test(trimmed);
 }
 
-/** Result-aware summary for result text that is already user-friendly. */
 function resultSummary(text: string): string | null {
   const line = extractSummaryLine(text);
   return line ? stripDimensions(line) : null;
@@ -682,7 +628,6 @@ function recoveryBadgeForDetails(details: ToolDetails): string {
   }
 }
 
-/** Append error / blocked badge to the detail string. */
 function badge(
   toolName: SupportedToolName,
   resultText: string | undefined,
@@ -721,11 +666,8 @@ function badge(
 }
 
 export interface ToolDesc {
-  /** Bold verb, e.g. "Read", "Wrote", "Format" */
   action: string;
-  /** Normal-weight rest, e.g. "Costs!A1:C19" */
   detail: string;
-  /** Raw Excel address for click-to-navigate. Omit for non-range details. */
   address?: string;
 }
 
@@ -733,7 +675,6 @@ function toolDescWithAddress(action: string, detail: string, address: string | u
   return address !== undefined ? { action, detail, address } : { action, detail };
 }
 
-/** Split a result-text summary line into action (first word) + rest. */
 function splitFirstWord(text: string): ToolDesc {
   const i = text.indexOf(" ");
   return i > 0
@@ -751,14 +692,6 @@ interface ToolDescriptionContext {
 
 type ToolDescriptionHandler = (context: ToolDescriptionContext) => ToolDesc;
 
-/**
- * Header for a write the user stopped (`details.stopped`). How far it got:
- * write_cells / fill_formula report `writtenCount` (0 = nothing changed);
- * python_transform_range reports `rowsWritten × colsWritten`, and no
- * `rowsWritten` when Stop came before the destination was known. A stopped
- * write_cells / fill_formula without `writtenCount` (older results) cannot
- * say how much landed, so the header asks the user to check the range.
- */
 function describeStoppedWrite(details: ToolDetails): ToolDesc | null {
   let written: number | undefined;
   let address: string | undefined;
@@ -815,7 +748,6 @@ function describeWriteCells(context: ToolDescriptionContext): ToolDesc {
   return toolDescWithAddress("Write", (target ?? "cells") + receipt, target);
 }
 
-/** The whole range a `write_cells` call will fill ("Sheet1!B2:C4"), before it runs. */
 function pendingWriteTarget(startCell: string, rows: number, cols: number): string {
   if (rows <= 0 || cols <= 0 || (rows === 1 && cols === 1)) return startCell;
 
@@ -1129,7 +1061,6 @@ const TOOL_DESCRIPTION_HANDLERS = {
   }),
 } satisfies Record<SupportedToolName, ToolDescriptionHandler>;
 
-/** Structured description: bold action + normal-weight detail. */
 export function describeToolCall(
   toolName: SupportedToolName,
   params: unknown,
@@ -1146,18 +1077,10 @@ export function describeToolCall(
   });
 }
 
-/* ── Renderer ───────────────────────────────────────────────── */
-
-/** The card's failure test: tools report most failures as an "Error …" result rather than throwing. */
 export function isFailedToolResult(result: ToolResultMessage): boolean {
   return result.isError || extractResultError(splitToolResultContent(result).text) !== undefined;
 }
 
-/**
- * Expanded body of a tool call: the humanized input, then the result
- * (data table, dependency tree, markdown, image, or JSON), the cell diff and
- * the change explanation. Shared by the tool card and the turn group row.
- */
 export function renderToolCardBody(
   toolName: SupportedToolName,
   params: unknown,
@@ -1182,7 +1105,6 @@ export function renderToolCardBody(
     `;
   }
 
-  // `details` is unknown at this seam: older persisted sessions may carry any shape.
   const details = decodeToolDetails(result.details);
   const { text, images } = splitToolResultContent(result);
   const standaloneImagePath = detectStandaloneImagePath(text);
@@ -1250,11 +1172,6 @@ export function renderToolCardBody(
   `;
 }
 
-/**
- * Guided setup for a failure the user can fix (web search not configured,
- * a bridge unreachable). Shown next to the call whether or not it is
- * expanded.
- */
 export function renderToolSetupCards(result: ToolResultMessage | undefined): TemplateResult | null {
   const details = decodeToolDetails(result?.details);
   if (details === undefined) return null;
@@ -1271,10 +1188,6 @@ export function isSupportedToolName(name: string): name is SupportedToolName {
   return SUPPORTED_TOOL_NAMES.has(name);
 }
 
-/**
- * One-line description of a tool call that has not run yet ("Write
- * Sheet1!B2:C4"), in the words its row will use.
- */
 export function describePendingToolCall(toolName: string, params: unknown): string | null {
   if (!isSupportedToolName(toolName)) return null;
   const desc = describeToolCall(toolName, params, undefined, undefined);

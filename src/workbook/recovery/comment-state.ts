@@ -1,5 +1,3 @@
-/** Comment-thread capture/apply for workbook recovery snapshots. */
-
 import { excelRun, getRange } from "../../excel/helpers.js";
 import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { firstCellAddress } from "./address.js";

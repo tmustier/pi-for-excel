@@ -1,9 +1,3 @@
-/**
- * Error utilities.
- *
- * We often catch `unknown` (or anything) at runtime; this helper normalizes
- * it into a user-facing string without relying on `any`.
- */
 export function getErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
 

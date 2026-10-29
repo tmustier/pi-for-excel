@@ -1,7 +1,3 @@
-/**
- * Built-in defaults for conventions + named styles.
- */
-
 import { buildFormatString } from "./format-builder.js";
 import {
   DEFAULT_CURRENCY_SYMBOL,
@@ -17,7 +13,6 @@ import type {
 
 export { DEFAULT_CURRENCY_SYMBOL, PRESET_DEFAULT_DP };
 
-/** Backward-compatible alias. */
 export const DEFAULT_CONVENTIONS = DEFAULT_FORMAT_CONVENTIONS;
 
 export const DEFAULT_VISUAL_DEFAULTS = {
@@ -81,8 +76,6 @@ export const DEFAULT_CONVENTION_CONFIG: ResolvedConventions = {
   colorConventions: { ...DEFAULT_COLOR_CONVENTIONS },
   headerStyle: { ...DEFAULT_HEADER_STYLE },
 };
-
-// ── Named style defaults ─────────────────────────────────────────────
 
 const FORMAT_STYLES: NamedStyle[] = [
   {

@@ -49,10 +49,8 @@ export function parseQualifiedCellAddress(cellRef: string, defaultSheet: string)
   }
 }
 
-/** Ranges up to this many cells are traced cell by cell; larger ones become one range node. */
 export const MAX_EXPANDED_RANGE_CELLS = 16;
 
-/** Traversal addresses for one rectangular reference: each cell, or the whole range when large. */
 export function expandReferenceBounds(
   sheet: string,
   bounds: { startCol: number; startRow: number; endCol: number; endRow: number },
@@ -73,11 +71,6 @@ export function expandReferenceBounds(
   return cells;
 }
 
-/**
- * Traversal addresses for an address from the precedent/dependent APIs
- * ("Sheet1!E2:E3", "A1", "'My Sheet'!$B$2:$C$4"). Every cell of a small range
- * is kept; previously only the first cell was.
- */
 export function expandTraversalAddress(address: string, defaultSheet: string): string[] {
   try {
     const parsed = parseRangeRef(address);
@@ -152,7 +145,6 @@ export function extractFormulaReferences(formula: string, currentSheet: string):
         startAddress: qualifiedAddress(sheetName, cellAddress(startCol, startRow)),
       });
     } catch {
-      // Skip malformed reference tokens.
     }
   }
 

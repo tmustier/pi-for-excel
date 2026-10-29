@@ -16,26 +16,19 @@ export interface ConnectionSecretFieldDefinition {
 }
 
 export interface ConnectionHttpAuthDefinition {
-  /** Currently only header auth injection is supported. */
   placement: "header";
-  /** Header name to inject (for example: Authorization, X-API-Key). */
   headerName: string;
-  /** Template where placeholders reference secret field ids (for example: Bearer {apiKey}). */
   valueTemplate: string;
-  /** Exact target hosts allowed for auth injection. */
   allowedHosts: readonly string[];
 }
 
 export interface ConnectionDefinition {
   id: string;
   title: string;
-  /** Short capability sentence shown to the assistant in prompt context. */
   capability: string;
   authKind: ConnectionAuthKind;
   secretFields: readonly ConnectionSecretFieldDefinition[];
-  /** Optional host-injected HTTP auth mapping for api.http.fetch({ connection }). */
   httpAuth?: ConnectionHttpAuthDefinition;
-  /** Optional custom setup hint for structured tool failures. */
   setupHint?: string;
 }
 

@@ -258,9 +258,6 @@ void test("restore round-trips comment-thread states for present and absent thre
 });
 
 void test("a restore that times out sends nothing more to Excel", async () => {
-  // Excel.run cannot be cancelled: when the call gives up (a timeout), the
-  // callback is still running. The restore's write must not reach Excel after
-  // the restore has already reported its failure.
   let releaseLoad: (() => void) | undefined;
   let syncsReachingExcel = 0;
   let callback: Promise<unknown> | undefined;
@@ -307,7 +304,6 @@ void test("a restore that times out sends nothing more to Excel", async () => {
 
     await assert.rejects(() => log.restore(appended.id), /Timeout/u);
 
-    // Excel answers the stuck load late; the callback goes on to its write.
     releaseLoad?.();
     const outcome = await callback;
     assert.equal(syncsReachingExcel, 1);

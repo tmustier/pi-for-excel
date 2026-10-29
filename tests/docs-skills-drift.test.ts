@@ -1,5 +1,3 @@
-// Static contract: repository docs and bundled skill catalogs must stay in sync;
-// runtime behavior cannot discover accidentally omitted build-time content.
 import assert from "node:assert/strict";
 import { readFile, readdir, stat } from "node:fs/promises";
 import { test } from "node:test";
@@ -77,7 +75,6 @@ async function readBundledSkillPathsFromFilesystem(): Promise<string[]> {
         discovered.push(skillPath);
       }
     } catch {
-      // ignore folders without a top-level SKILL.md
     }
   }
 

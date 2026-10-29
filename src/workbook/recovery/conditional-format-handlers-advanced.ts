@@ -1,5 +1,3 @@
-/** Advanced conditional-format handlers for data bars, color scales, and icon sets. */
-
 import {
   attachConditionalFormatCaptureContext,
   type ConditionalFormatRuleHandlers,

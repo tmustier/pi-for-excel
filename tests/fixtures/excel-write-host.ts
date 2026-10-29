@@ -1,23 +1,3 @@
-/**
- * A small in-memory Excel host for write-tool tests.
- *
- * It models the Excel behaviors the write path has to tell the truth about,
- * as observed in Excel on the web (2026-10-26):
- * - a value sent to a merged cell other than its top-left is dropped;
- * - a value sent into a spilled range turns the anchor into #SPILL!;
- * - numeric-looking text is stored as a number, "'text" as text;
- * - a new formula reads back 0 under manual calculation until calculated;
- * - data validation is not enforced on writes, only reported by `valid`;
- * - writes to locked cells on a protected sheet fail with AccessDenied;
- * - a write in the column right of a table extends the table, and Excel
- *   names the new column "Column1" when its header cell is empty;
- * - loading values/formulas for more than PAYLOAD_CELL_LIMIT cells fails the
- *   sync with ResponsePayloadSizeLimitExceeded, after writes in it applied.
- *
- * It is narrow on purpose: formulas evaluate only `=REF`, `=REF+REF…` and
- * `=REF*REF`, and only the APIs the write tools call exist.
- */
-
 interface Cell {
   value: string | number | boolean;
   formula: string;
@@ -109,8 +89,6 @@ export class FakeSheet {
     return new FakeRange(this, parseBlock(address));
   }
 
-  // ── Fixture setup ──
-
   set(address: string, value: string | number | boolean): void {
     const { row, col } = parseCoord(address);
     if (typeof value === "string" && value.startsWith("=")) {
@@ -159,8 +137,6 @@ export class FakeSheet {
     return this.cells.get(key(row, col))?.formula ?? "";
   }
 
-  // ── Behavior ──
-
   mergeAt(row: number, col: number): Merge | undefined {
     return this.merges.find(({ block }) =>
       row >= block.top && row <= block.bottom && col >= block.left && col <= block.right);
@@ -195,7 +171,7 @@ export class FakeSheet {
       if (!this.cells.get(key(block.top, col))) this.cells.set(key(block.top, col), { value: "Column1", formula: "" });
     }
     const merge = this.mergeAt(row, col);
-    if (merge && (row !== merge.block.top || col !== merge.block.left)) return; // dropped by Excel
+    if (merge && (row !== merge.block.top || col !== merge.block.left)) return;
     const spill = this.spillAt(row, col);
     if (spill && (row !== spill.anchor.row) && sent !== "") {
       this.cells.set(key(spill.anchor.row, spill.anchor.col), { value: "#SPILL!", formula: spill.formula });
@@ -237,7 +213,6 @@ class FakeAreas {
     this.address = blocks.map((block) => `${sheetName}!${blockText(block)}`).join(",");
     this.cellCount = blocks.reduce((total, block) =>
       total + (block.bottom - block.top + 1) * (block.right - block.left + 1), 0);
-    // Excel on the web reports a merged area by its top-left cell.
     this.areas = {
       items: blocks.map((block) => ({
         address: `${sheetName}!${colName(block.left)}${block.top + 1}`,
@@ -348,7 +323,6 @@ export class FakeRange {
   }
 
   get formulas(): (string | number | boolean)[][] {
-    // Like Excel: a constant reads back as itself in `formulas`, a blank cell as "".
     return this.grid((cell) => cell?.formula || (cell?.value ?? ""));
   }
 
@@ -356,7 +330,6 @@ export class FakeRange {
     this.values = formulas;
   }
 
-  /** Relative R1C1 form of each cell's formula (plain A1 references only, like `formulas`). */
   get formulasR1C1(): (string | number | boolean)[][] {
     return this.formulas.map((row, r) => row.map((formula, c) => typeof formula !== "string" ? formula
       : formula.replace(/([A-Z]+)(\d+)/gu, (_match, letters: string, digits: string) => {
@@ -405,7 +378,6 @@ export class FakeRange {
     });
   }
 
-  /** Paste with relative references shifted, like autofill; only a one-cell source, as fill_formula uses. */
   copyFrom(source: FakeRange, _type?: string): void {
     source.autoFill(this);
   }
@@ -489,15 +461,10 @@ export class FakeExcelHost {
   private readonly sheets = new Map<string, FakeSheet>();
   private queued: Array<() => void> = [];
   private active: FakeSheet;
-  /** Every sync, for asserting how many round trips a tool made. */
   syncCount = 0;
-  /** Fail the sync that would apply the Nth queued write (1-based) with this error; the write is not applied. */
   failWrite: { at: number; error: Error } | null = null;
-  /** Fail the Nth sync (1-based) with this error before it does anything, e.g. a read Excel never answered. */
   failSync: { at: number; error: Error } | null = null;
-  /** Hold the Nth sync (1-based) for `ms` before it runs, like Excel being slow to answer. */
   delaySync: { at: number; ms: number } | null = null;
-  /** Called after each sync that applied at least one write (1-based count of such syncs). */
   afterWriteSync: ((writeSyncs: number) => void) | null = null;
   private writeSyncs = 0;
   private writesApplied = 0;
@@ -526,7 +493,6 @@ export class FakeExcelHost {
         getItem: (name: string): FakeSheet => {
           const sheet = this.sheets.get(name);
           if (!sheet) {
-            // Office.js fails at sync; failing at the call is close enough for these tests.
             throw new OfficeError("ItemNotFound", "The requested resource doesn't exist.", "WorksheetCollection.getItem");
           }
           return sheet;
@@ -583,12 +549,10 @@ export class FakeExcelHost {
   };
 }
 
-/** Install the fake as the global `Excel` for the duration of `action`. */
 export async function withFakeExcel<T>(fake: FakeExcelHost, action: () => Promise<T>): Promise<T> {
   const hadExcel = Reflect.has(globalThis, "Excel");
   const previousExcel = Reflect.get(globalThis, "Excel");
   Reflect.set(globalThis, "Excel", {
-    // A fresh context per run, as in Office.js: tools may patch `context.sync` for one run.
     run: <TResult>(callback: (context: unknown) => Promise<TResult>): Promise<TResult> => callback(Object.create(fake.context)),
   });
   try {

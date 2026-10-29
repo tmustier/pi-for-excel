@@ -2,16 +2,6 @@ function isAuthOauthStoragePayloadShape(value: unknown): value is Record<string,
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * OAuth credential persistence for in-browser OAuth flows.
- *
- * Credentials are stored in IndexedDB via SettingsStore under `oauth.<providerId>`.
- * We intentionally do not read/write legacy localStorage keys anymore.
- *
- * Security note: this is storage hygiene, not an XSS boundary. Same-origin script
- * execution can read IndexedDB.
- */
-
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
 import type { SettingsAccess } from "../storage/local/settings-store.js";
 export function isOAuthCredentials(value: unknown): value is OAuthCredentials {
@@ -27,9 +17,6 @@ function oauthSettingsKey(providerId: string): string {
   return `oauth.${providerId}`;
 }
 
-/**
- * Load OAuth credentials from IndexedDB settings.
- */
 export async function loadOAuthCredentials(
   settings: SettingsAccess,
   providerId: string,

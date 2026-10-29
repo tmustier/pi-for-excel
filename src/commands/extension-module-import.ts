@@ -122,11 +122,6 @@ export function readRemoteExtensionOptInFromStorage(storage: Storage | null | un
   }
 }
 
-/**
- * Enforce the module-source policy for every runtime (host and sandbox):
- * unsupported specifiers are rejected, and remote http(s) URLs need the
- * explicit "Remote extension URLs" opt-in at load time, not only at install.
- */
 export function assertExtensionModuleSourceAllowed(specifier: string): Exclude<ExtensionSourceKind, "unsupported"> {
   const sourceKind = classifyExtensionSource(specifier);
 

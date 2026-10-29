@@ -56,11 +56,9 @@ void test("renamed and closed tabs restore with the active tab after reload", as
     await page.reload();
     await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
 
-    // Tabs keep their numbers across a reload: the closed "Chat 2" is not reused.
     assert.deepEqual(await page.locator(".pi-session-tab__title").allTextContents(), ["Chat 1", "Chat 3"]);
     assert.equal(await page.locator(".pi-session-tab.is-active .pi-session-tab__title").innerText(), "Chat 3");
 
-    // The closed tab is still in recently closed after the reload, and comes back with its name.
     const welcome = page.locator("#pi-welcome-login-overlay");
     await welcome.dispatchEvent("click");
     await welcome.waitFor({ state: "detached" });
@@ -77,8 +75,6 @@ void test("Ctrl+Alt arrows switch tabs from tab or composer focus, and tab short
     const active = page.locator(".pi-session-tab.is-active .pi-session-tab__title");
     await active.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
 
-    // A new tab moves focus to the composer on the next frame; let that land
-    // before focusing the tab, or it takes focus back after the key press.
     await page.waitForFunction(() => document.activeElement?.closest("pi-input") !== null);
     await page.locator(".pi-session-tab.is-active .pi-session-tab__main").focus();
     await page.waitForFunction(() => document.activeElement?.closest(".pi-session-tab") !== null);
@@ -135,7 +131,6 @@ void test("Ctrl/Cmd+Z never reopens tabs; common tab chords work in the composer
     await page.keyboard.press("Control+z");
     await page.keyboard.press("Meta+z");
     assert.equal(await tabs.count(), 1);
-    // After a reload the toast is gone but the tab is still in recently closed.
     await page.reload();
     await composer.waitFor({ state: "visible", timeout: 20_000 });
     const welcome = page.locator("#pi-welcome-login-overlay");
@@ -161,7 +156,6 @@ void test("clicking anywhere on an inactive tab's title switches to it", async (
     const title = page.locator(".pi-session-tab").first().locator(".pi-session-tab__title");
     const box = await title.boundingBox();
     assert.ok(box);
-    // The right end of a short title is where an overlaid × would sit.
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.click(box.x + box.width - 2, box.y + box.height / 2);
     await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ timeout: 3_000 });

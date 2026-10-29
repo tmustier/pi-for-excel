@@ -1,19 +1,3 @@
-/**
- * <user-message>, <assistant-message> — chat message elements.
- *
- * First-party replacements for pi-web-ui's Messages.js components
- * (docs/ui-ownership.md). Tag names, light DOM, and the CSS-facing structure
- * (`.user-message-container`, `.pi-assistant-body`, `.pi-assistant-aborted`)
- * are preserved; Tailwind utility classes are replaced with semantic `pi-*`
- * classes styled in src/ui/theme/content/.
- *
- * Intentional divergences from upstream:
- * - No usage/cost row (theme CSS always hid it; the status bar shows context).
- * - Tool calls are not drawn here: the transcript draws them in the turn's
- *   <turn-group> (turn-model.ts). `contentFrom`/`contentTo` let the list
- *   draw the prose before and after the calls separately.
- */
-
 import type {
   AssistantMessage as AssistantMessageType,
   UserMessage as UserMessageType,
@@ -84,11 +68,8 @@ export class AssistantMessage extends LitElement {
   @property({ type: String }) errorSummary: string | null = null;
   @property({ type: Boolean }) canRetry = false;
   @property({ type: Boolean }) hideError = false;
-  /** First content block to draw (the list splits a response around its tool calls). */
   @property({ type: Number }) contentFrom = 0;
-  /** One past the last content block to draw; the end of the message by default. */
   @property({ type: Number }) contentTo: number | undefined;
-  /** Offer "Copy answer": the answer, not the prose before a turn's tool calls. */
   @property({ type: Boolean }) copyable = true;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
@@ -108,9 +89,6 @@ export class AssistantMessage extends LitElement {
     const to = this.contentTo ?? message.content.length;
     const tail = to >= message.content.length;
 
-    // Render content in the order it appears. Only the last block of a
-    // streaming response can still be growing, so a thinking block reads
-    // "Thinking…" only until the model moves on to text or a tool call.
     const lastIndex = message.content.length - 1;
     const parts: TemplateResult[] = [];
     for (let index = from; index < to; index++) {

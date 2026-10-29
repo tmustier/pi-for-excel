@@ -12,7 +12,6 @@ interface ProviderFailure {
   retryAfterMs: number | null;
 }
 
-// Request-local HTTP facts survive the provider's friendly-error rewriting.
 const failures = new WeakMap<AssistantMessage, ProviderFailure>();
 
 export function providerRetryDelay(message: AssistantMessage, fallbackMs: number): number | null {
@@ -20,7 +19,6 @@ export function providerRetryDelay(message: AssistantMessage, fallbackMs: number
   const code = failure?.code ?? "";
   if (/usage_limit|usage_not_included|insufficient_quota|quota_exceeded|billing|budget|subscription_sharing_.*limit/iu.test(code)
     || /usage limit|insufficient_quota|quota exceeded|billing|out of budget/iu.test(message.errorMessage ?? "")) {
-    // A short rate-limit code takes precedence over Codex's generic usage-limit wording.
     if (code !== "rate_limit_exceeded") return null;
   }
   const retryable = failure?.status === 429 || failure?.status === 529
@@ -30,7 +28,6 @@ export function providerRetryDelay(message: AssistantMessage, fallbackMs: number
   return Math.min(60_000, failure?.retryAfterMs ?? fallbackMs);
 }
 
-/** Capture HTTP error facts at the transport seam, before adapters rewrite them. */
 export function streamWithProviderFailure(
   produce: (options: StreamOptions) => AssistantMessageEventStream,
   options?: StreamOptions,
@@ -39,7 +36,6 @@ export function streamWithProviderFailure(
   const fetchFn = options?.fetch ?? globalThis.fetch;
   const stream = produce({
     ...options,
-    // The action queue owns retries, their countdown and cancellation.
     maxRetries: 0,
     fetch: async (input, init) => {
       const response = await fetchFn(input, init);
@@ -51,7 +47,7 @@ export function streamWithProviderFailure(
         try {
           const raw: unknown = JSON.parse(await response.clone().text());
           if (Value.Check(errorBodySchema, raw)) code = raw.error.code ?? raw.error.type ?? "";
-        } catch { /* Non-JSON errors still carry HTTP status and delay. */ }
+        } catch {}
         failure = { status: response.status, code, retryAfterMs: Number.isFinite(delay) ? Math.max(0, delay) : null };
       }
       return response;

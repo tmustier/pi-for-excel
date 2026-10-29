@@ -1,13 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   12. DIALOGS — first-party model selector + provider connect
-   Components: src/ui/model-selector-dialog.ts, src/ui/api-key-dialog.ts.
-   Both mount inside .pi-overlay via createOverlayDialog().
-   ═══════════════════════════════════════════════════════ */
-
-/* ── Model selector ── */
-
-/* Surface, radius and width come from the shared overlay card
-   (.pi-welcome-card.pi-overlay-card--m); only the list layout is specific. */
 .pi-model-selector-card {
   padding: 0;
   gap: 0;
@@ -98,8 +88,6 @@
   font-size: var(--text-sm);
   color: var(--muted-foreground);
 }
-
-/* ── Provider connect (API key / OAuth) ── */
 
 .pi-api-key-card {
   display: flex;

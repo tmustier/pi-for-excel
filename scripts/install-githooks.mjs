@@ -14,7 +14,6 @@ function tryExec(cmd) {
   }
 }
 
-// Not running in a git checkout (e.g. npm pack / CI artifact) → nothing to do.
 if (!tryExec("git --version") || !tryExec("git rev-parse --is-inside-work-tree")) {
   process.exit(0);
 }
@@ -32,7 +31,6 @@ if (!hooksPath) {
   );
 }
 
-// Best-effort: ensure hooks are executable (POSIX).
 try {
   const hookNames = ["pre-commit", "pre-push"];
   for (const hookName of hookNames) {
@@ -42,5 +40,4 @@ try {
     }
   }
 } catch {
-  // Ignore (e.g. Windows filesystems)
 }

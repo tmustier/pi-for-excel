@@ -2,15 +2,6 @@ function isToolsExecuteOfficeJsPayloadShape(value: unknown): value is Record<str
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * execute_office_js — run direct Office.js code with explicit user intent.
- *
- * Security posture:
- * - always available (not behind /experimental)
- * - each execution requires a brief explanation (shown in tool cards and approval prompts)
- * - each execution requires explicit user approval
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -202,11 +193,8 @@ export function createExecuteOfficeJsTool(
         };
       } catch (error) {
         const parsed = parseExcelError(error);
-        // Office.js codes (AccessDenied, cell-edit mode, payload limits) get the same reasons as the
-        // structured tools; errors thrown by the code itself keep their message.
         const message = parsed.code ? (await describeExcelFailure(parsed)).reason : getErrorMessage(error);
         const ranEarlier = parsed.outcomeUnknown
-          // Excel.run cannot be cancelled; runMutation rejects the code's later syncs, nothing more.
           ? "\n\nPi cannot stop Office.js code once it runs. It blocked this code's later Excel calls, so nothing after the " +
             "unanswered step reached Excel, but that step may still be applied, and steps before it already ran. " +
             "Work the code does outside Excel (timers, network) may still run. Read the affected ranges back before retrying."

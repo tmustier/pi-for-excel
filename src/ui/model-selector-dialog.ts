@@ -1,17 +1,3 @@
-/**
- * Model selector dialog — first-party replacement for pi-web-ui's
- * `ModelSelector` (docs/ui-ownership.md step 6).
- *
- * Differences from upstream (intentional):
- * - No Thinking/Vision filter pills, capability icons, or cost column — the
- *   previous theme already hid all three; they are simply not rendered.
- * - Provider catalogues come from the browser-native Pi AI Models runtime.
- *   Cached dynamic models render immediately and background refreshes update
- *   an already-open selector.
- * - Provider filtering (active credentials) and featured-model ordering are
- *   built in rather than monkey-patched (src/models/featured-models.ts).
- */
-
 import {
   modelsAreEqual,
   type Api,
@@ -67,11 +53,6 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   let allItems = collectModelItems(options.models);
   let searchQuery = "";
   let selectedIndex = 0;
-  // Selection follows the mouse only after real pointer movement, so
-  // keyboard-triggered scrolling doesn't hand selection to whatever lands
-  // under the cursor.
-  // It starts in keyboard mode: a pointer resting where the list appears must
-  // not take the selection from the current model, or Enter would pick its row.
   let navigationMode: "keyboard" | "mouse" = "keyboard";
   let lastMouse: { x: number; y: number } | null = null;
 
@@ -114,7 +95,6 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
       }
       scored.sort((a, b) => b.score - a.score);
 
-      // Preserve score order, but float the current model to the top.
       const current = options.currentModel;
       const items = scored.map((entry) => entry.item);
       if (current) {
@@ -219,7 +199,6 @@ export function openModelSelectorDialog(options: ModelSelectorDialogOptions): vo
   dialog.overlay.addEventListener("mousemove", (event) => {
     const previous = lastMouse;
     lastMouse = { x: event.clientX, y: event.clientY };
-    // The first event only records where the pointer rests (browsers send one when content appears under it).
     if (!previous || (event.clientX === previous.x && event.clientY === previous.y)) return;
     navigationMode = "mouse";
   });

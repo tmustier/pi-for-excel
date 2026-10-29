@@ -1,11 +1,3 @@
-/**
- * Human-readable tool input rendering.
- *
- * Converts raw tool parameters into clean key-value lists with
- * color chips, data previews, and friendly descriptions — aimed
- * at Excel-savvy, less-technical users.
- */
-
 import { html, nothing, type TemplateResult } from "lit";
 import { cellRef, cellRefs } from "./cell-link.js";
 import { formatColorLabel } from "./color-names.js";
@@ -16,14 +8,10 @@ import {
 } from "../tools/capabilities.js";
 import type { CoreToolName } from "../tools/names.js";
 
-/* ── Types ──────────────────────────────────────────────────── */
-
 interface ParamItem {
   label: string;
   value: TemplateResult | string;
 }
-
-/* ── Helpers ────────────────────────────────────────────────── */
 
 function labelKey(label: string): string {
   return `humanize.label.${label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")}`;
@@ -54,7 +42,6 @@ function safe(params: unknown): Record<string, unknown> {
   return {};
 }
 
-/** Safely convert an unknown value to string. */
 function str(v: unknown): string {
   if (v === null || v === undefined) return "";
   if (typeof v === "string") return v;
@@ -62,7 +49,6 @@ function str(v: unknown): string {
   return JSON.stringify(v);
 }
 
-/** Safely read a number, returning undefined if not a number. */
 function num(v: unknown): number | undefined {
   if (typeof v === "number") return v;
   if (typeof v === "string") {
@@ -72,10 +58,8 @@ function num(v: unknown): number | undefined {
   return undefined;
 }
 
-/** Inline color chip (small filled circle) + human-readable name. */
 function colorChip(hex: string): TemplateResult {
   const label = formatColorLabel(hex);
-  // For well-known names, show just the name. For raw hex, show hex.
   const display = label === hex ? hex : label;
   return html`<span
       class="pi-color-chip"
@@ -84,9 +68,6 @@ function colorChip(hex: string): TemplateResult {
     ><span class="pi-color-chip-label">${display}</span>`;
 }
 
-/* ── Range parsing & grouping ───────────────────────────────── */
-
-/** Split "Sheet1!A1:B2" → { sheet: "Sheet1", address: "A1:B2" }. */
 function splitRangeRef(ref: string): { sheet: string; address: string } {
   const bang = ref.indexOf("!");
   if (bang >= 0) {
@@ -99,42 +80,27 @@ function splitRangeRef(ref: string): { sheet: string; address: string } {
 }
 
 interface RangeDisplayResult {
-  /** Common sheet name if all ranges share one, otherwise empty. */
   sheet: string;
-  /** Address display (sheet prefix stripped, truncated with "+N more"). */
   display: TemplateResult | string;
 }
 
-/**
- * Parse a comma/semicolon-separated range string, extract a common
- * sheet prefix, strip it from individual addresses, and truncate.
- *
- * Examples:
- *   "Sheet1!A1, Sheet1!B2, Sheet1!C3" → sheet="Sheet1", display="A1, B2, C3"
- *   "A1, B2, C3"                       → sheet="",       display="A1, B2, C3"
- *   "Sheet1!A1:D1, Sheet2!E1"          → sheet="",       display="Sheet1!A1:D1, Sheet2!E1"
- */
 function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
   const parts = range
     .split(/\s*[,;]\s*/)
     .map((s) => s.trim())
     .filter(Boolean);
 
-  // Parse each part
   const parsed = parts.map(splitRangeRef);
 
-  // Find common sheet (only if ALL parts with a sheet agree)
   const sheetsFound = [
     ...new Set(parsed.map((p) => p.sheet).filter(Boolean)),
   ];
   const commonSheet = sheetsFound.length === 1 ? (sheetsFound[0] ?? "") : "";
 
-  // Build display addresses — strip the common sheet prefix
   const addresses = commonSheet
     ? parsed.map((p) => p.address)
-    : parts; // keep originals if sheets differ
+    : parts;
 
-  // Truncate
   if (addresses.length <= maxShow) {
     return { sheet: commonSheet, display: addresses.join(", ") };
   }
@@ -147,7 +113,6 @@ function formatRangeForDisplay(range: string, maxShow = 3): RangeDisplayResult {
   };
 }
 
-/** Format a cell value for preview. */
 function fmtCell(v: unknown): string {
   if (v === null || v === undefined || v === "") return "";
   if (typeof v === "string") return v.length > 18 ? v.substring(0, 18) + "…" : v;
@@ -155,10 +120,6 @@ function fmtCell(v: unknown): string {
   return JSON.stringify(v);
 }
 
-/**
- * Render a mini data-preview table for write_cells values.
- * Shows up to 3 rows × 6 columns, with truncation indicators.
- */
 function renderDataPreview(values: unknown[][]): TemplateResult {
   const MAX_ROWS = 3;
   const MAX_COLS = 6;
@@ -195,17 +156,13 @@ function renderDataPreview(values: unknown[][]): TemplateResult {
   `;
 }
 
-/** Render a monospaced formula snippet. */
 function formulaSnippet(formula: string): TemplateResult {
   return html`<code class="pi-params__code">${formula}</code>`;
 }
 
-/** Localized "{n} row(s)" / "{n} column(s)" unit phrase. */
 function nUnit(n: number, unit: "row" | "column"): string {
   return t(`humanize.unit.${unit}_${n === 1 ? "one" : "other"}`, { n });
 }
-
-/* ── Layout ─────────────────────────────────────────────────── */
 
 function renderParamList(items: ParamItem[]): TemplateResult {
   return html`
@@ -222,19 +179,15 @@ function renderParamList(items: ParamItem[]): TemplateResult {
   `;
 }
 
-/* ── Per-tool humanizers ────────────────────────────────────── */
-
 function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
-  // Range (with sheet grouping)
   if (p.range) {
     const rd = formatRangeForDisplay(str(p.range));
     if (rd.sheet) items.push({ label: l("Sheet"), value: rd.sheet });
     items.push({ label: l("Range"), value: cellRefs(str(p.range), Infinity) });
   }
 
-  // Named styles
   if (p.style) {
     const names = Array.isArray(p.style)
       ? (p.style as unknown[]).map(str)
@@ -242,7 +195,6 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Style"), value: names.join(" + ") });
   }
 
-  // Font properties — grouped into one row
   const fontParts: Array<TemplateResult | string> = [];
   if (p.font_color) fontParts.push(colorChip(str(p.font_color)));
   if (p.bold === true) fontParts.push(v("bold"));
@@ -254,12 +206,10 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Font"), value: joinParts(fontParts) });
   }
 
-  // Fill
   if (p.fill_color) {
     items.push({ label: l("Fill"), value: colorChip(str(p.fill_color)) });
   }
 
-  // Number format
   if (p.number_format) {
     const nf = str(p.number_format);
     const dp = num(p.number_format_dp);
@@ -270,7 +220,6 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Format"), value: display });
   }
 
-  // Alignment
   const alignParts: string[] = [];
   if (p.horizontal_alignment) alignParts.push(str(p.horizontal_alignment));
   if (p.vertical_alignment) alignParts.push("v: " + str(p.vertical_alignment));
@@ -279,7 +228,6 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Align"), value: alignParts.join(", ") });
   }
 
-  // Dimensions
   const cw = num(p.column_width);
   if (cw !== undefined) {
     items.push({ label: l("Width"), value: t("humanize.unit.chars", { n: cw }) });
@@ -292,7 +240,6 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Auto-fit"), value: v("yes") });
   }
 
-  // Borders
   const edgeLabels: string[] = [];
   if (p.border_top) edgeLabels.push(t("humanize.edge.top", { style: str(p.border_top) }));
   if (p.border_bottom) edgeLabels.push(t("humanize.edge.bottom", { style: str(p.border_bottom) }));
@@ -304,7 +251,6 @@ function humanizeFormatCells(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Borders"), value: str(p.borders) + " (all edges)" });
   }
 
-  // Merge
   if (p.merge === true) items.push({ label: l("Merge"), value: v("yes") });
   if (p.merge === false) items.push({ label: l("Merge"), value: v("unmerge") });
 
@@ -486,21 +432,18 @@ function humanizeModifyStructure(p: Record<string, unknown>): ParamItem[] {
 function humanizeConditionalFormat(p: Record<string, unknown>): ParamItem[] {
   const items: ParamItem[] = [];
 
-  // Action
   if (p.action === "clear") {
     items.push({ label: l("Action"), value: v("clear_all_rules") });
   } else {
     items.push({ label: l("Action"), value: v("add_rule") });
   }
 
-  // Range (with sheet grouping)
   if (p.range) {
     const rd = formatRangeForDisplay(str(p.range));
     if (rd.sheet) items.push({ label: l("Sheet"), value: rd.sheet });
     items.push({ label: l("Range"), value: cellRefs(str(p.range), Infinity) });
   }
 
-  // Rule details
   if (p.type === "formula" && p.formula) {
     items.push({ label: l("Rule"), value: formulaSnippet(str(p.formula)) });
   } else if (p.type === "cell_value" && p.operator) {
@@ -510,7 +453,6 @@ function humanizeConditionalFormat(p: Record<string, unknown>): ParamItem[] {
     items.push({ label: l("Rule"), value: op + val + val2 });
   }
 
-  // Format
   const fmtParts: Array<TemplateResult | string> = [];
   if (p.fill_color) fmtParts.push(html`fill ${colorChip(str(p.fill_color))}`);
   if (p.font_color) fmtParts.push(html`font ${colorChip(str(p.font_color))}`);
@@ -1044,16 +986,12 @@ function humanizeExecuteWpsJs(p: Record<string, unknown>): ParamItem[] {
   return humanizeDirectJs(p, "WPS JSAPI");
 }
 
-/* ── Shared helpers ─────────────────────────────────────────── */
-
-/** Join an array of mixed text/TemplateResult with comma separators. */
 function joinParts(parts: Array<TemplateResult | string>): TemplateResult {
   return html`${parts.map(
     (part, i) => html`${i > 0 ? ", " : ""}${part}`,
   )}`;
 }
 
-/** Convert a cell_value operator to plain English. */
 function humanizeOperator(op: string): string {
   const MAP: Record<string, string> = {
     Between: "between",
@@ -1067,8 +1005,6 @@ function humanizeOperator(op: string): string {
   };
   return MAP[op] ?? op;
 }
-
-/* ── Registry ───────────────────────────────────────────────── */
 
 type HumanizerFn = (p: Record<string, unknown>) => ParamItem[];
 
@@ -1110,12 +1046,6 @@ const HUMANIZERS: Record<string, HumanizerFn> = {
 
 const HUMANIZABLE_TOOL_NAME_SET = new Set<string>(TOOL_NAMES_WITH_HUMANIZER);
 
-/* ── Public API ─────────────────────────────────────────────── */
-
-/**
- * Convert tool parameters to a human-readable Lit template.
- * Returns `null` for unknown tools (caller falls back to JSON).
- */
 export function humanizeToolInput(
   toolName: string,
   params: unknown,

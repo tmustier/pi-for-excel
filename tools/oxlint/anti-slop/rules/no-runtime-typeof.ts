@@ -23,7 +23,6 @@ function isInsideTypeGuard(node: ESTree.Node): boolean {
 	return false;
 }
 
-/** Return whether typeof safely probes for the existence of a possibly absent binding. */
 function isExistenceProbe(node: ESTree.UnaryExpression): boolean {
 	const parent = node.parent;
 	if (parent.type !== "BinaryExpression") return false;
@@ -32,7 +31,6 @@ function isExistenceProbe(node: ESTree.UnaryExpression): boolean {
 	return other.type === "Literal" && other.value === "undefined";
 }
 
-/** Disallow runtime typeof checks that narrow unparsed values instead of decoding them. */
 export const noRuntimeTypeofRule = defineRule({
 	meta: {
 		type: "problem",

@@ -1,5 +1,3 @@
-/* global Application, wps */
-
 "use strict";
 
 const DEV_TASKPANE_URL = "https://localhost:3141/src/taskpane.html";
@@ -87,8 +85,6 @@ function OnAddInLoad(ribbonUI) {
   return true;
 }
 
-// WPS template skeletons spell this callback `OnAddinLoad`.
-// Keep the alias as a real top-level function so either ribbon spelling works.
 function OnAddinLoad(ribbonUI) {
   return OnAddInLoad(ribbonUI);
 }
@@ -172,9 +168,6 @@ if (globalScope) {
     OpenPi,
   };
 
-  // WPS' official template prefixes callbacks with `ribbon.` in ribbon.xml.
-  // Keep the legacy globals as aliases for older generated manifests and local
-  // smoke packages.
   globalScope.ribbon = {
     ...(globalScope.ribbon && typeof globalScope.ribbon === "object" ? globalScope.ribbon : {}),
     ...ribbonCallbacks,

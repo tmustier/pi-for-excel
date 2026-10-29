@@ -1,5 +1,3 @@
-/** Runtime controller for persisted execution mode state. */
-
 import {
   dispatchExecutionModeChanged,
   getStoredExecutionMode,
@@ -9,20 +7,13 @@ import {
 } from "./mode.js";
 
 export interface ExecutionModeController {
-  /** Last known mode (for display). */
   getMode: () => ExecutionMode;
-  /**
-   * The mode as stored now. The mode is one setting for every taskpane on
-   * this computer, so approval decisions use this, never a value cached when
-   * another taskpane may have changed it since.
-   */
   readMode: () => Promise<ExecutionMode>;
   setMode: (mode: ExecutionMode) => Promise<void>;
 }
 
 export interface CreateExecutionModeControllerOptions {
   settings: ExecutionModeStore;
-  /** Tells other taskpanes the mode changed. Default: a BroadcastChannel when available. */
   channel?: Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null;
 }
 
@@ -47,7 +38,6 @@ export async function createExecutionModeController(
     return mode;
   };
 
-  // Another taskpane changed the mode: show it here too.
   channel?.addEventListener("message", () => {
     void readMode().catch(() => {});
   });

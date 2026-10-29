@@ -1,7 +1,3 @@
-/**
- * Extension runtime mode resolution.
- */
-
 import type { StoredExtensionTrust } from "./permissions.js";
 
 export type ExtensionRuntimeMode = "host" | "sandbox-iframe";

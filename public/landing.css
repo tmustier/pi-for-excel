@@ -47,7 +47,6 @@
 
     .page { max-width: 660px; margin: 0 auto; padding: 0 24px; }
 
-    /* ── Nav ── */
     nav {
       display: flex;
       align-items: center;
@@ -98,7 +97,6 @@
     .gh-link { display: inline-flex; align-items: center; gap: 5px; }
     .gh-link svg { width: 16px; height: 16px; fill: currentColor; }
 
-    /* ── Hero ── */
     .hero {
       padding: 72px 0 56px;
       position: relative;
@@ -154,7 +152,6 @@
     .hero-note a { text-decoration: none; }
     .hero-note a:hover { text-decoration: underline; }
 
-    /* ── Sections ── */
     section { margin-bottom: 64px; }
     .section-label {
       font-family: var(--font-mono);
@@ -181,7 +178,6 @@
       margin-bottom: 28px;
     }
 
-    /* ── Glass card ── */
     .card {
       background: var(--card-bg);
       border: 1px solid var(--card-border);
@@ -210,7 +206,6 @@
     .card a { text-decoration: none; }
     .card a:hover { text-decoration: underline; }
 
-    /* Step number */
     .step-num {
       display: inline-flex;
       align-items: center;
@@ -225,7 +220,6 @@
       flex-shrink: 0;
     }
 
-    /* ── Narrative block (the "why" sections) ── */
     .narrative {
       margin-bottom: 48px;
     }
@@ -244,7 +238,6 @@
     }
     .narrative p + p { margin-top: 10px; }
 
-    /* ── Section screenshot ── */
     .section-screenshot {
       display: block;
       max-width: 540px;
@@ -256,7 +249,6 @@
       margin-bottom: 32px;
     }
 
-    /* ── Convention demo ── */
     .convention-demo {
       margin-top: 20px;
       background: var(--card-bg);
@@ -307,7 +299,6 @@
       border: 1px solid oklch(0 0 0 / 0.1);
     }
 
-    /* ── Prompt examples ── */
     .prompts {
       display: flex;
       flex-direction: column;
@@ -340,7 +331,6 @@
       margin-left: 1px;
     }
 
-    /* ── Placeholder section ── */
     .placeholder-card {
       border: 1px dashed oklch(0 0 0 / 0.12);
       border-radius: var(--radius);
@@ -354,7 +344,6 @@
       font-style: italic;
     }
 
-    /* ── Download button ── */
     .dl-btn {
       display: inline-flex;
       align-items: center;
@@ -382,7 +371,6 @@
       stroke-linecap: round; stroke-linejoin: round;
     }
 
-    /* ── Terminal block ── */
     .terminal {
       background: var(--terminal-bg);
       border-radius: var(--radius-sm);
@@ -432,7 +420,6 @@
     .terminal pre .comment { color: var(--terminal-muted); }
     .terminal pre .prompt { color: var(--terminal-green); user-select: none; }
 
-    /* ── Callout ── */
     .callout {
       margin-top: 14px;
       padding: 14px 16px;
@@ -457,7 +444,6 @@
     }
 
 
-    /* ── OS toggle ── */
     .os-toggle {
       display: inline-flex;
       background: oklch(0 0 0 / 0.04);
@@ -486,7 +472,6 @@
     .os-panel { display: none; }
     .os-panel.active { display: block; }
 
-    /* ── Connect options ── */
     .connect-option {
       padding: 20px 24px;
       background: var(--card-bg);
@@ -536,7 +521,6 @@
       color: oklch(0.45 0.04 90);
     }
 
-    /* ── Inline elements ── */
     code {
       font-family: var(--font-mono);
       font-size: 0.9em;
@@ -581,7 +565,6 @@
       color: var(--green);
     }
 
-    /* ── Footer ── */
     footer {
       padding: 48px 0;
       border-top: 1px solid oklch(0 0 0 / 0.06);
@@ -608,7 +591,6 @@
     footer a { text-decoration: none; }
     footer a:hover { text-decoration: underline; }
 
-    /* ── Animations ── */
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(16px); }
       to { opacity: 1; transform: translateY(0); }
@@ -624,7 +606,6 @@
     }
     .reveal.visible { opacity: 1; transform: translateY(0); }
 
-    /* ── Responsive ── */
     @media (max-width: 640px) {
       .hero { padding: 56px 0 44px; }
       .card { padding: 18px; }

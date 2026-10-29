@@ -1,7 +1,3 @@
-/**
- * workbook_history — list / restore workbook backups.
- */
-
 import { Type, type Static } from "typebox";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";

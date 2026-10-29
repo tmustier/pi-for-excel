@@ -19,10 +19,6 @@ export interface CompactionSummaryMessage {
   summary: string;
   tokensBefore: number;
   timestamp: number;
-  /**
-   * Large results of answered requests kept after this summary. The model
-   * sees them as compacted previews; the tool cards keep the full output.
-   */
   compactedToolCallIds?: string[];
 }
 
@@ -54,7 +50,6 @@ export function createCompactionSummaryMessage(args: {
   };
 }
 
-/** Tool calls the latest compaction summary marked for compacting. */
 export function getCompactedToolCallIds(messages: readonly AgentMessage[]): ReadonlySet<string> {
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
@@ -63,10 +58,6 @@ export function getCompactedToolCallIds(messages: readonly AgentMessage[]): Read
   return new Set();
 }
 
-/**
- * UI-only formatter (message renderer card title). Safe to localize — the
- * agent-facing compaction summary text is built separately below.
- */
 export function formatCompactionSummaryExtent(msg: CompactionSummaryMessage): string {
   if (typeof msg.tokensBefore === "number") {
     const key = msg.tokensBefore === 1 ? "compaction.extent.token" : "compaction.extent.tokens";

@@ -96,7 +96,6 @@ void test("compact tells the summarizer an answered request is done and frees th
     const model = faux.getModel();
     const requests: Context[] = [];
 
-    // Two answered reads with ~22k-token results, then a short exchange.
     const read = (n: number, range: string, chars: number, answer: string, at: number): AgentMessage[] => [
       user(`Read ${range}`, at),
       fauxAssistantMessage(fauxToolCall("read_range", { range }, { id: `call-${n}` }), { stopReason: "toolUse" }),
@@ -132,13 +131,11 @@ void test("compact tells the summarizer an answered request is done and frees th
 
     await runCompactCommand(agent, "");
 
-    // The second request was cut from its answer; the summarizer still learns it was answered.
     const prompt = JSON.stringify(requests[0]?.messages);
     assert.match(prompt, /\[User request, answered\]: Read Calc!A2501:D5000/u);
     assert.match(prompt, /final reply to the request above, given after these messages\]: Second half read: total 5,678\./u);
     assert.match(prompt, /never under In Progress or Next Steps/u);
 
-    // The kept 22k-token result reaches the model as a preview; the tool card keeps it whole.
     const kept = agent.state.messages.find((message) => message.role === "toolResult" && message.toolCallId === "call-2");
     assert.ok(kept?.role === "toolResult" && kept.content.some((block) => block.type === "text" && block.text.length > 88_000));
     const llm = createConvertToLlm({ getContextWindow: () => 200_000 })(agent.state.messages);
@@ -146,7 +143,6 @@ void test("compact tells the summarizer an answered request is done and frees th
     assert.ok(sent?.role === "toolResult");
     assert.match(sent.content.map((block) => (block.type === "text" ? block.text : "")).join(""), /^\[Compacted tool result\] read_range/u);
 
-    // Most of the window is freed, and the context meter agrees.
     const after = estimateContextTokens({ systemPrompt: "", messages: agent.state.messages }).totalTokens;
     assert.ok(before > 45_000, `before: ${before}`);
     assert.ok(after < 2_000, `after: ${after}`);

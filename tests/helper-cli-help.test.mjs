@@ -1,5 +1,3 @@
-// `--help` must print usage without starting a server or touching the user's
-// certificate directory (the HTTPS path can install mkcert and create certs).
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, readdirSync, rmSync } from "node:fs";

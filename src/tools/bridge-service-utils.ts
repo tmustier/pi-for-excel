@@ -64,7 +64,6 @@ export async function setBridgeSetting(settingKey: string, value: string): Promi
     const storage = storageModule.getAppStorage();
     await storage.settings.set(settingKey, value);
   } catch {
-    // ignore (approval prompt will continue to appear if persistence is unavailable)
   }
 }
 

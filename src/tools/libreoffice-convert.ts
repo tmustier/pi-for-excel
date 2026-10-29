@@ -2,14 +2,6 @@ function isToolsLibreofficeConvertPayloadShape(value: unknown): value is Record<
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * libreoffice_convert — Experimental local LibreOffice bridge adapter.
- *
- * This tool stays registered for a stable tool list/prompt cache.
- * Execution requires a reachable bridge URL
- * (configured override or default https://localhost:3340).
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type TSchema } from "typebox";
 

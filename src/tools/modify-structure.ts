@@ -1,9 +1,3 @@
-/**
- * modify_structure — Insert/delete rows, columns, and sheets.
- *
- * Single tool for all structural changes (sheets, rows, columns).
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -32,7 +26,6 @@ import { appendMutationResultNote } from "./mutation/result-note.js";
 import { excelApiSupported } from "./mutation/range-write.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
-// Helper for string enum (TypeBox doesn't have a built-in StringEnum)
 const schema = Type.Object({
   action: StringEnum(
     [
@@ -91,15 +84,11 @@ const HIDDEN_ROW_PROBE_LIMIT = 500;
 
 interface HiddenRows {
   rows: number[];
-  /** Rows checked one by one; fewer than the target when it is very tall. */
   checked: number;
-  /** Text of the first hidden rows with data, e.g. 'row 7 ("South", "b")'. */
   samples: string[];
   tables: Array<{ name: string; filtered: boolean }>;
   sheetFiltered: boolean;
-  /** Hidden rows' cells in the sheet's used columns (JSON per row), to see after the delete which ones Excel kept. */
   rowKeys: string[] | null;
-  /** Used columns, e.g. "A:D", for reading the same cells back. */
   columns: string | null;
 }
 
@@ -109,11 +98,6 @@ function rowKeysOf(values: unknown[][]): string[] {
   return values.map((row) => JSON.stringify(row));
 }
 
-/**
- * Rows in startRow..endRow that are hidden, by a filter or by hand. A delete by
- * position removes them too, and the user cannot see them, so the result must
- * say so. Read before the delete.
- */
 async function findHiddenRows(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -175,12 +159,6 @@ async function findHiddenRows(
   };
 }
 
-/**
- * How many hidden rows Excel kept. Excel on the web deletes only the visible
- * rows of a filtered range (kept rows move up to the deleted position, in
- * order) but deletes hidden-by-hand rows, so read back rather than assume.
- * Null when the rows could not be compared.
- */
 async function countKeptHiddenRows(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -285,7 +263,6 @@ async function deleteRows(
   const range = sheet.getRange(`${startRow}:${endRow}`);
   const hidden = await findHiddenRows(context, sheet, startRow, endRow);
   const dataRangeCapture = await captureValueDataRange(context, range, MAX_RECOVERY_CELLS);
-  // Hidden data that no backup can restore: refuse rather than delete what the user cannot see.
   if (hidden && hidden.samples.length > 0 && dataRangeCapture.status === "too_large") {
     throw new Error(
       `Refused: rows ${startRow}–${endRow} include ${hidden.rows.length} hidden row(s) with data ` +
@@ -309,7 +286,6 @@ async function deleteRows(
     ...(hidden ? { hiddenRowsDeleted: hiddenDeleted } : {}),
   };
   if (kept !== 0) {
-    // A row backup restores `count` whole rows; with hidden rows kept (or unknown) it would restore them twice.
     result.checkpointUnavailableReason = kept === null
       ? "Pi could not check which hidden rows Excel deleted, so a row backup could restore the wrong rows."
       : `Excel kept ${kept} hidden row(s), so a backup of all ${count} rows would restore them twice.`;

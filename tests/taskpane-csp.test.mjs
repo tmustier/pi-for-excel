@@ -1,5 +1,3 @@
-// Static contract: CSP tokens are shipped HTML policy dependencies;
-// runtime requests cannot prove that required script/connect declarations remain present.
 import assert from "node:assert/strict";
 import test from "node:test";
 

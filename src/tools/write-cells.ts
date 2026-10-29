@@ -1,17 +1,3 @@
-/**
- * write_cells — Write values and formulas to Excel cells.
- *
- * The result is the truth about what is now in the workbook:
- * - Before writing: blocks on existing data (unless allowed), sheet protection,
- *   merged cells and spilled ranges that would silently drop or break values.
- * - Writes in chunks that stay under Excel's request payload limit.
- * - After writing: compares every cell (or, for large writes, both ends plus a
- *   whole-range scan) with what was sent, and reports cells that did not take
- *   their value, text Excel converted, formula errors, data-validation
- *   violations and manual calculation.
- * - Failures are tool errors (`isError: true`) with a specific reason.
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -122,7 +108,6 @@ type CheckedWrite =
   | { result: AgentToolResult<WriteCellsDetails> }
   | { padded: CellScalar[][]; block: WriteBlock; sent: SentGrid };
 
-/** Input checks that refuse a write before it touches the workbook. */
 function checkWriteInput(params: Params): CheckedWrite {
   if (!params.values || params.values.length === 0) {
     return { result: errorResult("Error: values array is empty.") };
@@ -131,7 +116,6 @@ function checkWriteInput(params: Params): CheckedWrite {
   const sentGrid = toCellGrid(params.values);
   const cols = Math.max(...sentGrid.map((row) => row.length));
   const rows = sentGrid.length;
-  // Short rows are padded with "" (which clears those cells), as before.
   const padded: CellScalar[][] = sentGrid.map((row) =>
     Array.from({ length: cols }, (_, index) => index < row.length ? row[index] : ""));
   const startCellRef = parseRangeRef(params.start_cell).address;
@@ -164,7 +148,6 @@ function checkWriteInput(params: Params): CheckedWrite {
   return { padded, block, sent };
 }
 
-/** Why a write is refused after inspecting its target, or null when it can go ahead. */
 function refusedOutcome(
   inspected: WriteTargetInspection,
   allowOverwrite: boolean | undefined,
@@ -229,9 +212,6 @@ export function createWriteCellsTool(
       "After writing, verifies what Excel stored and reports cells that did not take their value " +
       "(merged cells, spilled ranges), converted text, formula errors and data-validation violations.",
     parameters: schema,
-    // In Confirm mode, a write that would be refused (bad input, sheet
-    // protection, merged/spilled targets, overwrite protection) is refused
-    // before the user is asked to approve it. Same inspection as execute.
     checkBeforeApproval: async (toolCallId, params) => {
       const checked = checkWriteInput(params);
       if ("result" in checked) return { refused: checked.result };
@@ -243,7 +223,6 @@ export function createWriteCellsTool(
         const refused = refusedOutcome(inspected, params.allow_overwrite);
         if (refused) return { refused: await reportRefused(toolCallId, refused, checked.block) };
         if (inspected.occupiedCount === 0) return null;
-        // Allowed overwrite: the approval names the cells it replaces (#794).
         const occupied = inspected.before
           ? describeOccupiedCells({
             sheetName: inspected.sheetName,
@@ -254,7 +233,6 @@ export function createWriteCellsTool(
           : { count: inspected.occupiedCount, sample: [] };
         return occupied ? { overwrites: occupied } : null;
       } catch {
-        // Let the call proceed to approval; it reports its own error when it runs.
         return null;
       }
     },
@@ -270,7 +248,6 @@ export function createWriteCellsTool(
       const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
       const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
 
-      // Filled in as the Excel batch progresses, so a failure can say what already happened.
       const progress: { inspection: WriteTargetInspection | null; writtenRows: number; inFlightRows: number } = {
         inspection: null,
         writtenRows: 0,
@@ -287,8 +264,6 @@ export function createWriteCellsTool(
           const refused = refusedOutcome(inspected, params.allow_overwrite);
           if (refused) return refused;
 
-          // Stop is honored between chunks, never inside one, so the result can
-          // say exactly which rows landed.
           for (const chunk of chunkRowsForWrite(padded)) {
             if (signal?.aborted) return { kind: "stopped", inspection: inspected };
             sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
@@ -317,12 +292,9 @@ export function createWriteCellsTool(
           }
         });
       } catch (error) {
-        // Snapshot before any await: an abandoned run (runMutation) may still finish its in-flight chunk.
         const writtenRows = progress.writtenRows;
         const inFlightRows = progress.inFlightRows;
         const parsed = parseExcelError(error);
-        // A batch Excel refused did not apply. One it never answered (timeout,
-        // Stop, or a failure that is not an Excel answer) may have.
         const inFlightUnknown = parsed.outcomeUnknown || parsed.code === null;
         return interruptedWrite({
           cause: {
@@ -363,7 +335,6 @@ export function createWriteCellsTool(
       if (outcome.kind !== "written") return reportRefused(toolCallId, outcome, block);
 
       const successResult = formatWritten(outcome, block, padded, fullAddr);
-      // Stop pressed after verification finished: the result is complete, but say the change stands.
       if (signal?.aborted && !outcome.stopped) appendMutationResultNote(successResult, STOPPED_AFTER_CHANGE_NOTE);
       const backupBefore = outcome.inspection.before;
 
@@ -386,7 +357,6 @@ export function createWriteCellsTool(
               changedCount: successResult.details.changes?.changedCount ?? 0,
               beforeValues: backupBefore.values,
               beforeFormulas: backupBefore.formulas,
-              // What the write left, so a later restore can warn about edits made since (#794).
               ...(outcome.verification?.formulas ? { afterFormulas: outcome.verification.formulas } : {}),
             })
             : Promise.resolve(null),
@@ -402,11 +372,6 @@ export function createWriteCellsTool(
 
 const OVERWRITE_SAMPLE_SIZE = 3;
 
-/**
- * The non-empty cells of a grid starting at `topLeft` (e.g. "B2"), for an
- * approval that must say what a change replaces. Formulas are shown as
- * formulas, other cells by value.
- */
 export function describeOccupiedCells(args: {
   sheetName: string;
   topLeft: string;
@@ -442,18 +407,12 @@ interface InterruptedWriteArgs {
   toolCallId: string;
   block: WriteBlock;
   inspection: WriteTargetInspection | null;
-  /** Rows whose chunk Excel confirmed. */
   writtenRows: number;
-  /** Rows of the chunk in flight when Excel stopped answering: may or may not have landed. */
   uncertainRows: number;
   dependencies: WriteCellsToolDependencies;
   finalizeDependencies: MutationFinalizeDependencies;
 }
 
-/**
- * The write stopped partway (Stop, or an Excel failure): say exactly what is
- * in the workbook. Rows that landed stay, and are backed up and audited.
- */
 async function interruptedWrite(args: InterruptedWriteArgs): Promise<AgentToolResult<WriteCellsDetails>> {
   const { block, inspection, writtenRows, uncertainRows, cause } = args;
   const fullAddr = inspection

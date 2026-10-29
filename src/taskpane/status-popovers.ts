@@ -1,7 +1,3 @@
-/**
- * Status-bar popovers (thinking selector + context quick actions).
- */
-
 import type { ThinkingLevel } from "@earendil-works/pi-agent-core";
 import type { ExecutionMode } from "../execution/mode.js";
 import { t } from "../language/index.js";
@@ -43,7 +39,6 @@ interface ModePopoverOptions {
   onSelectMode: (mode: ExecutionMode) => void;
 }
 
-/** Status-bar controls are re-rendered often; find the live trigger by kind. */
 const ANCHOR_SELECTORS: Record<StatusPopoverKind, string> = {
   thinking: ".pi-status-thinking",
   context: ".pi-status-ctx--trigger",
@@ -168,8 +163,6 @@ function positionPopover(popover: HTMLDivElement, anchor: Element): void {
   popover.style.visibility = "hidden";
   popover.style.maxHeight = `${Math.max(0, viewportHeight - 16)}px`;
 
-  // Use fractional sizes: offsetWidth/offsetHeight round, which can push the
-  // popover's edge past the inset by a sub-pixel amount.
   const popoverRect = popover.getBoundingClientRect();
   const layout = resolveStatusPopoverLayout({
     anchor: anchorRect,
@@ -191,7 +184,6 @@ function closeIfOpen(state: ActivePopoverState | null): void {
   state.popover.remove();
 }
 
-/** Close the open status popover; with `restoreFocus`, focus returns to its trigger. */
 export function closeStatusPopover(opts: { restoreFocus?: boolean } = {}): void {
   const state = activePopover;
   activePopover = null;
@@ -227,8 +219,6 @@ function mountPopover(kind: StatusPopoverKind, anchor: Element, popover: HTMLDiv
     closeStatusPopover();
   };
 
-  // Escape closes from anywhere (the trigger may still hold focus on hosts that
-  // do not focus buttons on click); the menu keys apply inside the popover.
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape") return;
 

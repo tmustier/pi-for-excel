@@ -1,8 +1,6 @@
 /**
- * Store for custom LLM providers (auto-discovery servers + manual providers).
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import type { Api, Model } from "@earendil-works/pi-ai";
@@ -25,7 +23,6 @@ export interface CustomProvider {
   baseUrl: string;
   apiKey?: string;
   models?: Model<Api>[];
-  /** Send requests straight to the endpoint even when the CORS proxy is enabled. */
   connectDirectly?: boolean;
 }
 

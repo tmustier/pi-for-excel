@@ -1,15 +1,3 @@
-/**
- * Pyodide Web Worker.
- *
- * Runs in a dedicated worker thread. Loads Pyodide from CDN, executes
- * Python code, and posts results back to the main thread.
- *
- * Message protocol:
- * - Main → Worker: PyodideWorkerRequest
- * - Worker → Main: PyodideWorkerResponse
- */
-
-// Worker globals — declared locally to avoid tsconfig lib conflicts
 declare const self: {
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
   postMessage(message: unknown): void;
@@ -34,11 +22,9 @@ export interface PyodideWorkerResponse {
   runTimeMs?: number;
 }
 
-// Pyodide types (minimal subset for the worker)
 interface PyodideInterface {
   runPythonAsync(code: string): Promise<unknown>;
   loadPackage(names: string | string[]): Promise<void>;
-  /** Load the Pyodide-distribution packages the code imports (numpy, pandas, scipy, …). */
   loadPackagesFromImports(code: string): Promise<void>;
   globals: {
     set(name: string, value: unknown): void;
@@ -70,7 +56,6 @@ async function ensurePyodide(): Promise<PyodideInterface> {
 
   loadingPromise = (async () => {
     try {
-      // Dynamic import from CDN — works in module workers (no importScripts)
       const mod = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
         loadPyodide: typeof _loadPyodide;
       };
@@ -98,17 +83,12 @@ async function ensurePyodide(): Promise<PyodideInterface> {
   return loadingPromise;
 }
 
-/**
- * Detect import statements and return package names that may need
- * micropip.install(). Only handles top-level imports.
- */
 function detectImports(code: string): string[] {
   const imports = new Set<string>();
   const lines = code.split("\n");
 
   for (const line of lines) {
     const trimmed = line.trim();
-    // import foo / import foo.bar
     const importMatch = /^import\s+([\w.]+)/.exec(trimmed);
     if (importMatch) {
       const importName = importMatch[1];
@@ -117,7 +97,6 @@ function detectImports(code: string): string[] {
         if (topLevel) imports.add(topLevel);
       }
     }
-    // from foo import bar / from foo.bar import baz
     const fromMatch = /^from\s+([\w.]+)\s+import/.exec(trimmed);
     if (fromMatch) {
       const importName = fromMatch[1];
@@ -128,9 +107,7 @@ function detectImports(code: string): string[] {
     }
   }
 
-  // Remove stdlib and Pyodide-bundled packages
   const SKIP = new Set([
-    // Python stdlib (common ones)
     "sys", "os", "io", "re", "json", "math", "csv", "datetime",
     "collections", "itertools", "functools", "operator", "string",
     "textwrap", "unicodedata", "struct", "copy", "pprint",
@@ -174,24 +151,18 @@ async function handleRun(request: PyodideWorkerRequest): Promise<PyodideWorkerRe
   const py = await ensurePyodide();
   const loadTimeMs = Math.round(performance.now() - loadStart);
 
-  // Capture stdout/stderr
   let stdout = "";
   let stderr = "";
 
-  // Load explicitly requested packages
   if (request.packages && request.packages.length > 0) {
     await py.loadPackage(request.packages);
   }
 
-  // Load distribution packages the code imports (numpy, pandas, scipy, …).
-  // If this fails the import itself raises a clear ModuleNotFoundError.
   try {
     await py.loadPackagesFromImports(request.code);
   } catch {
-    // ignore: reported by the code's own import
   }
 
-  // Auto-detect and install other missing packages via micropip
   const detectedPackages = detectImports(request.code);
   if (detectedPackages.length > 0) {
     try {
@@ -205,12 +176,9 @@ except Exception:
     pass
 `);
     } catch {
-      // Package install failed — continue anyway, the code itself will
-      // produce a clear ImportError if the package is truly needed.
     }
   }
 
-  // Set up or clear input_data between requests to prevent data leakage
   if (request.inputJson) {
     py.globals.set("__input_json__", request.inputJson);
     await py.runPythonAsync(`
@@ -222,7 +190,6 @@ del __input_json__
     await py.runPythonAsync("input_data = None");
   }
 
-  // Set up stdout/stderr capture
   await py.runPythonAsync(`
 import sys as __sys__
 import io as __io__
@@ -238,22 +205,20 @@ result = None
   try {
     await py.runPythonAsync(request.code);
   } catch (error) {
-    // Restore stdout/stderr before returning
     await py.runPythonAsync(`
 __sys__.stdout = __sys__.__stdout__
 __sys__.stderr = __sys__.__stderr__
-`).catch(() => { /* ignore */ });
+`).catch(() => {});
 
-    // Collect captured output even on error
     try {
       const getVal = await py.runPythonAsync("__stdout_capture__.getvalue()");
       stdout = getVal != null ? `${getVal as string}` : "";
-    } catch { /* ignore */ }
+    } catch {}
 
     try {
       const getVal = await py.runPythonAsync("__stderr_capture__.getvalue()");
       stderr = getVal != null ? `${getVal as string}` : "";
-    } catch { /* ignore */ }
+    } catch {}
 
     const message = error instanceof Error ? error.message : String(error);
     const response: PyodideWorkerResponse = {
@@ -270,18 +235,16 @@ __sys__.stderr = __sys__.__stderr__
 
   const runTimeMs = Math.round(performance.now() - runStart);
 
-  // Collect stdout/stderr
   try {
     const getStdout = await py.runPythonAsync("__stdout_capture__.getvalue()");
     stdout = getStdout != null ? `${getStdout as string}` : "";
-  } catch { /* ignore */ }
+  } catch {}
 
   try {
     const getStderr = await py.runPythonAsync("__stderr_capture__.getvalue()");
     stderr = getStderr != null ? `${getStderr as string}` : "";
-  } catch { /* ignore */ }
+  } catch {}
 
-  // Collect result
   let resultJson: string | undefined;
   try {
     const resultVal = await py.runPythonAsync(`
@@ -293,21 +256,18 @@ __result_json__
       resultJson = `${resultVal as string}`;
     }
   } catch {
-    // result wasn't JSON-serializable — that's OK
   }
 
-  // Restore stdout/stderr
   await py.runPythonAsync(`
 __sys__.stdout = __sys__.__stdout__
 __sys__.stderr = __sys__.__stderr__
-`).catch(() => { /* ignore */ });
+`).catch(() => {});
 
-  // Clean up globals
   try {
     py.globals.delete("__stdout_capture__");
     py.globals.delete("__stderr_capture__");
     py.globals.delete("__result_json__");
-  } catch { /* ignore */ }
+  } catch {}
 
   const response: PyodideWorkerResponse = {
     id: request.id,

@@ -1,7 +1,3 @@
-/**
- * charts — list, create, update, delete, and capture Excel charts.
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -546,8 +542,6 @@ async function executeCreate(params: Params): Promise<ChartsExecutionResult> {
     chart.load("name,chartType,top,left,width,height");
     await context.sync();
 
-    // Best-effort: capture the stable chart id for rename-proof recovery.
-    // Hosts without Chart.id support must still be able to create charts.
     let chartId: string | undefined;
     try {
       chart.load("id");

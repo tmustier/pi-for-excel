@@ -2,21 +2,6 @@ function isToolsPythonTransformRangePayloadShape(value: unknown): value is Recor
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * python_transform_range — Read a range, run Python transform, write results back.
- *
- * High-level helper for common workflows:
- * 1) read tabular values from Excel
- * 2) execute Python (native bridge preferred, Pyodide fallback when available);
- *    input too large for the bridge is refused before anything runs, with the
- *    number of rows that fit
- * 3) parse returned result JSON into a 2D grid (short rows are padded and reported)
- * 4) write it through the same checked path as write_cells (`mutation/range-write.ts`):
- *    merged cells, spills and protection block the write; the read-back reports
- *    cells that did not take their value and text Excel converted
- * The result includes the code's stdout and stderr.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 
@@ -110,7 +95,6 @@ type Params = Static<typeof schema>;
 
 interface InputRangeSnapshot {
   sheetName: string;
-  /** Sheet-local address, e.g. A1:C10 */
   address: string;
   values: CellScalar[][];
   text: string[][];
@@ -120,7 +104,6 @@ interface WriteOutputRequest {
   outputStartCell: string;
   values: CellScalar[][];
   allowOverwrite: boolean;
-  /** Stop is honored between chunks, as in write_cells. */
   signal?: AbortSignal;
 }
 
@@ -129,7 +112,6 @@ type WriteOutputResult =
     blocked: true;
     outputAddress: string;
     existingCount: number;
-    /** Why the write cannot land (merge, spill, protection, too large to back up); absent when only occupied. */
     reason?: string;
   }
   | {
@@ -138,7 +120,6 @@ type WriteOutputResult =
     rowsWritten: number;
     colsWritten: number;
     formulaErrorCount: number;
-    /** Verification problems and notes, as write_cells reports them. */
     verificationLines?: string[];
     verification?: WriteVerification["mode"];
     notWrittenCount?: number;
@@ -146,16 +127,9 @@ type WriteOutputResult =
     changes?: WorkbookCellChangeSummary;
     beforeValues?: CellScalar[][];
     beforeFormulas?: CellScalar[][];
-    /** What the write left (full read-back only), for the backup's later-edit check. */
     afterFormulas?: CellScalar[][];
     backupUnavailable?: { unavailableReason: string; unavailableNote?: string };
-    /** Cells that held a formula and hold a constant now. */
     formulasReplacedCount?: number;
-    /**
-     * Set when the write ended early (Stop, or Excel failed partway). Its text
-     * comes from write_cells' wording; `rowsWritten` counts rows that landed or
-     * may have landed (0 when nothing changed).
-     */
     interrupted?: { text: string; stopped: boolean };
   };
 
@@ -168,14 +142,11 @@ export interface PythonTransformRangeToolDependencies {
   ) => Promise<PythonBridgeResponse>;
   readInputRange?: (rangeRef: string) => Promise<InputRangeSnapshot>;
   writeOutputValues?: (request: WriteOutputRequest) => Promise<WriteOutputResult>;
-  /** Override Pyodide availability check (for testing). */
   isPyodideAvailable?: () => boolean;
-  /** Override Pyodide runtime call (for testing). */
   callPyodide?: (
     request: PythonBridgeRequest,
     signal: AbortSignal | undefined,
   ) => Promise<PythonBridgeResponse>;
-  /** Override the bridge health probe used when input is too large for the bridge (for testing). */
   probeBridge?: (url: string) => Promise<boolean>;
 }
 
@@ -248,7 +219,6 @@ async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapsh
   });
 }
 
-/** Write through the write_cells path: inspect the target, write in chunks, verify the read-back. */
 async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<WriteOutputResult> {
   const { padded, cols } = padRows(request.values);
   if (padded.length === 0 || cols === 0) {
@@ -261,7 +231,6 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   const sent: SentGrid = (r, c) => classifySentValue(padded[r]?.[c]);
   const sentFormulas = padded.some((row) => row.some((value) => typeof value === "string" && value.startsWith("=")));
   const sentEmptyCount = padded.reduce((total, row) => total + row.filter((value) => value === "").length, 0);
-  // Filled in as the Excel batch progresses, so a failure can say what already happened.
   const progress: {
     outputAddress: string;
     inspection: WriteTargetInspection | null;
@@ -302,8 +271,6 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   };
 
   try {
-    // runMutation: once this call fails (e.g. excelRun's timeout), the abandoned run's
-    // later syncs reject, so it sends no further chunks.
     return await runMutation<WriteOutputResult>(async (context) => {
       const { sheet } = getRange(context, request.outputStartCell);
       const inspection = await inspectWriteTarget(context, sheet, block, sent);
@@ -331,7 +298,6 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
         };
       }
 
-      // Stop is honored between chunks, never inside one, so the result can say which rows landed.
       for (const chunk of chunkRowsForWrite(padded)) {
         if (signal?.aborted) return interrupted({ kind: "stopped" }, 0);
         sheet.getRange(blockAddress(block, chunk.rowOffset, chunk.rows.length)).values = chunk.rows;
@@ -414,16 +380,12 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
       };
     });
   } catch (error) {
-    // Snapshot before any await: the chunk in flight when the call failed may still land.
     const writtenRows = progress.writtenRows;
     const inFlightRows = progress.inFlightRows;
     const parsed = parseExcelError(error);
-    // A batch Excel refused did not apply. One it never answered (timeout, Stop,
-    // or a failure that is not an Excel answer) may have.
     const uncertainRows = parsed.outcomeUnknown || parsed.code === null ? inFlightRows : 0;
     if (writtenRows + uncertainRows === 0) {
       if (!parsed.code) throw error;
-      // Nothing landed. With no chunk in flight nothing was even sent, so say so rather than "unknown".
       const failure = await describeExcelFailure(parsed, { range: progress.outputAddress }, inFlightRows === 0);
       throw new Error(`Nothing was written to ${progress.outputAddress}. ${failure.reason}`);
     }
@@ -432,7 +394,6 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
   }
 }
 
-/** Pad short rows with "" (which clears those cells) to the widest row. */
 function padRows(values: CellScalar[][]): { padded: CellScalar[][]; cols: number; shortRows: number[] } {
   const cols = values.reduce((max, row) => Math.max(max, row.length), 0);
   const shortRows: number[] = [];
@@ -466,7 +427,6 @@ function fitsBridgeLimits(request: PythonBridgeRequest): boolean {
     && utf8Bytes(JSON.stringify(request)) <= PYTHON_BRIDGE_LIMITS.requestBodyBytes;
 }
 
-/** Largest number of leading source rows whose request still fits the bridge's limits. */
 function rowsThatFitBridge(code: string, input: InputRangeSnapshot, sourceAddress: string, timeoutMs: number | undefined): number {
   let low = 0;
   let high = input.values.length;
@@ -644,7 +604,6 @@ function shouldAttachPythonBridgeSkillHint(message: string): boolean {
     || normalized.includes("econnrefused");
 }
 
-/** Result, audit and backup for a write that ended early, worded like write_cells. */
 async function finishInterrupted(
   writeResult: Extract<WriteOutputResult, { blocked: false }>,
   interrupted: { text: string; stopped: boolean },
@@ -758,9 +717,6 @@ export function createPythonTransformRangeTool(
         let bridgeUrlUsed: string | undefined;
         let useBridge = bridgeConfig !== null;
 
-        // Check the bridge's request limits before sending. The default URL is always
-        // configured, so only refuse when a bridge is actually answering there;
-        // otherwise Pyodide (no such limit) runs the code as before.
         if (bridgeConfig && !fitsBridgeLimits(bridgeRequest)) {
           const reachable = bridgeConfig.source !== "default" || await probeBridge(bridgeConfig.url);
           if (reachable) {
@@ -793,7 +749,6 @@ export function createPythonTransformRangeTool(
         }
 
         if (!bridgeResponse) {
-          // Fall back to Pyodide
           let pyodideAvailable: boolean;
           if (checkPyodide) {
             pyodideAvailable = checkPyodide();
@@ -924,7 +879,6 @@ export function createPythonTransformRangeTool(
           },
           ...(writeResult.notWrittenCount ? { isError: true } : {}),
         };
-        // Stop pressed after verification finished: the result is complete, but say the change stands.
         if (signal?.aborted) appendMutationResultNote(successResult, STOPPED_AFTER_CHANGE_NOTE);
 
         const changedCount = changes?.changedCount ?? writeResult.rowsWritten * writeResult.colsWritten;
@@ -966,7 +920,6 @@ export function createPythonTransformRangeTool(
 
         return successResult;
       } catch (error) {
-        // Stop while Python ran (or before the write began): nothing changed in the workbook.
         if (signal?.aborted && !writeStarted) {
           const target = stoppedTarget ?? "the destination";
           return {
@@ -987,7 +940,6 @@ export function createPythonTransformRangeTool(
         }
 
         const parsed = parseExcelError(error);
-        // Excel failures get a specific reason; bridge/Python failures keep their message.
         const message = parsed.code
           ? (await describeExcelFailure(parsed)).reason
           : parsed.message;

@@ -174,7 +174,6 @@ void test("OpenAI Codex browser OAuth accepts pi-sourced credentials with connec
   const provider = getOAuthProvider("openai-codex");
   assert.ok(provider);
 
-  // Shaped like pi's auth.json entries: no codexOAuthVersion/scopes markers.
   const scopedAccessToken = fakeJwt({
     scp: ["openid", "profile", "email", "offline_access", "api.connectors.read", "api.connectors.invoke"],
     "https://api.openai.com/auth": {
@@ -244,7 +243,6 @@ void test("OpenAI Codex browser OAuth rejects JWT credentials missing connector 
   const provider = getOAuthProvider("openai-codex");
   assert.ok(provider);
 
-  // Basic scopes only — e.g. a pi login from before the connector-scope upgrade.
   const basicAccessToken = fakeJwt({
     scp: ["openid", "profile", "email", "offline_access"],
     "https://api.openai.com/auth": {

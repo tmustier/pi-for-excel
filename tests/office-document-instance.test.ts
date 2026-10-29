@@ -10,7 +10,6 @@ import {
 const TOKEN_A = "11111111-2222-4333-8444-555555555555";
 const TOKEN_B = "66666666-7777-4888-8999-aaaaaaaaaaaa";
 
-/** In-memory stand-in for `Office.context.document.settings`. */
 function createSettings(options: { saveSucceeds?: boolean; initial?: Record<string, string> } = {}) {
   const values = new Map<string, string>(Object.entries(options.initial ?? {}));
   let saveCalls = 0;
@@ -20,7 +19,6 @@ function createSettings(options: { saveSucceeds?: boolean; initial?: Record<stri
     remove: (name) => { values.delete(name); },
     saveAsync: (callback) => {
       saveCalls += 1;
-      // Office invokes the callback asynchronously.
       setTimeout(() => callback({ succeeded: options.saveSucceeds ?? true }), 0);
     },
   };

@@ -35,7 +35,6 @@ class MemoryKeys {
   }
 }
 
-/** A fake Anthropic OAuth provider whose refresh rotates the refresh token, like the real ones. */
 function fakeProvider(opts: { fail?: Error } = {}) {
   let refreshCalls = 0;
   const provider = {
@@ -53,7 +52,6 @@ function fakeProvider(opts: { fail?: Error } = {}) {
   return { provider, refreshCalls: () => refreshCalls };
 }
 
-/** One in-memory lock shared by several "taskpanes", standing in for navigator.locks. */
 function sharedLock(): OAuthRefreshLock {
   let chain: Promise<unknown> = Promise.resolve();
   return <T>(_name: string, run: () => Promise<T>): Promise<T> => {
@@ -85,7 +83,6 @@ void test("an expiring token is refreshed once for concurrent requests in one ta
 void test("a token that expires while the pane is open is refreshed before the next request", async () => {
   const settings = new MemorySettings();
   const keys = new MemoryKeys();
-  // Valid when the pane opens, expires 3.5 minutes later.
   seed(settings, NOW + 210_000);
   let clock = NOW;
   const fake = fakeProvider();
@@ -157,6 +154,5 @@ void test("a failed refresh of an expired token reports the login expired instea
   });
 
   assert.equal(await refresher.ensureFresh("anthropic"), "expired");
-  // The grant is kept so a later request can retry once the provider answers again.
   assert.equal((settings.values.get("oauth.anthropic") as OAuthCredentials).refresh, "refresh-0");
 });

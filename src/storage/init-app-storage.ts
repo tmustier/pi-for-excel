@@ -1,7 +1,3 @@
-/**
- * Shared app storage initialization for taskpane + dialog.
- */
-
 import { AppStorage, setAppStorage } from "./local/app-storage.js";
 import { IndexedDBStorageBackend } from "./local/indexeddb-storage-backend.js";
 import { CustomProvidersStore } from "./local/custom-providers-store.js";

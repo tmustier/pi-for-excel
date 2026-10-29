@@ -1,50 +1,17 @@
-/**
- * Settings shell — one overlay containing a navigable page stack.
- *
- * Replaces the previous constellation of sibling settings overlays (settings,
- * extensions hub, rules, backups, shortcuts) with a single surface:
- *
- *   header: [‹ back]  Page title  [×]
- *   body:   scrollable page content
- *   footer: optional sticky page footer (e.g. Save/Cancel)
- *
- * Navigation model:
- * - The history starts at the page the shell was opened on (`open(id)`, e.g.
- *   /rules or /backups opens straight at that page). `navigate(id)` pushes.
- * - Back/close rule: Escape and a page's own Save/Cancel (`ctx.back()`)
- *   return to where the user came from, and close the shell on the page it
- *   was opened at. The ‹ button is "up": it pops the history, or on the entry
- *   page goes to the page's `parentId` (so Extensions → Connections can still
- *   reach Plugins and Skills). × and backdrop click always request a full close.
- * - Pages may install a `beforeLeave` guard (used for unsaved-changes
- *   confirmation); it gates back, navigate, and close.
- */
-
 import { createOverlayDialog, registerOverlayCloser } from "./overlay-dialog.js";
 
 export interface SettingsPageContext {
-  /** Scrollable content region for the page. */
   body: HTMLElement;
-  /** Set (or clear) the sticky footer below the scroll region. */
   setFooter: (footer: HTMLElement | null) => void;
-  /** Push a nested page. */
   navigate: (pageId: string) => void;
-  /** Return to the previous page, or close the shell on the page it was opened at. */
   back: () => void;
-  /** Close the whole settings overlay. */
   close: () => void;
-  /** Register cleanup run when the page is left or the overlay closes. */
   addCleanup: (cleanup: () => void) => void;
-  /**
-   * Install a guard consulted before leaving this page (back, navigate, or
-   * close). Return false from the guard to stay on the page.
-   */
   setBeforeLeave: (guard: (() => Promise<boolean>) | null) => void;
 }
 
 export interface SettingsShellPage {
   id: string;
-  /** Where the ‹ button leads when this page is the one the shell opened at. */
   parentId?: string;
   title: () => string;
   subtitle?: () => string;
@@ -52,18 +19,14 @@ export interface SettingsShellPage {
 }
 
 export interface SettingsShellController {
-  /** Open the overlay at a page (defaults to the root page), or navigate if open. */
   open: (pageId?: string) => Promise<void>;
-  /** Whether the overlay is currently mounted. */
   isOpen: () => boolean;
-  /** Request a close (honors the active page's beforeLeave guard). */
   requestClose: () => Promise<void>;
 }
 
 export interface SettingsShellOptions {
   overlayId: string;
   rootId: string;
-  /** Resolve a page definition by id. */
   getPage: (pageId: string) => SettingsShellPage | undefined;
   backLabel: () => string;
   closeLabel: () => string;
@@ -95,7 +58,6 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
       try {
         cleanup();
       } catch {
-        // ignore cleanup errors
       }
     }
     pageCleanups = [];
@@ -159,10 +121,8 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     shell.footerEl.replaceChildren();
     shell.footerEl.hidden = true;
 
-    // Retrigger the slide-in animation for the incoming page.
     shell.bodyEl.classList.remove("pi-set-shell__body--forward", "pi-set-shell__body--back");
     if (direction !== "none") {
-      // Force a reflow so removing+adding the class restarts the animation.
       void shell.bodyEl.offsetWidth;
       shell.bodyEl.classList.add(
         direction === "forward" ? "pi-set-shell__body--forward" : "pi-set-shell__body--back",
@@ -212,7 +172,6 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
         try {
           cleanup();
         } catch {
-          // ignore cleanup errors from stale async renders
         }
       },
       setBeforeLeave: (guard) => {
@@ -224,11 +183,9 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     const rendered = page.render(ctx);
     if (rendered instanceof Promise) {
       rendered.catch(() => {
-        // Pages surface their own errors; keep the shell alive.
       });
     }
 
-    // Move focus to the page container for keyboard/screen-reader users.
     shell.bodyEl.focus({ preventScroll: true });
   };
 
@@ -271,7 +228,6 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
       overlayId: options.overlayId,
       cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--l pi-set-shell",
       closeOnBackdrop: false,
-      // goBack closes (through the unsaved-changes guard) on the entry page.
       onEscape: () => {
         void goBack();
         return true;
@@ -345,8 +301,6 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     overlay.addEventListener("click", onBackdropClick);
     dialog.addCleanup(() => overlay.removeEventListener("click", onBackdropClick));
 
-    // closeOverlayById (e.g. reopening Settings from a command) must go
-    // through the unsaved-changes guard, not straight to dialog.close().
     registerOverlayCloser(overlay, () => {
       void requestClose();
     });

@@ -154,7 +154,6 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
     await nameInput.press("Escape");
     assert.equal(await nameInput.inputValue(), "Browser gateway");
     assert.equal(await nameInput.evaluate((element) => element === document.activeElement), false);
-    // Stepping out of the field keeps focus inside the dialog, not on <body>.
     assert.equal(await settings.evaluate((overlay) => overlay.contains(document.activeElement)), true);
     await settings.waitFor({ state: "visible" });
 
@@ -180,7 +179,6 @@ void test("Escape preserves keyboard entry and closes only the topmost dialog", 
 
 void test("copy command still copies when the async clipboard is refused", async () => {
   await withBrowserPage("src/ui-gallery.html", async (page) => {
-    // Excel on the web frames the taskpane without clipboard-write permission.
     await page.evaluate(() => {
       Object.defineProperty(navigator, "clipboard", { value: { writeText: () => Promise.reject(new Error("denied")) } });
       document.documentElement.dataset.copied = "";
@@ -394,7 +392,6 @@ void test("first-run disclosure is a dismissible banner that can open Settings",
     await banner.waitFor({ state: "detached" });
     assert.equal(await page.evaluate("window.__settingsOpened"), 1);
 
-    // Acknowledged for good: a second taskpane boot does not show it again.
     assert.equal(await page.evaluate(`
       (async () => {
         const { createDisclosureBar } = await import("/src/ui/disclosure-bar.ts");
@@ -464,8 +461,6 @@ void test("recently closed tabs and experimental settings are reachable by comma
     await resume.getByRole("heading", { name: "Recently closed" }).waitFor({ state: "visible", timeout: 5_000 });
     await resume.locator('[data-resume-section="recently-closed"] .pi-resume-item').waitFor({ state: "visible" });
 
-    // Tab from the card itself must be handled by the trap: the browser's default
-    // from a tabindex=-1 card leaves the add-in frame inside Office.
     const tabFromCard = await page.evaluate(() => {
       const card = document.querySelector<HTMLElement>("#pi-resume-overlay .pi-overlay-card, #pi-resume-overlay [tabindex=\"-1\"]");
       card?.focus();
@@ -512,13 +507,11 @@ void test("Settings back/close rule: Escape closes on the entry page and steps b
   await withTaskpane(async (page) => {
     const settings = page.locator("#pi-settings-overlay");
 
-    // Opened straight at Backups: Escape closes instead of landing on the Settings root.
     await enterCommand(page, "/history");
     await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible", timeout: 5_000 });
     await page.keyboard.press("Escape");
     await settings.waitFor({ state: "detached" });
 
-    // Reached from the Settings root: Escape goes back to the root, then closes.
     await enterCommand(page, "/settings");
     await settings.getByRole("button", { name: /^Backups/ }).click();
     await settings.getByRole("heading", { name: "Backups" }).waitFor({ state: "visible" });

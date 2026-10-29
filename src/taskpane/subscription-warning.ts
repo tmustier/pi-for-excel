@@ -2,7 +2,6 @@ import type { SettingsAccess } from "../storage/local/settings-store.js";
 
 export const SUBSCRIPTION_WARNING_SETTING = "auth.anthropicSubscriptionWarning";
 
-/** UI history only: never add this warning to Agent messages or prompts. */
 export async function showSubscriptionWarning(
   settings: SettingsAccess,
   sessionId: string,

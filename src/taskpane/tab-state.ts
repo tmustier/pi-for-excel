@@ -1,12 +1,3 @@
-/**
- * Per-tab turn state that is not part of the agent: the composer draft, the
- * error banner, and the non-streaming activity line (compaction, retry wait).
- *
- * Each session runtime owns one. The visible sidebar renders the active tab's
- * state (see `runtime-sidebar-binding.ts`), so switching tabs swaps the draft,
- * the banner and the activity line together with the transcript.
- */
-
 export interface TabActivity {
   label: string;
   hint: string | null;
@@ -16,23 +7,16 @@ export interface TabState {
   readonly draft: string;
   readonly attachments: readonly string[];
   setAttachments(paths: readonly string[]): void;
-  /** The tab's action queue is running something (a turn, compaction, a command). */
   readonly busy: boolean;
   readonly error: string | null;
   readonly activity: TabActivity | null;
-  /**
-   * Messages a stopped or failed turn never delivered, oldest first. Each
-   * stays its own row above the composer and is never sent automatically.
-   */
   readonly held: readonly string[];
   setHeld(texts: readonly string[]): void;
-  /** Keeps `texts` as separate held rows after the existing ones. */
   hold(texts: readonly string[]): void;
   setDraft(text: string): void;
   setError(message: string | null): void;
   setActivity(activity: TabActivity | null): void;
   setBusy(busy: boolean): void;
-  /** Puts `texts` back above the current draft, separated by blank lines. */
   returnToDraft(texts: readonly string[]): void;
   subscribe(listener: () => void): () => void;
 }

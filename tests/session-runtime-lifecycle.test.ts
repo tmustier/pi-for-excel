@@ -197,7 +197,6 @@ void test("runtime tab snapshots follow create, switch, and close lifecycle", as
     isActive: tab.isActive,
   })), [{ runtimeId: first.runtimeId, isActive: true }]);
 
-  // A closed tab's number is retired: the next tab is "Chat 3", not a second "Chat 2".
   await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
   assert.deepEqual(environment.manager.snapshotTabs().map((tab) => tab.title), ["Chat 1", "Chat 3"]);
 });
@@ -206,7 +205,6 @@ void test("model selection updates an empty session in place and survives restar
   const environment = createEnvironment();
   const runtime = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
   const sessionId = runtime.persistence.getSessionId();
-  // Every taskpane tab starts with a hidden instruction message; it does not make the tab non-empty.
   runtime.agent.state.messages.push({ role: "system", content: "", timestamp: 0 });
 
   const result = await environment.manager.selectModel({
@@ -390,7 +388,6 @@ void test("a chosen tab title and the tab number survive reopening the session",
   const environment = createEnvironment();
   await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
   const named = await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false });
-  // Renaming before Pi answers still saves the title.
   await named.persistence.renameSession("Budget review");
   const sessionId = named.persistence.getSessionId();
   const tabNumber = environment.manager.getTabNumber(named.runtimeId) ?? 0;
@@ -404,7 +401,6 @@ void test("a chosen tab title and the tab number survive reopening the session",
   assert.equal(tab?.title, "Budget review");
   assert.equal(tab?.tabNumber, 2);
 
-  // An unnamed session reopened with its number keeps its "Chat N" label.
   await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false, tabNumber: 7 });
   await environment.manager.createRuntime({ activate: true, autoRestoreLatest: false, tabNumber: 7 });
   const titles = environment.manager.snapshotTabs().map((candidate) => candidate.title);
@@ -431,7 +427,6 @@ void test("a compacted conversation, whose user messages are all archived, is st
   runtime.agent.state.messages.push(question);
   assert.equal(await runtime.persistence.saveSession(), true);
 
-  // What /compact leaves: archive and summary, then a kept tail without user messages.
   runtime.agent.state.messages = [
     createArchivedMessagesMessage({ existingArchivedMessages: [], newlyArchivedMessages: [question], timestamp: 2 }),
     createCompactionSummaryMessage({ summary: "The user asked a question.", tokensBefore: 43_000, timestamp: 3 }),
@@ -467,7 +462,6 @@ void test("a reopened session drops a saved thinking level its model cannot use"
 
   const loaded = await environment.sessions.loadSession(sessionId);
   assert.ok(loaded);
-  // The saved model is gone; the session comes back on one without reasoning.
   const result = await environment.manager.openSession(
     { ...loaded, model: getBuiltinModel("openai", "gpt-4.1-mini") },
     { kind: "new_tab" },

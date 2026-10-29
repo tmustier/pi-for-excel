@@ -1,12 +1,3 @@
-/**
- * Session persistence wiring for one runtime.
- *
- * Owns:
- * - auto-saving agent state to IndexedDB
- * - optional latest-session restore on startup
- * - session identity lifecycle (new / rename / resume)
- */
-
 import type { Api, Model } from "@earendil-works/pi-ai";
 import { clampThinkingLevel, normalizeContext } from "@earendil-works/pi-ai";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
@@ -23,18 +14,11 @@ export interface SessionPersistenceController {
   getSessionId: () => string;
   getSessionTitle: () => string;
   getSessionCreatedAt: () => string;
-  /** True when the user chose the title (rename, `/name`, duplicate, fork). Persisted with the session. */
   hasExplicitTitle: () => boolean;
   startNewSession: () => void;
-  /** Sets a chosen title (empty clears it) and saves the session. */
   renameSession: (title: string) => Promise<void>;
   applyLoadedSession: (sessionData: SessionData) => Promise<void>;
   restoreLatestSession: () => Promise<boolean>;
-  /**
-   * Saves the session once it holds a user message, or always with `force`.
-   * Resolves false when there was nothing to save or the save failed; failures
-   * are also reported through `onSaveError`.
-   */
   saveSession: (opts?: { force?: boolean }) => Promise<boolean>;
   subscribe: (listener: () => void) => () => void;
   dispose: () => void;
@@ -47,11 +31,6 @@ type UserLikeMessage = AgentMessage & {
   content: unknown;
 };
 
-/**
- * Resolves a persisted model against the current registry so metadata such as
- * `contextWindow` picks up upstream changes, and a renamed custom gateway is
- * found again. Returns undefined when the registry no longer has the model.
- */
 export type PersistedModelResolver = (persisted: Model<Api>) => Model<Api> | undefined;
 
 function isChatUserMessage(message: AgentMessage): message is UserLikeMessage {
@@ -73,11 +52,6 @@ function normalizeSessionId(value: string | null): string | null {
   return trimmed.length > 0 ? trimmed : null;
 }
 
-/**
- * Messages the user sees in the transcript. Hidden instruction (`system`)
- * messages and internal bookkeeping roles are not counted, so a blank session
- * has zero messages.
- */
 export function countVisibleSessionMessages(messages: readonly AgentMessage[]): number {
   let count = 0;
   for (const message of messages) {
@@ -109,12 +83,10 @@ export function getRestoreCandidateSessionIds(args: {
   const globalLatest = normalizeSessionId(args.globalLatestSessionId);
 
   if (args.workbookId) {
-    // Workbook is known: restore only the workbook-linked latest session.
     pushUnique(workbookLatest);
     return candidates;
   }
 
-  // Workbook identity unavailable: fall back to global latest behavior.
   pushUnique(globalLatest);
   return candidates;
 }
@@ -127,13 +99,7 @@ export async function setupSessionPersistence(opts: {
   initialSessionId?: string;
   autoRestoreLatest?: boolean;
   spreadsheetHost?: Pick<SpreadsheetHost, "getWorkbookContext" | "sessionStorage">;
-  /** Reports a save that did not reach storage (quota, blocked IndexedDB). */
   onSaveError?: (message: string) => void;
-  /**
-   * Called when another taskpane saved this session since this one loaded
-   * it: this taskpane's copy was saved as a new session instead of
-   * replacing theirs.
-   */
   onSavedAsCopy?: (args: { fromSessionId: string; toSessionId: string; title: string }) => void;
 }): Promise<SessionPersistenceController> {
   const { agent, sessions, settings } = opts;
@@ -155,9 +121,7 @@ export async function setupSessionPersistence(opts: {
   let titleGenerationAttempted = false;
   let titleRequest: AbortController | null = null;
   let canWriteLatestSessionPointer = !opts.autoRestoreLatest;
-  /** Stored revision this taskpane last loaded or saved; saves only go over it. */
   let baseRevision: string | undefined;
-  /** Saves run one at a time so each one's base is the previous one's result. */
   let saveQueue: Promise<void> = Promise.resolve();
 
   agent.sessionId = sessionId;
@@ -190,9 +154,6 @@ export async function setupSessionPersistence(opts: {
 
   async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<boolean> {
     const messages = agent.state.messages;
-    // A session exists from the user's first message, so a reload during the
-    // first turn keeps it. Blank tabs are saved only on request (close, restore).
-    // Compaction moves the user's messages into the summary and archive, which still count.
     const hasConversation = messages.some((m) =>
       isChatUserMessage(m) || m.role === "compactionSummary" || m.role === "archivedMessages");
     if (!optsForSave?.force && !hasConversation) return false;
@@ -285,8 +246,6 @@ export async function setupSessionPersistence(opts: {
       );
 
       if (!saved) {
-        // Another taskpane saved this session since we loaded it. Keep both
-        // conversations: ours becomes a new session instead of replacing theirs.
         const fromSessionId = savedSessionId;
         savedSessionId = crypto.randomUUID();
         sessionId = savedSessionId;
@@ -332,7 +291,6 @@ export async function setupSessionPersistence(opts: {
     sessionTitle = title.trim();
     explicitTitle = sessionTitle.length > 0;
     emitChange();
-    // A chosen title is a decision the user expects to keep, even before Pi answers.
     await saveSession({ force: true });
   }
 
@@ -360,7 +318,6 @@ export async function setupSessionPersistence(opts: {
       agent.state.model = opts.resolveModel(sessionData.model) ?? sessionData.model;
     }
     if (sessionData.thinkingLevel) {
-      // The saved model may have been swapped for one with fewer thinking levels.
       agent.state.thinkingLevel = clampThinkingLevel(agent.state.model, sessionData.thinkingLevel);
     }
 
@@ -410,11 +367,7 @@ export async function setupSessionPersistence(opts: {
     const request = new AbortController();
     titleRequest = request;
     const id = sessionId;
-    // The runtime factory and persisted-model resolver supply Pi API models;
-    // Agent's public state erases that API parameter.
     const model = agent.state.model as Model<Api>;
-    // Record the attempt before calling the provider: a reload never starts a
-    // second paid request. Failure leaves the ordinary Chat N fallback.
     try {
       if (!await saveSession() || request.signal.aborted || sessionId !== id) return;
       const apiKey = await agent.getApiKey?.(model.provider);
@@ -438,7 +391,6 @@ export async function setupSessionPersistence(opts: {
       emitChange();
       await saveSession();
     } catch {
-      // A title is optional; never surface a side-request failure as a chat error.
     } finally {
       if (titleRequest === request) titleRequest = null;
     }

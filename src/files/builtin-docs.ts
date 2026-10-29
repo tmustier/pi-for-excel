@@ -1,10 +1,3 @@
-/**
- * Built-in, read-only docs exposed through the files workspace.
- *
- * Every non-archive markdown doc is auto-discovered and bundled so the
- * assistant can answer setup/runtime questions accurately.
- */
-
 import { loadRawMarkdownFromTestGlob } from "../utils/test-raw-markdown-glob.js";
 import { normalizeWorkspacePath } from "./path.js";
 import type { WorkspaceFileEntry, WorkspaceFileReadResult } from "./types.js";

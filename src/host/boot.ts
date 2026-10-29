@@ -1,5 +1,3 @@
-/** Boot-time host resolution. */
-
 import { BrowserHost } from "./browser-host.js";
 import { detectSpreadsheetHost } from "./detection.js";
 import { OfficeHost } from "./office-host.js";
@@ -65,11 +63,6 @@ export async function resolveSpreadsheetHostForBoot(
     };
 
     timeout = setTimeout(() => {
-      // Keep the Office host: before the host seam existed, a slow
-      // `Office.onReady` only delayed init while workbook identity and theme
-      // were still read lazily from Office globals at call time. Pinning the
-      // browser host here would permanently drop workbook identity for slow
-      // Office startups, which would be a behavior change.
       finish({
         host: officeHost,
         readyInfo: officeTimeoutReadyInfo(),
@@ -81,9 +74,6 @@ export async function resolveSpreadsheetHostForBoot(
         finish({ host: officeHost, readyInfo });
       })
       .catch(() => {
-        // Match pre-host-seam behavior: a failing `Office.onReady` never
-        // resolved early; init happened at the timeout with Office globals
-        // still read lazily afterwards.
       });
   });
 }

@@ -1,24 +1,3 @@
-/**
- * Auto-context: what Pi tells the agent about the workbook without being asked.
- *
- * Two layers, chosen for prompt caching (see docs/context-management-policy.md):
- *
- * 1. Notes stored in the transcript (`prepareRequest`). Snapshots that stay
- *    true until something changes (the workbook blueprint, the Files summary)
- *    and events (cells edited by someone other than Pi). Before each model
- *    request, a note is added only when its subject differs from the last
- *    note of that kind in the transcript. Stored notes become part of the
- *    cached prefix, remain visible for the rest of the turn and in later
- *    turns, survive reloads, and are re-sent only when compaction removed
- *    them. They are inserted before the user's new prompt, or after the latest
- *    tool results mid-turn.
- *
- * 2. The current selection (`transformContext`). State that can change at any
- *    moment, so it is re-read for every request and appended as the last
- *    message. It is never stored, is bounded in size, and sits after the
- *    cached prefix.
- */
-
 import type { Agent, AgentMessage, PrepareRequest } from "@earendil-works/pi-agent-core";
 
 import { getBlueprint } from "../context/blueprint.js";
@@ -37,9 +16,7 @@ interface FilesSummary {
 
 export interface AutoContextSources {
   changeTracker: Pick<ChangeTracker, "cursor" | "describeSince">;
-  /** The runtime's agent: stored notes are added to its transcript. */
   getAgent: () => Pick<Agent, "state"> | null | undefined;
-  /** This runtime (chat tab); its own workbook writes are not reported to it. */
   runtimeId: string;
   getWorkbookId?: () => Promise<string | null>;
   getBlueprint?: (workbookId: string | null) => Promise<string>;
@@ -50,12 +27,6 @@ export interface AutoContextSources {
 export interface AutoContext {
   prepareRequest: PrepareRequest;
   transformContext: (messages: AgentMessage[], signal?: AbortSignal) => Promise<AgentMessage[]>;
-  /**
-   * This runtime's own mutation changed the workbook structure. The tool
-   * result already says what changed, so the new blueprint waits for the
-   * next turn instead of arriving after the tool result as fresh input (which
-   * made a model repeat the change).
-   */
   noteOwnStructureChange: () => void;
 }
 
@@ -66,7 +37,6 @@ const SELECTION_TIMEOUT_MS = 2000;
 
 const TIMED_OUT = Symbol("timed out");
 
-/** Run one auto-context source; a failure or timeout is logged and yields null. */
 async function attempt<T>(what: string, run: () => Promise<T>, timeoutMs: number): Promise<T | null> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -115,7 +85,6 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
   const loadBlueprint = sources.getBlueprint ?? getBlueprint;
   const loadFilesSummary = sources.getFilesSummary ?? ((workbookId) => getFilesWorkspace().getContextSummary(workbookId));
   const loadSelection = sources.readSelection ?? readSelectionContext;
-  // Each runtime (chat tab) reads the shared edit log from its own cursor.
   let changeCursor = sources.changeTracker.cursor();
   let ownStructureChangePending = false;
 
@@ -166,13 +135,10 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
     const notes = await collectNotes(messages);
     if (notes.length === 0) return undefined;
 
-    // Before the user's new prompt(s); after tool results mid-turn.
     let insertAt = messages.length;
     while (insertAt > 0 && isPrompt(messages[insertAt - 1])) insertAt -= 1;
     const anchor = messages[insertAt];
 
-    // Store the notes in the runtime's transcript at the same place, so they
-    // persist with the session and later runs see them.
     const agent = sources.getAgent();
     if (agent) {
       const transcript = agent.state.messages;
@@ -194,10 +160,6 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
     const selection = await attempt("selection", loadSelection, SELECTION_TIMEOUT_MS);
     const text = selection?.text
       ?? "Current selection: unavailable (Excel did not answer in time).";
-    // This note is the last user-role message, after tool results mid-turn.
-    // Some models answered it as if it were the request, so it says what it
-    // is. It must not restate the request: after a successful tool call that
-    // read as "do it again" and looped a mutation.
     const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
     const reminder = midTurn
       ? "(Background from Excel, not a message from the user and not a new request. Continue from the tool results above; do not repeat steps that already succeeded.)"

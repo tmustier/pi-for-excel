@@ -1,10 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   TURN GROUP
-   One card per turn: header with state, one row per tool
-   call, the change receipt as footer (<turn-group>).
-   docs/proposals/sidebar-redesign.md §5
-   ═══════════════════════════════════════════════════════ */
-
 turn-group {
   margin: 0 12px;
   min-width: 0;
@@ -17,8 +10,6 @@ turn-group {
   overflow: hidden;
   min-width: 0;
 }
-
-/* ── Header ───────────────────────────────────────────── */
 
 .pi-turn__header {
   display: flex;
@@ -112,8 +103,6 @@ turn-group {
   flex-shrink: 0;
   color: var(--fg-3);
 }
-
-/* ── Rows ─────────────────────────────────────────────── */
 
 .pi-turn__rows {
   border-top: 1px solid var(--line);
@@ -246,7 +235,6 @@ turn-group {
   margin: 8px 0 0 24px;
 }
 
-/* Drill-in: the tool card's body, full width under the row. */
 .pi-turn-row__detail {
   margin: 8px -10px -8px -12px;
   border-top: 1px solid var(--line);
@@ -265,7 +253,6 @@ turn-group {
   padding-top: 4px;
 }
 
-/* Prose and thinking between steps. */
 .pi-turn-row--note {
   color: var(--fg-2);
   padding-left: 36px;
@@ -278,8 +265,6 @@ turn-group {
 .pi-turn-row--note .thinking-block {
   margin: 0;
 }
-
-/* ── Approval actions ─────────────────────────────────── */
 
 .pi-turn-row__actions {
   display: flex;
@@ -309,8 +294,6 @@ turn-group {
   color: var(--fg-1);
 }
 
-/* ── Footer: the change receipt ───────────────────────── */
-
 .pi-turn-changes {
   color: var(--fg-1);
   font-size: 12.5px;
@@ -318,7 +301,6 @@ turn-group {
   overflow-wrap: anywhere;
 }
 
-/* The totals line of the ledger: a heavier rule than the rows above it. */
 .pi-turn-changes--footer {
   padding: 6px 10px 6px 12px;
   border-top: 1px solid var(--line-strong);
@@ -362,8 +344,6 @@ turn-group {
 .pi-turn-changes[data-outcome="failed"] .pi-turn-changes__summary {
   color: var(--amber);
 }
-
-/* ── Buttons: one component, three weights ────────────── */
 
 .pi-btn {
   display: inline-flex;

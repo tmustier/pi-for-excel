@@ -1,26 +1,9 @@
-/**
- * Integrations persistence helpers.
- *
- * Integrations can be enabled in two scopes:
- * - session: only for one chat tab/session
- * - workbook: applies to all sessions for the active workbook
- *
- * Workbook scope that has never been configured (null in storage) inherits
- * catalog defaults (e.g. web_search is enabled by default). Session scope
- * stays explicit by default, with an opt-in runtime fallback when workbook
- * identity is unavailable.
- */
-
 import { getDefaultEnabledIntegrationIds } from "./catalog.js";
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 export type IntegrationScope = "session" | "workbook";
 
 export interface SessionIntegrationIdsOptions {
-  /**
-   * When true and the session scope has never been configured, return
-   * catalog defaults instead of an empty set.
-   */
   applyDefaultsWhenUnconfigured?: boolean;
 }
 
@@ -91,8 +74,6 @@ async function readScopeIntegrationIds(
     : workbookIntegrationsKey(identifier);
   const raw = await settings.get(key);
 
-  // Never configured workbook scope inherits defaults (web search).
-  // Session scope stays explicit unless the caller opts into fallback defaults.
   if (raw == null) {
     if (scope === "workbook" || applyDefaultsWhenUnconfigured) {
       return normalizeIntegrationIds(getDefaultEnabledIntegrationIds(), knownIntegrationIds);
@@ -226,7 +207,6 @@ function parseStoredBoolean(value: unknown): boolean {
 
 export async function getExternalToolsEnabled(settings: SettingsWriter): Promise<boolean> {
   const raw = await settings.get(EXTERNAL_TOOLS_ENABLED_SETTING_KEY);
-  // Default ON so web search is available once a provider API key is configured.
   if (raw == null) return true;
   return parseStoredBoolean(raw);
 }

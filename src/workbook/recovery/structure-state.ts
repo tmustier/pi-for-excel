@@ -1,5 +1,3 @@
-/** Structure-state capture/apply for workbook recovery snapshots. */
-
 export { applyModifyStructureState } from "./structure-apply.js";
 export {
   captureModifyStructureState,

@@ -1,7 +1,3 @@
-/**
- * Session-scoped cache for loaded Agent Skill markdown.
- */
-
 import type { SkillsSourceKind } from "../tools/tool-details.js";
 
 export interface SkillReadCacheEntry {

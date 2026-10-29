@@ -1,13 +1,3 @@
-/**
- * get_workbook_overview — Returns a structural blueprint of the workbook.
- *
- * Includes: workbook name, all sheets with dimensions, header rows,
- * named ranges, and table inventory. This is injected at session start
- * and available on-demand.
- *
- * Pushes rich structural metadata (headers, named ranges, tables) — not just sheet names + dimensions.
- */
-
 import { t } from "../language/index.js";
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
@@ -21,7 +11,6 @@ const PREVIEW_ROWS = 5;
 const PREVIEW_COLUMNS = 20;
 const MAX_OVERVIEW_SPILL_CHECKS = 100;
 
-/** Cells of a RangeAreas address ("S!A1:A3,S!C5"), first `limit` only. */
 function formulaCellAddresses(address: string, limit: number): string[] {
   const cells: string[] = [];
   for (const part of address.split(",")) {
@@ -83,14 +72,8 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
   };
 }
 
-/** Columns of the header row read; wider sheets list the first ones only. */
 const MAX_HEADER_COLUMNS = 200;
 
-/**
- * Labels in the first row of the used range, which is the header row even
- * when the data starts below row 1 or right of column A. `rowNote` names the
- * row when it is not row 1, e.g. " (row 5)".
- */
 async function loadHeaderRow(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -105,11 +88,6 @@ async function loadHeaderRow(
   return { labels, rowNote: used.rowIndex === 0 ? "" : ` (row ${used.rowIndex + 1})` };
 }
 
-/**
- * Calculation mode and sheet protection for the workbook overview tool. Kept
- * out of buildOverview() because that text is the cached blueprint, which only
- * refreshes on structure changes; these change without one.
- */
 async function buildWorkbookStateNotes(): Promise<string> {
   return excelRun(async (context) => {
     const application = context.workbook.application;
@@ -135,7 +113,6 @@ async function buildWorkbookStateNotes(): Promise<string> {
   });
 }
 
-/** Build the full workbook overview. Also used by context injection. */
 export async function buildOverview(runOptions?: ExcelRunOptions): Promise<string> {
   return excelRun(async (context) => {
     const wb = context.workbook;
@@ -158,11 +135,9 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
       const used = sheet.getUsedRangeOrNullObject();
       used.load("rowCount,columnCount,rowIndex,columnIndex,address");
 
-      // Get tables on this sheet
       const tables = sheet.tables;
       tables.load("items/name,items/columns/count,items/rows/count");
 
-      // Get object counts
       const charts = sheet.charts;
       charts.load("count");
 
@@ -198,7 +173,6 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
         lines.push(`   Headers${header.rowNote}: ${display}`);
       }
 
-      // List tables
       if (tables.items.length > 0) {
         for (const table of tables.items) {
           lines.push(`   Table: "${table.name}" (${table.rows.count} rows × ${table.columns.count} cols)`);
@@ -217,7 +191,6 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
       }
     }
 
-    // Named ranges
     const visibleNames = names.items.filter((n) => n.visible);
     if (visibleNames.length > 0) {
       lines.push("");
@@ -231,11 +204,6 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
   }, runOptions);
 }
 
-// ============================================================================
-// Sheet-level detail (absorbs former get_all_objects logic)
-// ============================================================================
-
-/** Build detailed info for a single sheet including objects, tables, named ranges, and a data preview. */
 async function buildSheetDetail(sheetName: string): Promise<string> {
   return excelRun(async (context) => {
     const sheet = context.workbook.worksheets.getItemOrNullObject(sheetName);
@@ -249,7 +217,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       throw new Error(`Sheet "${sheetName}" not found. Sheets in this workbook: ${existing}.`);
     }
 
-    // Only the shape of the used range: loading its values fails on big sheets.
     const used = sheet.getUsedRangeOrNullObject();
     used.load("rowCount,columnCount,rowIndex,columnIndex,address");
     const formulaCells = used.getSpecialCellsOrNullObject("Formulas");
@@ -257,15 +224,12 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     const freeze = sheet.freezePanes.getLocationOrNullObject();
     freeze.load("address");
 
-    // Tables
     const tables = sheet.tables;
     tables.load("items/name,items/columns/count,items/rows/count");
 
-    // Named ranges (workbook-level; we filter to this sheet below)
     const names = context.workbook.names;
     names.load("items/name,items/value,items/visible");
 
-    // Objects — charts, pivot tables, shapes
     const charts = sheet.charts;
     charts.load("items/name,count");
 
@@ -285,7 +249,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
 
     const lines: string[] = [];
 
-    // ── Header ──
     const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
     const dims = used.isNullObject
       ? "empty"
@@ -293,13 +256,11 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     lines.push(`## Sheet: ${sheet.name}${visibility}`);
     lines.push(`Dimensions: ${dims}`);
 
-    // ── Headers ──
     const header = await loadHeaderRow(context, sheet, used);
     if (header.labels.length > 0) {
       lines.push(`Headers${header.rowNote}: ${header.labels.join(", ")}`);
     }
 
-    // ── Tables ──
     if (tables.items.length > 0) {
       lines.push("");
       lines.push(`### Tables (${tables.items.length})`);
@@ -310,7 +271,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       }
     }
 
-    // ── Named ranges referencing this sheet ──
     const sheetPrefix = `${sheet.name}!`.toLowerCase();
     const sheetQuotedPrefix = `'${sheet.name}'!`.toLowerCase();
     const relevantNames = names.items.filter((n) => {
@@ -327,7 +287,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       }
     }
 
-    // ── Objects (charts, pivot tables, shapes) ──
     const chartNames = charts.items.map((c) => c.name);
     const pivotNames = pivotTables.items.map((p) => p.name);
     const shapeNames = shapes ? shapes.items.map((s) => s.name) : [];
@@ -347,7 +306,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
       );
     }
 
-    // ── Sheet state (protection, merges, filters, validation, spills, calc mode) ──
     if (!used.isNullObject) {
       const usedBlock = {
         rowIndex: used.rowIndex,
@@ -369,7 +327,6 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
         for (const note of notes) lines.push(`- ${note}`);
       }
 
-      // ── Data preview (first rows only, as displayed) ──
       const previewRowCount = Math.min(PREVIEW_ROWS, used.rowCount);
       const previewColumnCount = Math.min(PREVIEW_COLUMNS, used.columnCount);
       const preview = sheet.getRangeByIndexes(used.rowIndex, used.columnIndex, previewRowCount, previewColumnCount);

@@ -1,22 +1,3 @@
-/**
- * Lightweight UI translation layer — zero dependencies.
- *
- * Scope: **UI chrome only.** Never route agent-facing strings through this —
- * the system prompt, tool names/descriptions/schemas, and auto-context
- * injection must stay English for prompt-cache prefix stability
- * (see docs/cache-observability-baselines.md).
- *
- * Usage:
- *   import { t } from "../language/index.js";
- *   element.textContent = t("welcome.subtitle");
- *   element.textContent = t("settings.toast.connected", { label: "Anthropic" });
- *
- * `en.json` is the source of truth. Untranslated keys silently fall back to
- * English; unknown keys render the key itself (visible in dev, harmless in
- * production). Language is persisted in SettingsStore and applied at boot;
- * switching reloads the taskpane.
- */
-
 import en from "./locales/en.json" with { type: "json" };
 import zhCN from "./locales/zh-CN.json" with { type: "json" };
 
@@ -37,7 +18,6 @@ export function isSupportedLanguage(lang: string): lang is SupportedLanguage {
 export function initLanguage(lang: string): void {
   if (isSupportedLanguage(lang)) {
     currentLang = lang;
-    // Screen readers, hyphenation and CJK font selection follow <html lang>.
     if (typeof document !== "undefined") document.documentElement.lang = lang;
   }
 }

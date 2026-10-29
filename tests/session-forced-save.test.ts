@@ -142,16 +142,13 @@ void test("one session open in two taskpanes keeps both conversations", async ()
   await paneA.persistence.saveSession({ force: true });
   await paneB.persistence.saveSession({ force: true });
 
-  // Pane A's turn is not overwritten by pane B's older copy...
   assert.match(JSON.stringify((await paneA.sessions.get(sharedId))?.messages), /Write 11 in K1/u);
-  // ...and pane B's turn is kept as a new session, which pane B now continues.
   assert.equal(copies.length, 1);
   assert.equal(paneB.persistence.getSessionId(), copies[0]);
   const copy = await paneB.sessions.get(copies[0] ?? "");
   assert.match(JSON.stringify(copy?.messages), /Write 22 in K2/u);
   assert.doesNotMatch(JSON.stringify(copy?.messages), /Write 11 in K1/u);
 
-  // Later saves from either pane go through normally.
   paneB.agent.state.messages.push({ role: "user", content: "next", timestamp: 4 });
   await paneB.persistence.saveSession({ force: true });
   assert.equal(copies.length, 1);

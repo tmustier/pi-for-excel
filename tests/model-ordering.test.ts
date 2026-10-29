@@ -156,8 +156,6 @@ void test("pickDefaultModel falls back to the preferred hardcoded OpenAI default
 });
 
 void test("pickDefaultModel never picks an unusable provider while a configured provider has models (#553)", () => {
-  // Providers with registry models but no dedicated default-model rule used
-  // to fall through to an OpenAI API model, which the user has no credentials for.
   for (const provider of ["github-copilot", "mistral", "groq", "xai", "deepseek"]) {
     const models = getModels(provider);
     assert.ok(models.length > 0, `expected registry models for ${provider}`);

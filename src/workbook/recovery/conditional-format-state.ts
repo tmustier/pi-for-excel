@@ -1,5 +1,3 @@
-/** Conditional-format capture/apply for workbook recovery snapshots. */
-
 import { excelRun, getRange } from "../../excel/helpers.js";
 import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryConditionalFormatRules } from "./clone.js";
@@ -110,7 +108,6 @@ function applyConditionalFormatRule(
   const targetAddress = resolveConditionalFormatTargetAddress(fallbackAddress, rule);
   const handlers = CONDITIONAL_FORMAT_RULE_HANDLERS;
 
-  // Each case narrows `rule` to the variant its handler accepts.
   switch (rule.type) {
     case "custom":
       return handlers.custom.apply(range, targetAddress, rule);

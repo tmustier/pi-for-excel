@@ -20,7 +20,6 @@ import type { StoreConfig } from "./types.js";
 
 export const MAX_MODEL_ID_LENGTH = 256;
 
-/** Chat model fields shared by persisted catalogues and pi.dev catalogue responses. */
 const catalogModelSchema = Type.Object({
   type: Type.Optional(Type.Literal("chat")),
   id: Type.String({ minLength: 1, maxLength: MAX_MODEL_ID_LENGTH }),
@@ -47,7 +46,6 @@ const catalogEntrySchema = Type.Object({
   etag: Type.Optional(Type.String()),
 });
 
-/** Decode one chat model, dropping top-level fields the runtime does not use. Null if invalid. */
 export function decodeCatalogModel(value: unknown): Model<Api> | null {
   if (!Value.Check(catalogModelSchema, value)) return null;
   const { headers, thinkingLevelMap, promptCache, inputLimits, compat } = value;
@@ -88,7 +86,6 @@ function decodeEntry(value: unknown): ModelsStoreEntry | undefined {
   };
 }
 
-/** IndexedDB-backed dynamic provider catalogues, keyed by runtime provider ID. */
 export class ModelCatalogsStore extends Store implements ModelsStore {
   getConfig(): StoreConfig {
     return { name: "model-catalogs" };

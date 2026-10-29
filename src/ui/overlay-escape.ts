@@ -1,8 +1,3 @@
-/**
- * Helper to make overlay dialogs Esc-dismissible and mark them as
- * Escape owners so streaming Esc abort is suppressed while open.
- */
-
 import { isTextEntryTarget } from "../utils/text-entry.js";
 
 function getTargetElement(target: EventTarget | null): Element | null {
@@ -24,20 +19,10 @@ function isTopmostEscapeClaim(overlay: HTMLElement): boolean {
   return claimingOverlays[claimingOverlays.length - 1] === overlay;
 }
 
-/**
- * True while a dialog overlay (settings, pickers, confirmations, welcome) is
- * open. Every such overlay registers through `installOverlayEscapeClose`.
- */
 export function isDialogOverlayOpen(): boolean {
   return typeof document !== "undefined" && document.querySelector("[data-claims-escape='true']") !== null;
 }
 
-/**
- * Escape closes the topmost overlay. From a text field, the first Escape only
- * steps out of the field to `stepOutTarget` (the dialog card), so a half-filled
- * form is not dismissed by reflex; the next Escape closes. Focus never drops
- * out of the dialog.
- */
 export function installOverlayEscapeClose(
   overlay: HTMLElement,
   closeOverlay: () => void,

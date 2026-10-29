@@ -1,10 +1,3 @@
-/**
- * UTF-8 safe base64 text helpers.
- *
- * Used to move arbitrary text (e.g. code fence contents) safely through HTML
- * attributes. Avoids the deprecated unescape()/escape() btoa dance.
- */
-
 export function encodeBase64Utf8(text: string): string {
   const bytes = new TextEncoder().encode(text);
   let binary = "";

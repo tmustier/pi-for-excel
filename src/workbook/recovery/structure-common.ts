@@ -1,5 +1,3 @@
-/** Shared helpers and types for structure-state capture/apply. */
-
 import { Value } from "typebox/value";
 
 import { addressMatchesRangeShape } from "./address.js";

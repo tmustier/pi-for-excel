@@ -1,7 +1,3 @@
-/**
- * Humanize Excel format strings.
- */
-
 import type { NumberPreset, ResolvedConventions } from "./types.js";
 import { buildFormatString } from "./format-builder.js";
 import { DEFAULT_CURRENCY_SYMBOL } from "./defaults.js";

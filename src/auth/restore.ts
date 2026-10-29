@@ -2,14 +2,6 @@ function isAuthRestorePayloadShape(value: unknown): value is Record<string, unkn
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Auto-restore auth credentials from pi's auth.json (dev) or browser storage (OAuth).
- *
- * Per-provider priority:
- * 1. pi's ~/.pi/agent/auth.json (served by Vite plugin at /__pi-auth)
- * 2. IndexedDB SettingsStore (`oauth.<providerId>`) as fallback
- */
-
 import type { OAuthCredentials } from "@earendil-works/pi-ai";
 import type { ProviderKeysStore } from "../storage/local/provider-keys-store.js";
 import type { SettingsStore } from "../storage/local/settings-store.js";
@@ -53,10 +45,6 @@ function isOAuthCredential(value: unknown): value is OAuthCredential {
   );
 }
 
-/**
- * Restore credentials from all available sources.
- * Populates the ProviderKeysStore so ChatPanel can make API calls.
- */
 export async function restoreCredentials(
   providerKeys: ProviderKeysStore,
   settings: SettingsStore,
@@ -135,8 +123,6 @@ async function restoreFromBrowserOAuthStorage(
   getOAuthProvider: GetOAuthProvider,
   restoredProviders: Set<string>,
 ): Promise<void> {
-  // Startup refresh goes through the same guarded path as on-demand refresh,
-  // so two taskpanes opening together cannot both rotate one grant.
   const refresher = createOAuthRefresher({ settings, providerKeys, getOAuthProvider });
 
   for (const providerId of BROWSER_OAUTH_PROVIDERS) {
@@ -161,7 +147,6 @@ async function restoreFromBrowserOAuthStorage(
         restoredProviders.add(apiProvider);
         console.log(`[auth] ${provider.name}: session restored from IndexedDB`);
       } else if (outcome === "failed") {
-        // Refresh is attempted shortly before expiry; a token that still works is used until then.
         await providerKeys.set(apiProvider, provider.getApiKey(credentials));
         restoredProviders.add(apiProvider);
         console.warn(`[auth] ${provider.name}: refresh failed; it will be retried before the next request`);

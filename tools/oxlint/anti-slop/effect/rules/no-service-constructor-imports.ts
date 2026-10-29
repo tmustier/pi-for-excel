@@ -14,7 +14,6 @@ function getImportedName(specifier: ESTree.ImportSpecifier): string {
 	return specifier.imported.value;
 }
 
-/** Keep dependency-bearing Effect service constructors local to their owning capability modules. */
 export const noServiceConstructorImportsRule = defineRule({
 	meta: {
 		type: "problem",

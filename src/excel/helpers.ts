@@ -1,38 +1,14 @@
-/**
- * Office.js wrappers — thin abstraction over Excel.run() with
- * address parsing, error handling, and guarded API calls.
- */
-
-// ============================================================================
-// Types
-// ============================================================================
-
-// Office.js is loaded at runtime by Excel, but its types are available via
-// `@types/office-js` (global `Excel` namespace/value).
-
-/** Result of parsing a range reference like "Sheet1!A1:B5" */
 export interface RangeRef {
-  sheet?: string;   // undefined = active sheet
-  address: string;  // e.g. "A1:B5"
+  sheet?: string;
+  address: string;
 }
 
-// ============================================================================
-// Excel.run wrapper
-// ============================================================================
-
-/** Office.js error code while the user is typing in a cell (Excel on the web, desktop). */
 const CELL_EDIT_MODE_ERROR_CODE = "InvalidOperationInCellEditMode";
 
-/** How long a batch waits for the user to leave cell-edit mode before it fails. */
 export const CELL_EDIT_WAIT_MS = 60_000;
 const CELL_EDIT_RETRY_FIRST_DELAY_MS = 250;
 const CELL_EDIT_RETRY_MAX_DELAY_MS = 2_000;
 
-/**
- * Excel refused a batch because the user is editing a cell. The message is
- * written for the agent: it says what happened, whether anything was applied,
- * and what to do next.
- */
 export class ExcelCellEditModeError extends Error {
   readonly code = "excel_cell_edit_mode";
   readonly waitedMs: number;
@@ -57,10 +33,6 @@ type CellEditWaitListener = (waiting: boolean) => void;
 const cellEditWaitListeners = new Set<CellEditWaitListener>();
 let cellEditWaiters = 0;
 
-/**
- * Observe whether any Excel batch is currently waiting for the user to leave
- * cell-edit mode (for the "Waiting for you to finish editing a cell" status).
- */
 export function onCellEditWait(listener: CellEditWaitListener): () => void {
   cellEditWaitListeners.add(listener);
   return () => cellEditWaitListeners.delete(listener);
@@ -73,20 +45,12 @@ function setWaiting(delta: 1 | -1): void {
   for (const listener of cellEditWaitListeners) listener(cellEditWaiters > 0);
 }
 
-/** How long one `Excel.run` may take before Pi stops waiting for it. */
 export const EXCEL_RUN_TIMEOUT_MS = 60_000;
 
-/**
- * Excel did not answer a batch in time (a hung or overloaded Excel on the
- * web, a lost connection). The batch may still complete later, so the outcome
- * is unknown; the message tells the agent to read back before retrying.
- */
 export class ExcelTimeoutError extends Error {
   readonly code = "excel_timeout";
-  /** Contract with mutation results (#791): rows "may or may not have been written". */
   readonly outcomeUnknown = true;
   readonly timeoutMs: number;
-  /** Earlier batches that also timed out with no answer from Excel in between. */
   readonly consecutiveTimeouts: number;
 
   constructor(timeoutMs: number, consecutiveTimeouts: number) {
@@ -103,7 +67,6 @@ export class ExcelTimeoutError extends Error {
   }
 }
 
-/** A wait for the user to leave cell-edit mode was ended by Stop. Nothing reached Excel. */
 export class ExcelWaitStoppedError extends Error {
   readonly code = "excel_wait_stopped";
 
@@ -117,11 +80,6 @@ let consecutiveTimeouts = 0;
 let stopGeneration = 0;
 const cellEditSleepers = new Set<() => void>();
 
-/**
- * End every wait for the user to leave cell-edit mode (Stop pressed). Those
- * batches never reached Excel; without this they would run once the user
- * finishes editing, after the turn was stopped.
- */
 export function cancelCellEditWaits(): void {
   stopGeneration += 1;
   for (const wake of cellEditSleepers) wake();
@@ -140,15 +98,8 @@ function sleepUnlessCancelled(ms: number): Promise<void> {
 }
 
 export interface ExcelRunOptions {
-  /**
-   * Retry while the user is editing a cell (default true). Auto-context reads
-   * pass false: they must not hold up a model request, and they report the
-   * edit mode to the agent instead.
-   */
   waitForCellEdit?: boolean;
-  /** Override for tests. */
   cellEditWaitMs?: number;
-  /** Per-batch timeout (default {@link EXCEL_RUN_TIMEOUT_MS}). */
   timeoutMs?: number;
 }
 
@@ -160,7 +111,6 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
       reject(new ExcelTimeoutError(timeoutMs, consecutiveTimeouts));
     }, timeoutMs);
   });
-  // The abandoned batch may settle later; keep its rejection from going unhandled.
   promise.catch(() => {});
   return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
 }
@@ -211,7 +161,7 @@ export async function excelRun<T>(
         const inCellEditMode = typeof error === "object" && error !== null
           && "code" in error && error.code === CELL_EDIT_MODE_ERROR_CODE;
         if (!inCellEditMode) throw error;
-        consecutiveTimeouts = 0; // Excel answered.
+        consecutiveTimeouts = 0;
         const waitedMs = Date.now() - startedAt;
         if (!waitForCellEdit || committedBatches > 0 || waitedMs + delay > waitMs) {
           throw new ExcelCellEditModeError(waitedMs, committedBatches > 0);
@@ -230,24 +180,18 @@ export async function excelRun<T>(
   }
 }
 
-// ============================================================================
-// Address parsing
-// ============================================================================
-
-/** Parse "Sheet1!A1:B5" → { sheet: "Sheet1", address: "A1:B5" } */
 export function parseRangeRef(ref: string): RangeRef {
   if (ref.includes("!")) {
     const idx = ref.lastIndexOf("!");
     const sheet = ref
       .substring(0, idx)
       .replace(/^'|'$/g, "")
-      .replace(/''/g, "'"); // strip quotes + unescape
+      .replace(/''/g, "'");
     return { sheet, address: ref.substring(idx + 1) };
   }
   return { address: ref };
 }
 
-/** Get a Range object from a context, resolving sheet name if present */
 export function getRange(context: Excel.RequestContext, ref: string): { sheet: Excel.Worksheet; range: Excel.Range } {
   const parsed = parseRangeRef(ref);
   const sheet = parsed.sheet
@@ -256,22 +200,15 @@ export function getRange(context: Excel.RequestContext, ref: string): { sheet: E
   return { sheet, range: sheet.getRange(parsed.address) };
 }
 
-/** Whether a sheet came from the address itself or from the active sheet. */
 export type SheetSource = "explicit" | "active";
 
 export interface ResolvedSheetRef {
   sheet: Excel.Worksheet;
   sheetName: string;
-  /** Address without the sheet prefix, e.g. "A1:B5" or "A:A". */
   address: string;
   sheetSource: SheetSource;
 }
 
-/**
- * Resolve a range reference to one named sheet before any range work, so a
- * tool reads the sheet it reports even if the user switches tabs mid-call.
- * An unknown sheet name fails with the list of existing sheets.
- */
 export async function resolveSheetRef(context: Excel.RequestContext, ref: string): Promise<ResolvedSheetRef> {
   const parsed = parseRangeRef(ref.trim());
   if (parsed.sheet === undefined) {
@@ -294,7 +231,6 @@ export async function resolveSheetRef(context: Excel.RequestContext, ref: string
   return { sheet, sheetName: sheet.name, address: parsed.address, sheetSource: "explicit" };
 }
 
-/** A rectangular block of cells by zero-based indexes, as Office.js reports them. */
 export interface CellBlock {
   rowIndex: number;
   columnIndex: number;
@@ -302,7 +238,6 @@ export interface CellBlock {
   columnCount: number;
 }
 
-/** A1 address of a block, e.g. "A1:E500" (or "B3" for one cell). */
 export function blockAddress(block: CellBlock): string {
   const start = cellAddress(block.columnIndex, block.rowIndex + 1);
   if (block.rowCount === 1 && block.columnCount === 1) return start;
@@ -319,14 +254,11 @@ export function intersectBlocks(a: CellBlock, b: CellBlock): CellBlock | null {
   return { rowIndex: rowStart, columnIndex: colStart, rowCount: rowEnd - rowStart, columnCount: colEnd - colStart };
 }
 
-/** Excel's "response payload size has exceeded the limit" (about 5 MB per sync on the web). */
 export function isResponsePayloadLimitMessage(message: string): boolean {
   return /payload size has exceeded|ResponsePayloadSizeLimitExceeded/iu.test(message);
 }
 
-/** Build a fully-qualified address like "Sheet1!A1:B5" */
 export function qualifiedAddress(sheetName: string, address: string): string {
-  // Strip sheet prefix if already in the address
   const clean = address.includes("!") ? address.slice(address.lastIndexOf("!") + 1) : address;
   const escaped = sheetName.replace(/'/g, "''");
   const needsQuote = /[\s'!]/.test(sheetName);
@@ -334,11 +266,6 @@ export function qualifiedAddress(sheetName: string, address: string): string {
   return `${quoted}!${clean}`;
 }
 
-// ============================================================================
-// Column / address math
-// ============================================================================
-
-/** Convert 0-indexed column to letter (0=A, 25=Z, 26=AA) */
 export function colToLetter(col: number): string {
   let letter = "";
   let c = col;
@@ -349,16 +276,14 @@ export function colToLetter(col: number): string {
   return letter;
 }
 
-/** Convert column letter to 0-indexed number (A=0, Z=25, AA=26) */
 export function letterToCol(letters: string): number {
   let col = 0;
   for (let i = 0; i < letters.length; i++) {
     col = col * 26 + (letters.charCodeAt(i) - 64);
   }
-  return col - 1; // 0-indexed
+  return col - 1;
 }
 
-/** Parse cell address "B3" → { col: 1, row: 3 } (col is 0-indexed, row is 1-indexed) */
 export function parseCell(cell: string): { col: number; row: number } {
   const clean = cell.includes("!") ? cell.slice(cell.indexOf("!") + 1) : cell;
   const match = clean.match(/^\$?([A-Z]+)\$?(\d+)$/i);
@@ -373,12 +298,10 @@ export function parseCell(cell: string): { col: number; row: number } {
   return { col: letterToCol(colLetters.toUpperCase()), row: parseInt(rowDigits, 10) };
 }
 
-/** Build cell address from 0-indexed col and 1-indexed row */
 export function cellAddress(col: number, row: number): string {
   return `${colToLetter(col)}${row}`;
 }
 
-/** Check if a cell address falls within a range address. */
 export function isCellInRange(cellAddress: string, rangeAddress: string): boolean {
   const bangIndex = rangeAddress.indexOf("!");
   const cleanRange = bangIndex >= 0 ? rangeAddress.slice(bangIndex + 1) : rangeAddress;
@@ -396,27 +319,15 @@ export function isCellInRange(cellAddress: string, rangeAddress: string): boolea
   );
 }
 
-/**
- * Compute the end address for a 2D array starting at a given cell.
- * E.g. startCell="B2", rows=3, cols=4 → "B2:E4"
- */
 export function computeRangeAddress(startCell: string, rows: number, cols: number): string {
   const { col, row } = parseCell(startCell);
   return `${startCell}:${colToLetter(col + cols - 1)}${row + rows - 1}`;
 }
 
-/**
- * Compute cell address at offset from a range's start address.
- * E.g. rangeStart="B2", row offset 1, col offset 2 → "D3"
- */
 export function cellAtOffset(rangeStart: string, rowOffset: number, colOffset: number): string {
   const { col, row } = parseCell(rangeStart);
   return cellAddress(col + colOffset, row + rowOffset);
 }
-
-// ============================================================================
-// Guarded API calls
-// ============================================================================
 
 function isOfficeItemNotFound(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
@@ -432,14 +343,6 @@ function isOfficeItemNotFound(error: unknown): boolean {
   return false;
 }
 
-/**
- * Safely call getDirectPrecedents().
- *
- * Returns:
- * - `string[][]` when API succeeds
- * - `[]` when the API is available but there are no precedents
- * - `null` when the API is unavailable/failing (so callers can use fallback logic)
- */
 export async function getDirectPrecedentsSafe(
   context: Excel.RequestContext,
   range: Excel.Range,
@@ -448,8 +351,6 @@ export async function getDirectPrecedentsSafe(
     const precedents = range.getDirectPrecedents();
     precedents.load("addresses");
     await context.sync();
-    // WorkbookRangeAreas.addresses is string[]; each entry may itself contain
-    // a comma-separated list of address blocks.
     return precedents.addresses
       .map((s) => s.split(",").map((x) => x.trim()).filter(Boolean));
   } catch (error) {
@@ -460,14 +361,6 @@ export async function getDirectPrecedentsSafe(
   }
 }
 
-/**
- * Safely call getDirectDependents().
- *
- * Returns:
- * - `string[][]` when API succeeds
- * - `[]` when the API is available but there are no dependents
- * - `null` when the API is unavailable/failing (so callers can use fallback logic)
- */
 export async function getDirectDependentsSafe(
   context: Excel.RequestContext,
   range: Excel.Range,
@@ -486,7 +379,6 @@ export async function getDirectDependentsSafe(
   }
 }
 
-/** Pad a 2D array so all rows have the same length */
 export function padValues(values: unknown[][]): { padded: unknown[][]; rows: number; cols: number } {
   const rows = values.length;
   const cols = Math.max(...values.map((r) => r.length));

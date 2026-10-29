@@ -1,7 +1,3 @@
-/**
- * conventions — public API for formatting conventions + style resolution.
- */
-
 export type {
   BorderWeight,
   CellStyle,

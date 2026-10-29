@@ -1,18 +1,8 @@
-/**
- * Visual CSV table renderer for read_range CSV results.
- *
- * Replaces the syntax-highlighted code block with a proper HTML table
- * featuring Excel-style row/column headers and a "Copy CSV" button.
- * The raw CSV text sent to the agent is unchanged.
- */
-
 import { html, nothing, type TemplateResult } from "lit";
 import { colToLetter } from "../excel/helpers.js";
 import { t } from "../language/index.js";
 import type { ReadRangeCsvDetails } from "../tools/tool-details.js";
 import { isExcelError } from "../utils/format.js";
-
-/* ── Value formatting ───────────────────────────────────────── */
 
 function fmtCell(v: unknown): string {
   if (v === null || v === undefined || v === "") return "";
@@ -20,8 +10,6 @@ function fmtCell(v: unknown): string {
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   return JSON.stringify(v);
 }
-
-/* ── Copy-to-clipboard ──────────────────────────────────────── */
 
 async function copyToClipboard(csv: string, btn: HTMLButtonElement): Promise<void> {
   try {
@@ -34,7 +22,6 @@ async function copyToClipboard(csv: string, btn: HTMLButtonElement): Promise<voi
       btn.classList.remove("pi-csv-table__copy--done");
     }, 1500);
   } catch {
-    // Fallback: select-all in a temp textarea
     const ta = document.createElement("textarea");
     ta.value = csv;
     ta.style.position = "fixed";
@@ -46,12 +33,6 @@ async function copyToClipboard(csv: string, btn: HTMLButtonElement): Promise<voi
   }
 }
 
-/* ── Table rendering ────────────────────────────────────────── */
-
-/**
- * Render a CSV result as an Excel-style table with row/column headers
- * and a copy button.
- */
 export function renderCsvTable(details: ReadRangeCsvDetails): TemplateResult {
   const { startCol, startRow, values, csv } = details;
   if (values.length === 0) return html`<div class="pi-tool-card__plain-text">${t("render-csv-table.empty")}</div>`;

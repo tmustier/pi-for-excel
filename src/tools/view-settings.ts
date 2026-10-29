@@ -1,9 +1,3 @@
-/**
- * view_settings — Control worksheet display settings.
- *
- * Scope: on-screen worksheet view/navigation only (not print/page layout).
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { Type, type Static } from "typebox";
 import { StringEnum } from "./string-enum.js";
@@ -335,16 +329,11 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
       case "freeze_at": {
         if (!params.range) throw new Error("range is required for freeze_at");
 
-        // parseCell returns 0-indexed col and 1-indexed row.
-        // "freeze at B5" means rows 1-4 and column A are frozen — the
-        // anchor cell is the first *unfrozen* cell (exclusive).
         const anchor = parseCell(params.range);
-        const frozenRows = anchor.row - 1; // 1-indexed → count above
-        const frozenCols = anchor.col; // 0-indexed col IS the count left of it
+        const frozenRows = anchor.row - 1;
+        const frozenCols = anchor.col;
 
         if (frozenRows === 0 && frozenCols === 0) {
-          // A1 means "nothing to freeze" — matches Excel UI which
-          // unfreezes when the anchor is A1.
           sheet.freezePanes.unfreeze();
           await context.sync();
           sheet.load("name");
@@ -362,8 +351,6 @@ async function executeViewSettingsAction(params: Params): Promise<ViewSettingsAc
         } else if (frozenRows === 0) {
           sheet.freezePanes.freezeColumns(frozenCols);
         } else {
-          // Build the frozen pane content range: A1 up to (but not
-          // including) the anchor cell.
           const paneRange = sheet.getRangeByIndexes(0, 0, frozenRows, frozenCols);
           sheet.freezePanes.freezeAt(paneRange);
         }

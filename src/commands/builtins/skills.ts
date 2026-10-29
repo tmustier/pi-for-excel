@@ -1,7 +1,3 @@
-/**
- * Builtin command for skills catalog UI.
- */
-
 import type { ExtensionsHubTab } from "./settings-pages/index.js";
 import type { SlashCommand } from "../types.js";
 import { t } from "../../language/index.js";

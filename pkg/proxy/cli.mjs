@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import https from "node:https";

@@ -1,12 +1,3 @@
-/**
- * Copies text to the clipboard from the taskpane.
- *
- * Excel on the web frames the taskpane without clipboard-write permission, so
- * both the async clipboard API and `execCommand("copy")` can be refused. The
- * last fallback shows the text selected in a dialog for the user to copy with
- * Ctrl/Cmd+C, so a copy request never silently does nothing.
- */
-
 import { t } from "../language/index.js";
 import {
   createOverlayButton,
@@ -17,7 +8,6 @@ import { COPY_TEXT_OVERLAY_ID } from "./overlay-ids.js";
 
 export type CopyTextOutcome = "copied" | "manual" | "unavailable";
 
-/** Legacy fallback for WebViews where the async clipboard API is rejected. */
 export function copyViaHiddenTextarea(text: string): boolean {
   const textarea = document.createElement("textarea");
   textarea.value = text;
@@ -35,10 +25,6 @@ export function copyViaHiddenTextarea(text: string): boolean {
   }
 }
 
-/**
- * `manualFallback: false` returns "unavailable" instead of showing the dialog,
- * for callers with a better fallback for large text (such as a download).
- */
 export async function copyText(
   text: string,
   options: { manualFallback?: boolean } = {},
@@ -47,7 +33,6 @@ export async function copyText(
     await navigator.clipboard.writeText(text);
     return "copied";
   } catch {
-    // Refused by the frame's permissions policy or the WebView; try the legacy path.
   }
 
   if (copyViaHiddenTextarea(text)) return "copied";

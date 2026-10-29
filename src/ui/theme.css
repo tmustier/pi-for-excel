@@ -1,19 +1,5 @@
-/**
- * Pi for Excel theme
- *
- * Designed to sit alongside a white Excel sheet in a narrow sidebar.
- * Warm-tinted neutrals, one accent for changed values. See
- * docs/proposals/sidebar-redesign.md.
- *
- * Fully first-party: tokens, preflight reset, components, and content
- * styles. This file is kept intentionally small; the actual styles live
- * in src/ui/theme/*.css and are imported in order below.
- */
-
-/* ── Google Fonts ─────────────────────────────────────────── */
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap');
 
-/* Theme partials (loaded in order) */
 @import "./theme/tokens.css";
 @import "./theme/preflight.css";
 @import "./theme/base.css";

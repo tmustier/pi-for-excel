@@ -1,24 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Generate an opt-in dev manifest for running the dev server behind a local
- * HTTPS reverse proxy such as portless (see docs/portless.md).
- *
- * Usage:
- *   npm run manifest:dev                          # → https://pi-excel.localhost
- *   npm run manifest:dev -- my-addin.localhost    # custom hostname
- *   DEV_HOST=pi-excel.localhost node scripts/generate-dev-manifest.mjs
- *
- * Replaces the default dev base URL (https://localhost:3141) in manifest.xml
- * with the proxy origin and writes manifest.dev.xml (fixed output path).
- * manifest.xml itself stays untouched and nothing is published to public/.
- *
- * Notes:
- * - Office add-ins require HTTPS, so the proxy origin is always https://.
- * - The add-in Id is unchanged: sideloading manifest.dev.xml replaces the
- *   default localhost:3141 sideload (they are the same add-in to Excel).
- */
-
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -26,15 +5,6 @@ import { pathToFileURL } from "node:url";
 export const DEV_BASE_URL = "https://localhost:3141";
 export const DEFAULT_DEV_PROXY_HOST = "pi-excel.localhost";
 
-/**
- * Resolve the HTTPS origin for the dev proxy.
- *
- * Precedence: explicit CLI arg > DEV_HOST env > PORTLESS_URL env (injected by
- * portless) > default (`pi-excel.localhost`, matching `npm run dev:portless`).
- *
- * Accepts a bare hostname ("pi-excel.localhost"), host:port, or a full
- * https:// URL. Throws on anything that is not a clean https origin.
- */
 export function resolveDevOrigin({ arg, env = {} } = {}) {
   const candidates = [
     { source: "argument", value: arg },
@@ -86,10 +56,6 @@ export function resolveDevOrigin({ arg, env = {} } = {}) {
   return { origin, source };
 }
 
-/**
- * Replace every occurrence of the default dev base URL with the proxy origin.
- * Throws if the template does not contain the dev base URL (wrong input file).
- */
 export function renderDevManifest(xml, origin) {
   if (!xml.includes(DEV_BASE_URL)) {
     throw new Error(`Input manifest does not include expected dev base URL ${DEV_BASE_URL}`);
@@ -122,7 +88,6 @@ if (isCurrentModuleEntrypoint()) {
 
   const repoRoot = path.resolve(process.cwd());
   const inPath = path.join(repoRoot, "manifest.xml");
-  // Fixed output path by design: this script must never write anywhere else.
   const outPath = path.join(repoRoot, "manifest.dev.xml");
 
   if (!fs.existsSync(inPath)) {

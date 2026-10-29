@@ -1,9 +1,3 @@
-/**
- * Bundled Agent Skills catalog.
- *
- * Source of truth: top-level `skills/<skill-name>/SKILL.md` files.
- */
-
 import { loadRawMarkdownFromTestGlob } from "../utils/test-raw-markdown-glob.js";
 import { parseSkillDocument, type ParsedSkillFrontmatter } from "./frontmatter.js";
 import type {

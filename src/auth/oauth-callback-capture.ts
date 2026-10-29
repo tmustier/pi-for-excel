@@ -1,12 +1,3 @@
-/**
- * Poll the local Pi for Excel proxy for OAuth redirects captured on localhost.
- *
- * Browser-safe OAuth providers still use CLI-compatible localhost redirect URIs
- * such as http://localhost:1455/auth/callback or http://localhost:8085/oauth2callback.
- * When the local proxy helper is running, it also listens on those redirect
- * ports and exposes the captured code back to the taskpane through its HTTPS/CORS endpoint.
- */
-
 import { getAppStorage } from "../storage/local/app-storage.js";
 
 import {
@@ -140,9 +131,6 @@ export async function pollOAuthCallbackCapture(
       }
       const response = await fetch(pollUrl, requestInit);
 
-      // 4xx usually means the user is running an older proxy helper, a remote
-      // proxy, or a proxy with an origin policy that cannot serve callback
-      // capture. Fall back to manual paste immediately.
       if (response.status >= 400 && response.status < 500) {
         return null;
       }
@@ -163,8 +151,6 @@ export async function pollOAuthCallbackCapture(
       if (options.signal?.aborted) {
         throw createAbortError();
       }
-      // Transient proxy/network errors should not break the dialog. Keep the
-      // manual paste field available while we retry until the timeout expires.
     }
 
     await wait(intervalMs, options.signal);

@@ -1,9 +1,3 @@
-/**
- * What a submitted composer draft becomes. Enter, Alt+Enter, the send button
- * and a command chosen from the menu all come through here, so they behave
- * the same.
- */
-
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import { showToast } from "../../ui/toast.js";
@@ -21,17 +15,6 @@ export interface SubmitTarget {
   tab?: Pick<TabState, "attachments" | "setAttachments">;
 }
 
-/**
- * Handles a submitted draft for the active tab. Returns true when the draft
- * was used (the composer clears) and false when it stays for editing.
- *
- * - A leading `/` names a command. Known commands run (or are queued, for
- *   `/compact`) under the busy policy; a refused or unknown command keeps the
- *   draft and says why. A leading space sends slash text as a message.
- * - While Pi responds, Enter steers and Alt+Enter follows up.
- * - While the tab is busy otherwise (compacting, waiting to retry), the text
- *   is queued; when idle it is sent.
- */
 export function submitComposerText(args: {
   text: string;
   followUp: boolean;

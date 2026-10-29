@@ -1,7 +1,3 @@
-/**
- * Register all builtin slash commands.
- */
-
 import { commandRegistry, type SlashCommand } from "../types.js";
 
 import { createModelCommands, type ActiveAgentProvider } from "./model.js";
@@ -30,9 +26,7 @@ export interface BuiltinsContext
   openModelSelector: () => void;
 }
 
-/** Register all built-in commands. Call once after runtime manager is ready. */
 export function registerBuiltins(context: BuiltinsContext): void {
-  // Most-used conversation commands lead each group in the discovery menu.
   const builtins: SlashCommand[] = [
     ...createSessionLifecycleCommands(context),
     ...createCompactCommands(context.getActiveAgent),

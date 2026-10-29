@@ -1,6 +1,3 @@
-// Transcript-as-turns contracts (src/ui/messages/turn-model.ts) and the
-// rows a turn group draws (src/ui/tool-rows.ts). Native rendering is covered
-// by tests/browser/ui-transcript.browser-test.ts.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -76,12 +73,10 @@ void test("while the turn runs, calls without a result are live and the streamed
   const messages: AgentMessage[] = [{ role: "user", content: "Go", timestamp: 1 }, first, result("r1", "Filled A1", 11)];
   assert.deepEqual(shape(build(messages, { running: true, pending: ["r2"] })), ["user", "group[r1:done,r2:live] live"]);
 
-  // The next response streams a tool call: its row appears in the same group, live.
   const streaming = assistant(20, [{ type: "text", text: "Next." }, call("r3", "A3")]);
   const done: AgentMessage[] = [...messages, result("r2", "Filled A2", 12)];
   assert.deepEqual(shape(build(done, { running: true, streaming })), ["user", "group[r1:done,r2:done,note:Next.,r3:live] live"]);
 
-  // The answer streams: the group is finished and collapses, the answer draws below it.
   const answer = assistant(30, [{ type: "text", text: "All" }]);
   const withThird: AgentMessage[] = [...done, assistant(20, [call("r3", "A3")]), result("r3", "Filled A3", 21)];
   assert.deepEqual(shape(build(withThird, { running: true, streaming: answer })), ["user", "group[r1:done,r2:done,r3:done] answered", "assistant[0,1] streaming"]);
@@ -159,7 +154,6 @@ void test("trailing prose is not an answer while its tool calls still run", () =
     ["group[r1:done] answered", "assistant[1,2]"]);
 });
 
-/** The words a template shows: text between tags and the string values bound there (not attribute values). */
 function textOf(template: TemplateResult): string {
   const isTemplate = (value: unknown): value is TemplateResult =>
     typeof value === "object" && value !== null && "strings" in value && "values" in value;

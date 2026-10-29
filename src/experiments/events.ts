@@ -1,7 +1,3 @@
-/**
- * Experimental feature/config event helpers.
- */
-
 import type { ExperimentalFeatureId } from "./flags.js";
 
 export const PI_EXPERIMENTAL_FEATURE_CHANGED_EVENT = "pi:experimental-feature-changed";

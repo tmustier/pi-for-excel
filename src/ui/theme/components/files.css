@@ -1,10 +1,7 @@
-/* Files workspace dialog (Section 12 redesign) */
-
 .pi-files-dialog {
   gap: 10px;
 }
 
-/* ── Actions row (Upload / Connect folder) ───────── */
 .pi-files-actions {
   display: flex;
   gap: 6px;
@@ -24,7 +21,6 @@
   height: 12px;
 }
 
-/* ── Filter input ────────────────────────────────── */
 .pi-files-filter {
   display: flex;
   align-items: center;
@@ -69,7 +65,6 @@
   color: var(--muted-foreground);
 }
 
-/* ── Section groups ──────────────────────────────── */
 .pi-files-section-group {
   display: flex;
   flex-direction: column;
@@ -127,9 +122,7 @@
   gap: 1px;
 }
 
-/* ── Folder group ────────────────────────────────── */
 .pi-files-folder-group {
-  /* no extra spacing — sits inline with file items */
 }
 
 .pi-files-folder {
@@ -198,7 +191,6 @@
   padding-left: 16px;
 }
 
-/* ── File item row ───────────────────────────────── */
 .pi-files-item {
   display: flex;
   align-items: center;
@@ -288,7 +280,6 @@
   opacity: 1;
 }
 
-/* ── Footer ──────────────────────────────────────── */
 .pi-files-footer {
   padding: 8px 20px 12px;
   font-family: var(--font-sans);
@@ -298,7 +289,6 @@
   text-align: center;
 }
 
-/* ── Empty state ─────────────────────────────────── */
 .pi-files-empty {
   display: flex;
   flex-direction: column;
@@ -309,7 +299,7 @@
 }
 
 .pi-files-empty__icon {
-  font-size: 32px; /* decorative glyph */
+  font-size: 32px;
   opacity: 0.4;
   margin-bottom: 4px;
   display: flex;
@@ -346,7 +336,6 @@
   opacity: 0.7;
 }
 
-/* ── Detail view ─────────────────────────────────── */
 .pi-files-detail-title {
   display: flex;
   align-items: center;
@@ -375,7 +364,6 @@
   border-color: var(--alpha-14);
 }
 
-/* Text preview with line numbers */
 .pi-files-detail-preview {
   border: 1px solid var(--alpha-8);
   border-radius: var(--radius-sm);
@@ -383,8 +371,6 @@
   overflow: hidden;
 }
 
-/* Plain-text preview — wrapped prose, no line numbers (preview is for
-   reading, not code editing). */
 .pi-files-detail-preview--text {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
@@ -400,8 +386,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Rendered markdown preview (.md files). Typography comes from the
-   shared markdown-block styles; container just scales it down a notch. */
 .pi-files-detail-preview--markdown {
   max-height: 260px;
   overflow-y: auto;
@@ -409,8 +393,6 @@
   font-size: var(--text-sm);
 }
 
-/* Preview-scale headings — transcript heading sizes are too loud inside
-   a small preview panel. */
 .pi-files-detail-preview--markdown markdown-block h1 {
   font-size: var(--text-md);
 }
@@ -422,7 +404,6 @@
   font-size: var(--text-sm);
 }
 
-/* "More content below" cue — sticks to the bottom of the scroll viewport. */
 .pi-files-detail-preview__fade {
   position: sticky;
   bottom: 0;
@@ -432,7 +413,6 @@
   pointer-events: none;
 }
 
-/* Binary/image preview placeholder */
 .pi-files-detail-preview--binary {
   min-height: 120px;
   display: flex;
@@ -450,7 +430,7 @@
 }
 
 .pi-files-detail-preview__placeholder-icon {
-  font-size: 36px; /* decorative glyph */
+  font-size: 36px;
   opacity: 0.3;
   display: flex;
   align-items: center;
@@ -476,7 +456,6 @@
   color: var(--muted-foreground);
 }
 
-/* Image preview */
 .pi-files-detail-preview--image {
   border: 1px solid var(--alpha-8);
   border-radius: var(--radius-sm);
@@ -494,7 +473,6 @@
   max-height: 200px;
 }
 
-/* Actions bar in detail view */
 .pi-files-detail-actions {
   display: flex;
   align-items: center;
@@ -506,9 +484,6 @@
   flex: 1;
 }
 
-/* ── Badge overrides inside file items (#490) ────── */
-/* Badge is a row-level right-aligned column (after the flexible info
-   block) so every badge lands at the same x regardless of name length. */
 .pi-files-item .pi-overlay-badge {
   border-radius: var(--radius-xs);
   border: none;
@@ -517,7 +492,6 @@
   flex-shrink: 0;
 }
 
-/* ── Text preview scroll fixes (#491) ────────────── */
 .pi-files-detail-preview--text {
   max-height: min(400px, 50vh);
   overscroll-behavior: contain;

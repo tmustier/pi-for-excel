@@ -56,7 +56,6 @@ function createManager(
 
 void test("the manager exposes the accepted source forms and their runtime modes", async (t) => {
   setExperimentalFeatureEnabled("extension_sandbox_runtime", false);
-  // Remote URLs need the explicit opt-in, which lives in localStorage.
   const values = new Map<string, string>();
   Reflect.set(globalThis, "localStorage", {
     getItem: (key: string) => values.get(key) ?? null,

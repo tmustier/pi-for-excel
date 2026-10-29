@@ -1,7 +1,3 @@
-/**
- * Recently closed tabs, newest first, kept per workbook so they survive a reload.
- */
-
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 
@@ -16,7 +12,6 @@ const recentlyClosedItemSchema = Type.Object({
   title: Type.String(),
   closedAt: Type.String(),
   workbookId: Type.Union([Type.String(), Type.Null()]),
-  /** The tab's "Chat N" number when it was closed, so reopening restores the same label. */
   tabNumber: Type.Optional(Type.Integer({ minimum: 1 })),
 });
 
@@ -27,10 +22,6 @@ export function recentlyClosedKey(workbookId: string | null): string {
   return `${RECENTLY_CLOSED_PREFIX}${suffix}`;
 }
 
-/**
- * Reads the recently closed list for a workbook. Malformed entries are dropped;
- * a failed read rejects so the caller does not overwrite a list it could not see.
- */
 export async function loadRecentlyClosed(
   settings: Pick<SettingsStore, "get">,
   workbookId: string | null,
@@ -63,7 +54,6 @@ export class RecentlyClosedStack {
     this.onChange = onChange;
   }
 
-  /** Replaces the list with persisted items without reporting a change. */
   load(items: readonly RecentlyClosedItem[]): void {
     this.items.length = 0;
     const seenSessions = new Set<string>();
@@ -76,7 +66,6 @@ export class RecentlyClosedStack {
   }
 
   push(item: RecentlyClosedItem): void {
-    // One entry per session: closing it again replaces the older entry.
     const existing = this.items.findIndex((candidate) => candidate.sessionId === item.sessionId);
     if (existing >= 0) this.items.splice(existing, 1);
 

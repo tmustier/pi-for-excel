@@ -262,10 +262,6 @@ void test("restoring a deleted row reinserts its captured values", async () => {
   assert.deepEqual(restoredValues, [[10, 20]]);
 });
 
-/**
- * A two-column sheet for delete_rows. Rows are hidden by hand or by a filter. As in
- * Excel on the web, deleting deletes hand-hidden rows but keeps filtered-out ones.
- */
 function rowSheetHost(rows: Array<{ values: string[]; hidden?: "manual" | "filter" }>): {
   context: unknown;
   rows: Array<{ values: string[]; hidden?: "manual" | "filter" }>;
@@ -354,7 +350,6 @@ void test("delete_rows in a filtered range says Excel kept the filtered-out row 
   assert.match(firstText(result), /Excel kept 1 hidden row\(s\) \(a filter is on\).*originally row 3\) now start at row 2/u);
   assert.doesNotMatch(firstText(result), /Deleted hidden data/u);
   assert.equal(result.details.hiddenRowsDeleted, 0);
-  // A backup of both rows would bring "South" back twice.
   assert.equal(result.details.recovery?.status, "not_available");
   assert.deepEqual(host.rows.map((row) => row.values[0]), ["Region", "South", "East"]);
 });

@@ -11,11 +11,6 @@ export interface ProviderKeysStoreLike {
   list(): Promise<string[]>;
 }
 
-/**
- * Adapts Pi for Excel's existing IndexedDB API-key store to Pi AI's runtime
- * credential contract. Browser OAuth flows continue to refresh their grants in
- * the taskpane and publish the effective access token through ProviderKeysStore.
- */
 export class ProviderCredentialsStore implements CredentialStore {
   private readonly providerKeys: ProviderKeysStoreLike;
   private readonly chains = new Map<string, Promise<void>>();

@@ -1,5 +1,3 @@
-/* Settings pages (providers, proxy, gateway) inside the settings shell */
-
 .pi-settings-section {
   display: flex;
   flex-direction: column;

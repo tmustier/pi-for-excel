@@ -440,23 +440,19 @@ void test("files writes and deletes use the same ownership consent in Auto and C
   assert.ok(gated);
   const run = (params: Record<string, string>) => gated.execute("call", params);
 
-  // Auto: Pi's own new file can be created, rewritten and deleted silently.
   await run({ action: "write", path: "out/report.csv" });
   await run({ action: "write", path: "out/report.csv" });
   await run({ action: "delete", path: "out/report.csv" });
-  // Reads and read-only built-ins never ask (the tool itself rejects built-in writes).
   await run({ action: "read", path: "notes/user.txt" });
   await run({ action: "write", path: "assistant-docs/README.md" });
   assert.deepEqual(asked, []);
 
-  // Auto: overwriting or deleting a file the user had asks, and a denial stops the tool.
   answer = false;
   await assert.rejects(run({ action: "write", path: "notes/user.txt" }), /cancelled by user/);
   await assert.rejects(run({ action: "delete", path: "notes/user.txt" }), /cancelled by user/);
   assert.deepEqual(asked, ["Replace a file?", "Delete a file?"]);
   assert.ok(existing.has("notes/user.txt"));
 
-  // Confirm: new files and Pi's own files are also silent; user files still ask.
   mode = "safe";
   answer = true;
   await run({ action: "write", path: "out/new.csv" });
@@ -561,7 +557,6 @@ void test("stopping the turn withdraws a pending files consent request and the c
   const [gated] = await applyExperimentalToolGates([createTestTool("files", () => { ran = true; })], {
     getExecutionMode: () => Promise.resolve("safe"),
     inspectWorkspaceFile: () => Promise.resolve({ size: 5, readOnly: false }),
-    // Like the taskpane dialog: stays open until answered or withdrawn by the signal.
     requestLocalChangeApproval: (request) => new Promise<boolean>((resolve) => {
       request.signal?.addEventListener("abort", () => resolve(false), { once: true });
       markAsked();

@@ -1,11 +1,3 @@
-/**
- * Test-only fallback for import.meta.glob raw markdown loading.
- *
- * Browser/runtime builds use Vite's import.meta.glob transform.
- * Node test runs execute source directly, so register-test-ts-loader.mjs
- * injects a glob loader onto globalThis.
- */
-
 interface RawMarkdownGlobLoader {
   (pattern: string, importerUrl: string): Record<string, string>;
 }

@@ -1,11 +1,3 @@
-/**
- * Built-in integration catalog.
- *
- * Integrations bundle:
- * - additional system guidance
- * - one or more tools
- */
-
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 
 import { createMcpTool, type McpToolDependencies } from "../tools/mcp.js";
@@ -27,11 +19,8 @@ export interface IntegrationDefinition {
   id: IntegrationId;
   title: string;
   description: string;
-  /** Standards-based Agent Skill identity (agentskills.io). */
   agentSkillName?: string;
   warning?: string;
-  /** When true the integration is active for new sessions/workbooks that have
-   *  not been explicitly configured yet. */
   enabledByDefault?: boolean;
   toolNames: readonly string[];
   instructions: string;
@@ -114,7 +103,6 @@ export function buildIntegrationPromptEntries(integrationIds: readonly string[])
   return entries;
 }
 
-/** Integration IDs that are active for scopes that have never been configured. */
 export function getDefaultEnabledIntegrationIds(): string[] {
   return INTEGRATION_IDS.filter((id) => INTEGRATION_DEFINITIONS[id].enabledByDefault === true);
 }

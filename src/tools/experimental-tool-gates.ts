@@ -1,10 +1,3 @@
-/**
- * Public entrypoint for tool execution gates.
- *
- * This module intentionally re-exports split implementations to keep
- * imports stable while keeping each implementation file focused/smaller.
- */
-
 export {
   DEFAULT_PYTHON_BRIDGE_URL,
   DEFAULT_TMUX_BRIDGE_URL,

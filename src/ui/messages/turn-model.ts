@@ -1,15 +1,3 @@
-/**
- * The transcript as turns.
- *
- * A turn is a user message and everything the agent did in reply: one or
- * more assistant responses, their tool results, and the workbook-change
- * receipt. The transcript draws each turn as the lead (what the model said
- * before its first tool call), one <turn-group> holding every tool call and
- * the prose between them, then the answer (what it said after the last
- * call), so the record of what the agent did reads as one block no matter
- * how many responses it took.
- */
-
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent, ThinkingContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
@@ -21,7 +9,6 @@ import { thinkingKey } from "./transcript-state.js";
 
 export interface TurnToolStep {
   type: "tool";
-  /** Disclosure key for the row's drill-in. */
   key: string;
   toolCall: ToolCall;
   tool: AgentTool | undefined;
@@ -29,43 +16,35 @@ export interface TurnToolStep {
   state: ToolRowTense;
 }
 
-/** Prose or thinking between tool calls: what the model said before its next step. */
 export interface TurnNoteStep {
   type: "note";
   key: string;
   content: TextContent | ThinkingContent;
-  /** The block is still being streamed. */
   streaming: boolean;
 }
 
 export type TurnStep = TurnToolStep | TurnNoteStep;
 
 export interface TurnGroupModel {
-  /** Disclosure key for the group's open state; also the block key. */
   key: string;
   steps: TurnStep[];
   startedAt: number;
-  /** When the last step finished; null while the turn runs. */
   endedAt: number | null;
-  /** The answer has started, so the group collapses itself. */
   answerStarted: boolean;
   changes: TurnChangesMessage | null;
 }
 
 export type TranscriptBlock =
   | { type: "message"; key: string; message: Exclude<AgentMessage, AssistantMessage>; }
-  /** A response, or the slice of one around its tool calls, drawn as prose. */
   | { type: "response"; key: string; message: AssistantMessage; streaming: boolean; contentFrom: number; contentTo: number; }
   | { type: "turnGroup"; group: TurnGroupModel };
 
 export interface BuildTurnsOptions {
   messages: readonly AgentMessage[];
-  /** The response being streamed, not yet in `messages`. */
   streamingMessage: AssistantMessage | null;
   tools: readonly AgentTool[];
   results: ReadonlyMap<string, ToolResultMessage>;
   pendingToolCalls: ReadonlySet<string>;
-  /** The agent is working: calls without a result are running or about to. */
   running: boolean;
 }
 
@@ -76,11 +55,6 @@ interface Response {
   lastCall: number;
 }
 
-/**
- * Splits the transcript into blocks. Assistant responses that follow one
- * another without a user message in between form one turn; its tool calls
- * (across every response) make one group.
- */
 export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlock[] {
   const { messages, streamingMessage, tools, results, pendingToolCalls, running } = options;
   const blocks: TranscriptBlock[] = [];
@@ -92,13 +66,11 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
     const message = all[index];
     if (!message) break;
     if (message.role !== "assistant") {
-      // Tool results are drawn with their turn; artifacts are persistence-only.
       if (message.role !== "toolResult" && message.role !== "artifact") blocks.push({ type: "message", key: `msg:${index}`, message });
       index++;
       continue;
     }
 
-    // Context-only updates do not interrupt a turn; a receipt closes it.
     const responses: Response[] = [];
     let changes: TurnChangesMessage | null = null;
     let end = index;
@@ -120,7 +92,6 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
     }
 
     const draw = (response: Response, contentFrom: number, contentTo: number): void => {
-      // An empty tail is drawn only for the response's error or stop marker.
       const { stopReason } = response.message;
       if (contentFrom > 0 && contentFrom >= contentTo && stopReason !== "error" && stopReason !== "aborted") return;
       blocks.push({
@@ -143,13 +114,11 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
       continue;
     }
 
-    // Lead: everything before the first tool call.
     for (const response of responses) {
       if (response.index < firstTool.index) draw(response, 0, response.message.content.length);
     }
     if (firstTool.firstCall > 0) draw(firstTool, 0, firstTool.firstCall);
 
-    // Group: every tool call, and the prose between the first and the last.
     const steps: TurnStep[] = [];
     let endedAt = message.timestamp;
     let hasLiveTool = false;
@@ -197,7 +166,6 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
       }
       endedAt = Math.max(endedAt, assistant.timestamp);
     }
-    // Text after the last call starts the answer; thinking alone does not.
     const answerStarted = !hasLiveTool && responses.some((response) => response.index >= lastTool.index
       && response.message.content.slice(response.index === lastTool.index ? lastTool.lastCall + 1 : 0)
         .some((chunk) => chunk.type === "text" && chunk.text.trim() !== ""));

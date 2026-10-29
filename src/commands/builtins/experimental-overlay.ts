@@ -1,7 +1,3 @@
-/**
- * Experimental features section builder.
- */
-
 import {
   getExperimentalFeatureSnapshots,
   setExperimentalFeatureEnabled,
@@ -37,7 +33,6 @@ function buildFeatureRow(feature: ExperimentalFeatureSnapshot): HTMLElement {
     onChange: (checked) => {
       setExperimentalFeatureEnabled(feature.id, checked);
 
-      // Same wording as `/experimental on|off <feature>`.
       const suffix = feature.wiring === "flag-only"
         ? t("experimental.toast.flagSavedSuffix")
         : "";
@@ -121,8 +116,6 @@ export function buildExperimentalFeatureContent(): HTMLDivElement {
       features: experimentalFeatures,
     }));
   }
-
-  // Python bridge configuration is in Extensions → Connections → Bridges.
 
   if (advancedSecurityFeatures.length > 0) {
     content.appendChild(buildFeatureSection({

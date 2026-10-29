@@ -1,17 +1,6 @@
-/**
- * Keyboard shortcuts page.
- *
- * Shortcuts are grouped into logical sections and key notation adapts
- * to the current platform (macOS symbols vs Windows/Linux labels).
- */
-
 import { t } from "../../../language/index.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
 import { isMacPlatform } from "../../../utils/platform.js";
-
-// ---------------------------------------------------------------------------
-// Shortcut data
-// ---------------------------------------------------------------------------
 
 interface ShortcutEntry {
   mac: string;
@@ -24,7 +13,6 @@ interface ShortcutGroup {
   shortcuts: ShortcutEntry[];
 }
 
-/** Key that displays identically on both platforms. */
 function same(key: string, description: string): ShortcutEntry {
   return { mac: key, win: key, description };
 }
@@ -69,10 +57,6 @@ function getShortcutGroups(): readonly ShortcutGroup[] {
     },
   ];
 }
-
-// ---------------------------------------------------------------------------
-// Page
-// ---------------------------------------------------------------------------
 
 export function createShortcutsPage(): SettingsShellPage {
   return {

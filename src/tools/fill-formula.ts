@@ -1,12 +1,3 @@
-/**
- * fill_formula — Fill a single formula across a range with Excel's AutoFill.
- *
- * This avoids constructing large 2D formula arrays. References adjust automatically.
- * The fill is synced on its own and verified with bounded reads (see
- * `mutation/range-write.ts`), so a 200k-row fill reports what landed instead of
- * failing on the read-back after the change was applied.
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -78,7 +69,6 @@ function errorResult(text: string, details: FillFormulaDetails = { kind: "fill_f
 
 type RefusedFill = Extract<FillOutcome, { kind: "obstacle" | "occupied" | "too_large_to_back_up" }>;
 
-/** Input checks that refuse a fill before it touches the workbook. */
 function checkFillInput(params: Params): AgentToolResult<FillFormulaDetails> | null {
   if (!params.formula.startsWith("=")) {
     return errorResult("Error: formula must start with '='.");
@@ -93,7 +83,6 @@ function checkFillInput(params: Params): AgentToolResult<FillFormulaDetails> | n
   return null;
 }
 
-/** Why a fill is refused after inspecting its target, or null when it can go ahead. */
 function refusedFill(inspection: WriteTargetInspection, block: WriteBlock, allowOverwrite: boolean | undefined): RefusedFill | null {
   const obstacle = describeWriteObstacle(inspection, (address) => qualifiedAddress(inspection.sheetName, address));
   if (obstacle) return { kind: "obstacle", inspection, block, reason: obstacle };
@@ -144,9 +133,6 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
       "Relative references adjust automatically. Use this instead of building large formula arrays.",
     parameters: schema,
     reportsStop: true,
-    // Before approval (#794): refuse a fill that would be refused anyway, and
-    // otherwise name the non-empty cells an allowed overwrite replaces.
-    // Same inspection as execute.
     checkBeforeApproval: async (toolCallId, params) => {
       const inputError = checkFillInput(params);
       if (inputError) return { refused: inputError };
@@ -173,7 +159,6 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
           : { count: inspection.occupiedCount, sample: [] };
         return occupied ? { overwrites: occupied } : null;
       } catch {
-        // Let the call proceed to approval; it reports its own error when it runs.
         return null;
       }
     },
@@ -200,19 +185,11 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
           if (refused) return refused;
           if (signal?.aborted) return { kind: "stopped", inspection, block };
 
-          // Paste the top-left formula across the range, formulas only: the
-          // same relative references autofill produces, but each cell keeps
-          // its formats (autofill copied the top-left formats, which the
-          // backup cannot undo). One paste, not a per-cell formula grid:
-          // on the web a 50,000-row paste takes ~0.3 s, a grid times out
-          // after ~4,500 cells.
           const topLeft = range.getCell(0, 0);
           topLeft.formulas = [[params.formula]];
           if (block.rowCount > 1 || block.columnCount > 1) {
             range.copyFrom(topLeft, "Formulas");
           }
-          // Sync the fill on its own: a read-back in the same batch can exceed the
-          // response payload limit after Excel has already applied the fill.
           progress.fillInFlight = true;
           await context.sync();
           progress.fillInFlight = false;
@@ -234,7 +211,6 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
           }
         });
       } catch (error) {
-        // Snapshot before any await: an abandoned run (runMutation) may still finish its in-flight fill.
         const filled = progress.filled;
         const fillInFlight = progress.fillInFlight;
         const parsed = parseExcelError(error);
@@ -243,7 +219,6 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
           { range: params.range },
           !filled && !fillInFlight,
         );
-        // Excel never answered the fill batch (timeout, Stop, not an Excel error): it may have landed.
         const fillUnknown = fillInFlight && (parsed.outcomeUnknown || parsed.code === null);
         const inspection = progress.inspection;
         const address = inspection ? qualifiedAddress(inspection.sheetName, params.range) : params.range;
@@ -337,7 +312,6 @@ export function createFillFormulaTool(attribution: RecoveryAttribution = {}): Ag
               changedCount: toolResult.details.changes?.changedCount ?? 0,
               beforeValues: before.values,
               beforeFormulas: before.formulas,
-              // What the fill left, so a later restore can warn about edits made since (#794).
               ...(verification?.formulas ? { afterFormulas: verification.formulas } : {}),
             })
             : Promise.resolve(null),

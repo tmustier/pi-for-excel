@@ -18,23 +18,14 @@ const officeErrorSchema = Type.Object({
   debugInfo: Type.Optional(Type.Object({
     errorLocation: Type.Optional(Type.String()),
   })),
-  /** Set by `excelRun` when it gave up waiting for the user to leave cell-edit mode (#792). */
   waitedMs: Type.Optional(Type.Number()),
   earlierStepReachedExcel: Type.Optional(Type.Boolean()),
-  /** Set by an `excelRun` that gave up waiting for Excel to answer (timeout or Stop, #792). */
   outcomeUnknown: Type.Optional(Type.Boolean()),
 });
 
-/** Raw Office.js code while the user is typing in a cell. */
 const CELL_EDIT_MODE_CODE = "InvalidOperationInCellEditMode";
-/** Code of the error `excelRun` throws after waiting out cell-edit mode (#792). */
 const CELL_EDIT_MODE_WAITED_CODE = "excel_cell_edit_mode";
 
-/**
- * The one cell-edit-mode reason. Worded like `ExcelCellEditModeError` (#792)
- * minus its "what was applied" clause: each tool states what it changed itself,
- * because only the tool knows (write_cells knows which chunks landed).
- */
 export function cellEditModeReason(waitedMs = 0): string {
   const waited = waitedMs > 0 ? ` Waited ${Math.round(waitedMs / 1000)} s for the user to finish.` : "";
   return "Excel is in cell-edit mode: the user is typing in a cell, and Excel rejects every workbook request " +
@@ -42,19 +33,11 @@ export function cellEditModeReason(waitedMs = 0): string {
 }
 
 export interface ExcelFailure {
-  /** Office.js error code (`AccessDenied`, `ItemNotFound`, ...) when the host gave one. */
   code: string | null;
-  /** One or two sentences naming the cause and what to do next. */
   reason: string;
-  /**
-   * True when an earlier step of the failed call had already reached Excel, so
-   * part of the change may be in the workbook. Tools that cannot tell exactly
-   * what landed must not claim "nothing was changed" then.
-   */
   maybeApplied: boolean;
 }
 
-/** The clause a tool appends after its error heading: what it did not change, or that it may have. */
 export function unchangedClause(failure: ExcelFailure, unchanged: string): string {
   return failure.maybeApplied
     ? " — part of this change may already be in the workbook; check it before retrying"
@@ -62,9 +45,7 @@ export function unchangedClause(failure: ExcelFailure, unchanged: string): strin
 }
 
 export interface ExcelFailureTarget {
-  /** Sheet name the call targeted, when known. */
   sheet?: string;
-  /** Range or cell reference as the agent wrote it (may include the sheet). */
   range?: string;
 }
 
@@ -74,23 +55,15 @@ const PAYLOAD_LIMIT_CODES = new Set([
   "PayloadTooLarge",
 ]);
 
-/** A caught Office.js failure, parsed at the catch seam. */
 export interface ExcelErrorInfo {
   code: string | null;
-  /** `debugInfo.errorLocation`, e.g. "WorksheetCollection.getItem". */
   location: string;
   message: string;
   waitedMs: number;
   earlierStepReachedExcel: boolean;
-  /**
-   * The call gave up waiting for Excel (timeout or Stop) without Excel
-   * confirming or refusing the batch in flight, so its change may or may not
-   * be in the workbook. Set from the error's own `outcomeUnknown` flag.
-   */
   outcomeUnknown: boolean;
 }
 
-/** Parse a caught value (the `catch` seam) into the fields Office.js errors carry. */
 export function parseExcelError(error: unknown): ExcelErrorInfo {
   const message = getErrorMessage(error);
   if (!Value.Check(officeErrorSchema, error)) {
@@ -115,7 +88,6 @@ async function describeProtection(sheetName: string | undefined): Promise<string
       sheet.load("name");
       sheet.protection.load("protected");
       context.workbook.protection.load("protected");
-      // Without a named target (e.g. execute_office_js), the change may have hit any sheet.
       const sheets = sheetName ? null : context.workbook.worksheets;
       sheets?.load("items/name,items/protection/protected");
       await context.sync();
@@ -143,11 +115,9 @@ async function describeProtection(sheetName: string | undefined): Promise<string
   }
 }
 
-/** Describe why an Excel call failed. Never throws; probes are best-effort. */
 export async function describeExcelFailure(
   error: ExcelErrorInfo,
   target: ExcelFailureTarget = {},
-  /** True when the tool knows no write had been sent yet (it failed while reading the target). */
   nothingSent = false,
 ): Promise<ExcelFailure> {
   const { code, location, message } = error;
@@ -166,7 +136,6 @@ export async function describeExcelFailure(
   if (error.outcomeUnknown && nothingSent) {
     return {
       code,
-      // Not the raw timeout message: it says the outcome is unknown, which is not true here.
       reason: "Excel did not answer before the change was sent, so nothing was written. " +
         "Retry once Excel responds; if it keeps happening, ask the user to reload the Excel page.",
       maybeApplied: false,
@@ -209,7 +178,6 @@ export async function describeExcelFailure(
         return sheets.items.map((sheet) => sheet.name);
       });
     } catch {
-      // Listing sheets is best-effort; retain the original failure if Excel refuses it.
     }
     const sheetLabel = sheetName ? `Sheet "${sheetName}"` : "The sheet";
     return {

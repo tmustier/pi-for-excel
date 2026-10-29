@@ -1,7 +1,3 @@
-/**
- * Model providers page — connect/disconnect provider logins.
- */
-
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { t } from "../../../language/index.js";

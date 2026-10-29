@@ -13,12 +13,6 @@ export const DEFAULT_LOCAL_PROXY_URL = "https://localhost:3003";
 export const WPS_DEV_HOST_GATEWAY_PROXY_URL = "http://10.0.2.2:3003";
 export const PROXY_HELPER_COMMAND = "npx -y pi-for-excel-proxy@latest";
 
-/**
- * Resolve the build-time default proxy URL override (org/central deployments).
- * Falls back to the local proxy default unless the override is a valid
- * https:// URL — http would be blocked as mixed content in Office webviews,
- * so we refuse it here rather than baking in a broken default.
- */
 export function resolveDefaultProxyUrl(raw: unknown): string {
   if (typeof raw !== "string") return DEFAULT_LOCAL_PROXY_URL;
   const candidate = normalizeProxyUrl(raw);
@@ -30,7 +24,6 @@ export function resolveDefaultProxyUrl(raw: unknown): string {
   }
 
   try {
-    // Validate URL shape; result unused.
     new URL(candidate);
   } catch {
     console.warn(`[pi-for-excel] Ignoring VITE_PI_DEFAULT_PROXY_URL (not a valid URL): ${candidate}`);
@@ -40,28 +33,12 @@ export function resolveDefaultProxyUrl(raw: unknown): string {
   return candidate;
 }
 
-/**
- * Effective default proxy URL for this build. Equals DEFAULT_LOCAL_PROXY_URL
- * unless the build sets VITE_PI_DEFAULT_PROXY_URL (org/central deployments —
- * see docs/central-proxy.md).
- */
 export const DEFAULT_PROXY_URL = resolveDefaultProxyUrl(
   typeof import.meta.env === "undefined" ? undefined : import.meta.env.VITE_PI_DEFAULT_PROXY_URL,
 );
 
-/**
- * True when this build's default proxy is a remote (org/central) proxy.
- * UI copy uses this to swap local-helper instructions ("run npx pi-for-excel-proxy")
- * for org guidance ("contact IT / check settings").
- */
 export const DEFAULT_PROXY_IS_REMOTE = !isLoopbackProxyUrl(DEFAULT_PROXY_URL);
 
-/**
- * Target URL used for proxy reachability probes.
- *
- * Must stay inside scripts/cors-proxy-server.mjs DEFAULT_ALLOWED_TARGET_HOSTS,
- * otherwise the helper will return 403 and OAuth preflight checks will fail.
- */
 export const PROXY_REACHABILITY_TARGET_URL = "https://github.com";
 export const PROXY_HEALTH_HEADER = "x-pi-for-excel-proxy";
 export const CODEX_WEBSOCKET_BRIDGE_HEADER = "x-pi-for-excel-codex-websocket-bridge";
@@ -73,9 +50,6 @@ export function normalizeProxyUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
-/**
- * Resolve the runtime default proxy URL, including host-specific dev defaults.
- */
 export function resolveRuntimeDefaultProxyUrl(options?: {
   hostKind?: SpreadsheetHostKind;
   location?: Pick<Location, "hostname" | "protocol">;
@@ -92,19 +66,12 @@ export function resolveRuntimeDefaultProxyUrl(options?: {
   return DEFAULT_PROXY_URL;
 }
 
-/**
- * Resolve a user-configured proxy URL with sane defaults.
- */
 export function resolveConfiguredProxyUrl(rawUrl: unknown): string {
   const trimmed = typeof rawUrl === "string" ? rawUrl.trim() : "";
   const candidate = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
   return normalizeProxyUrl(candidate);
 }
 
-/**
- * Probe whether a proxy URL is reachable and can forward to the allowlisted
- * reachability target.
- */
 export async function probeCodexWebSocketBridge(
   proxyUrl: string,
   timeoutMs: number = 1500,
@@ -157,8 +124,6 @@ export function validateOfficeProxyUrl(url: string): string {
     throw new Error(t("proxy.error.invalid", { url, example: DEFAULT_PROXY_URL }));
   }
 
-  // Mixed content guardrail: HTTPS taskpane -> HTTP proxy.
-  // This tends to fail in Office webviews (macOS), so fail fast with guidance.
   if (typeof window !== "undefined" && window.location?.protocol === "https:" && parsed.protocol === "http:") {
     throw new Error(t("proxy.error.mixedContent", {
       url: normalized,
@@ -179,10 +144,6 @@ export function isLoopbackHostname(hostname: string): boolean {
   return false;
 }
 
-/**
- * Returns true if the proxy URL points at a loopback/localhost address.
- * Useful for warning users when they configure a remote proxy.
- */
 export function isLoopbackProxyUrl(url: string): boolean {
   const normalized = normalizeProxyUrl(url);
   try {

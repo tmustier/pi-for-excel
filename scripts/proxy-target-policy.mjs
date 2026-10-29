@@ -20,7 +20,6 @@ PRIVATE_LOCAL_IPV6.addSubnet("fe80::", 10, "ipv6");
 
 const IPV4_MAPPED_IPV6_RE = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i;
 
-/** Normalize host/hostname strings to a canonical comparison form. */
 export function normalizeHost(hostname) {
   if (typeof hostname !== "string") return "";
 
@@ -31,7 +30,6 @@ export function normalizeHost(hostname) {
     host = host.slice(1, -1);
   }
 
-  // Strip IPv6 zone index (e.g. fe80::1%lo0).
   const zoneIndex = host.indexOf("%");
   if (zoneIndex >= 0) {
     host = host.slice(0, zoneIndex);
@@ -56,7 +54,6 @@ function checkBlockList(list, ip) {
   return false;
 }
 
-/** Parse ALLOWED_TARGET_HOSTS env var into a normalized host set. */
 export function parseAllowedTargetHosts(raw) {
   if (typeof raw !== "string" || raw.trim().length === 0) {
     return new Set();
@@ -104,9 +101,6 @@ export function isLoopbackHostname(hostname) {
   return mapped !== null && checkBlockList(LOOPBACK_IPV4, mapped);
 }
 
-/**
- * True for loopback, RFC1918, and link-local addresses.
- */
 export function isPrivateOrLocalIp(ip) {
   const host = normalizeHost(ip);
   if (!host) return false;
@@ -118,11 +112,6 @@ export function isPrivateOrLocalIp(ip) {
   return mapped !== null && checkBlockList(PRIVATE_LOCAL_IPV4, mapped);
 }
 
-/**
- * Host allowlist check.
- * - Empty allowlist => allow all hosts.
- * - Non-empty allowlist => exact normalized host match.
- */
 export function isAllowedTargetHost(hostname, allowedHosts) {
   const host = normalizeHost(hostname);
   if (!host) return false;
@@ -134,9 +123,6 @@ export function isAllowedTargetHost(hostname, allowedHosts) {
   return allowedHosts.has(host);
 }
 
-/**
- * Hostname-only block decision (no DNS resolution context).
- */
 export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
   const {
     allowLoopbackTargets = false,
@@ -153,13 +139,6 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     return "blocked_target_loopback";
   }
 
-  // Legacy semantics (local, default-allowlist deployments): if loopback is
-  // explicitly allowed, do not re-block it under private/local checks or host
-  // allowlists. SECURITY: when the operator explicitly configured a target
-  // allowlist (requireAllowlistForOverriddenTargets), the allowlist still
-  // applies — otherwise ALLOW_LOOPBACK_TARGETS/ALLOW_PRIVATE_TARGETS on a
-  // shared central proxy would silently bypass ALLOWED_TARGET_HOSTS and open
-  // an SSRF path into the proxy's network.
   if (loopback && allowLoopbackTargets) {
     if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
       return "blocked_target_not_allowlisted";
@@ -172,8 +151,6 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     return "blocked_target_private_ip";
   }
 
-  // Same shape as the loopback override above: legacy pass-through unless an
-  // explicit allowlist is in force.
   if (allowPrivateTargets && privateOrLocalLiteral) {
     if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
       return "blocked_target_not_allowlisted";
@@ -188,10 +165,6 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
   return null;
 }
 
-/**
- * DNS-resolution-based block decision.
- * Resolved IPs should come from dns.lookup(host, { all: true }).
- */
 export function getBlockedTargetReasonForResolvedIps(resolvedIps, opts = {}) {
   const {
     allowLoopbackTargets = false,
@@ -223,9 +196,6 @@ export function getBlockedTargetReasonForResolvedIps(resolvedIps, opts = {}) {
   return null;
 }
 
-/**
- * Final target policy decision used by proxy server.
- */
 export function evaluateTargetHostPolicy(opts = {}) {
   const {
     hostname,
@@ -259,7 +229,6 @@ export function evaluateTargetHostPolicy(opts = {}) {
   return { allowed: true };
 }
 
-/** Backward-compatible convenience helper. */
 export function isBlockedTargetByHostname(hostname) {
   return getBlockedTargetReasonForHostname(hostname) !== null;
 }

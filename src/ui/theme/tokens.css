@@ -1,34 +1,14 @@
-/* ═══════════════════════════════════════════════════════
-   1. CSS VARIABLES — theme + component tokens
-   ═══════════════════════════════════════════════════════
-
-   Palette and rules: docs/proposals/sidebar-redesign.md §3.
-
-   Warm-tinted neutrals so the pane sits beside a white Excel canvas without
-   reading grey or blue. One accent (--accent-data, a bottle green) with one
-   rule: it marks cells Pi touched (done ticks, changed values, the receipt,
-   cell references under the pointer) and the one action that asks Pi to
-   touch them (Send). Amber for waiting on the user; red for failed. Nothing
-   else is coloured. All values are plain sRGB so older WebViews (WPS) render
-   the same palette without fallbacks.
-
-   Token names from the previous theme are kept so every consumer keeps
-   resolving; several are now aliases of the semantic set at the top of each
-   block. Glass tokens are inert (transparent shadows, no blur) until the
-   files that reference them are reworked.
-*/
 :root {
-  /* ── Semantic palette ───────────────────────────────── */
-  --surface-0: #faf9f7;   /* pane background */
-  --surface-1: #ffffff;   /* composer, popovers, groups, code */
-  --surface-2: #f1efeb;   /* user message, highlighted row, live row */
-  --line: #e6e3de;        /* hairlines */
-  --line-strong: #d3cfc8; /* input borders, outlined buttons */
+  --surface-0: #faf9f7;
+  --surface-1: #ffffff;
+  --surface-2: #f1efeb;
+  --line: #e6e3de;
+  --line-strong: #d3cfc8;
   --fg-1: #1c1b19;
   --fg-2: #55524d;
-  --fg-3: #6b6862;        /* tertiary text and icons; 4.6:1 on --surface-0 */
-  --accent-data: #155e4b;        /* 7.3:1 on --surface-0 */
-  --accent-data-strong: #0f4a3a; /* hover on green fills */
+  --fg-3: #6b6862;
+  --accent-data: #155e4b;
+  --accent-data-strong: #0f4a3a;
   --accent-data-foreground: #ffffff;
   --accent-data-soft: #e3efe9;
   --amber: #9a6b12;
@@ -37,14 +17,12 @@
   --red-soft: #f9ebe5;
   --selection: #d9e9e1;
 
-  /* ── Shadcn-style names used across components ──────── */
   --background: var(--surface-0);
   --foreground: var(--fg-1);
   --card: var(--surface-1);
   --card-foreground: var(--fg-1);
   --popover: var(--surface-1);
   --popover-foreground: var(--fg-1);
-  /* Primary actions are ink on paper, not brand green. */
   --primary: var(--fg-1);
   --primary-foreground: var(--surface-0);
   --secondary: var(--surface-2);
@@ -67,12 +45,11 @@
   --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
   --radius: 8px;
 
-  /* ── Scale tokens ───────────────────────────────────── */
-  --radius-xs: 3px;    /* inline code */
-  --radius-sm: 6px;    /* buttons, code blocks, chips, icon buttons */
-  --radius-md: 8px;    /* turn group, user message, search, toast */
-  --radius-lg: 10px;   /* composer, popovers */
-  --radius-xl: 10px;   /* sheets are flat; kept for overlay consumers */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 10px;
+  --radius-xl: 10px;
   --radius-full: 999px;
 
   --text-xs: 11px;
@@ -80,22 +57,18 @@
   --text-base: 13px;
   --text-md: 13.5px;
   --text-lg: 20px;
-  /* One headline per screen (workbook name, product name). */
   --text-display: 22px;
 
-  /* ── Layers (low → high). See src/ui/README.md "Layers". ── */
   --z-sticky: 20;
   --z-popover: 150;
   --z-overlay: 200;
   --z-toast: 1000;
 
-  /* Menus and popovers are opaque (HINTS-08). */
   --menu-surface: var(--surface-1);
 
   --duration-fast: 0.12s;
   --duration-normal: 0.18s;
 
-  /* ── Alpha ladders (neutral ink) ────────────────────── */
   --alpha-2: rgba(28, 27, 25, 0.02);
   --alpha-3: rgba(28, 27, 25, 0.03);
   --alpha-4: rgba(28, 27, 25, 0.04);
@@ -109,7 +82,6 @@
   --alpha-20: rgba(28, 27, 25, 0.20);
   --alpha-25: rgba(28, 27, 25, 0.25);
 
-  /* White alphas were specular highlights; now inert. */
   --white-alpha-20: transparent;
   --white-alpha-25: transparent;
   --white-alpha-35: transparent;
@@ -123,9 +95,6 @@
   --white-alpha-80: transparent;
   --white-alpha-90: transparent;
 
-  /* Green alphas were decorative tints on cards and chrome. They now resolve
-     to the neutral ladder so hover/active states stay visible but uncoloured.
-     The data accent is --pi-green. */
   --green-alpha-6: var(--alpha-4);
   --green-alpha-12: var(--alpha-6);
   --green-alpha-14: var(--alpha-8);
@@ -133,7 +102,6 @@
   --green-alpha-25: var(--alpha-12);
   --green-alpha-30: var(--alpha-15);
 
-  /* ── Our custom tokens ───────────────────────────────── */
   --pi-green: var(--accent-data);
   --pi-green-strong: var(--accent-data);
   --pi-green-light: var(--accent-data-soft);
@@ -156,7 +124,6 @@
   --pi-grid-line: transparent;
   --pi-surface-inset-shadow: none;
 
-  /* ── Pill tokens — bordered units in the transcript ── */
   --pill-radius: var(--radius-md);
   --pill-border-width: 1px;
   --pill-border: var(--pill-border-width) solid var(--line);
@@ -167,7 +134,6 @@
   --pill-padding-x: 12px;
   --pill-padding-y: 8px;
   --pill-text-indent: calc(var(--pill-border-width) + var(--pill-padding-x));
-  /* Completed tools are not tinted; errors keep a quiet red line. */
   --pill-green-border: var(--pill-border);
   --pill-green-bg: var(--surface-1);
   --pill-green-hover-border: var(--line-strong);
@@ -175,7 +141,6 @@
   --pill-red-bg: var(--surface-1);
   --pill-red-hover-border: #e0ae9a;
 
-  /* ── Glass tokens — inert ───────────────────────────── */
   --glass-blur: none;
   --glass-blur-dropdown: none;
   --glass-blur-heavy: none;
@@ -184,7 +149,6 @@
   --glass-highlight: 0 0 0 0 transparent;
   --glass-inner-shadow: 0 0 0 0 transparent;
   --glass-shadow: 0 0 0 0 transparent;
-  /* The one real shadow: popovers and dialogs. */
   --glass-shadow-lg: 0 6px 20px -6px rgba(0, 0, 0, 0.18);
   --glass-border: 1px solid var(--line-strong);
   --popover-shadow: var(--glass-shadow-lg);

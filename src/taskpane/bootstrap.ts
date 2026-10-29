@@ -1,12 +1,3 @@
-/**
- * Taskpane bootstrap.
- *
- * Runs immediately when the add-in loads:
- * - renders loading UI
- * - installs global fetch + UI monkey patches
- * - waits for Office.onReady (with fallback) and then initializes the app
- */
-
 import { render } from "lit";
 
 import { installFetchInterceptor } from "../auth/cors-proxy.js";
@@ -42,10 +33,8 @@ export function bootstrapTaskpane(): void {
   const loadingRoot = getRequiredElement("loading-root");
   const errorRoot = getRequiredElement("error-root");
 
-  // Initial loading UI
   render(renderLoading(), loadingRoot);
 
-  // Global patches
   installProcessEnvShim();
   installFetchInterceptor();
 
@@ -56,7 +45,6 @@ export function bootstrapTaskpane(): void {
     showFatalError(errorRoot, t("bootstrap.storageVersionChanged"));
   });
 
-  // Host bootstrap (Office/WPS/browser fallback for local dev)
   let initialized = false;
 
   const runInit = () => {
@@ -64,8 +52,6 @@ export function bootstrapTaskpane(): void {
 
     initialized = true;
 
-    // A slow start keeps going: the spinner says so, and success mounts the
-    // taskpane in its place. Only a real failure shows the fatal error.
     const slowInitTimer = setTimeout(() => {
       render(renderLoading(t("bootstrap.slowStart")), loadingRoot);
       console.warn("[pi] Taskpane initialization taking longer than expected (>12s)");

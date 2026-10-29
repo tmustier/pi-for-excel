@@ -1,7 +1,3 @@
-/**
- * Skill-related UI/runtime refresh events.
- */
-
 export const PI_SKILLS_CHANGED_EVENT = "pi:skills-changed";
 
 export interface SkillsChangedDetail {

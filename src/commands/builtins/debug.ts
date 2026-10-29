@@ -1,9 +1,3 @@
-/**
- * Debug helpers.
- *
- * Intentionally lightweight: this is for temporary instrumentation toggles.
- */
-
 import type { SlashCommand } from "../types.js";
 import { showToast } from "../../ui/toast.js";
 import { t } from "../../language/index.js";

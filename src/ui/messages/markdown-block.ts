@@ -1,24 +1,3 @@
-/**
- * <markdown-block> — first-party markdown renderer.
- *
- * Replaces @mariozechner/mini-lit's MarkdownBlock (docs/ui-ownership.md),
- * keeping the same tag name, light DOM, and input-hardening behavior:
- * - raw HTML tags in the input are escaped (code spans/fences preserved)
- * - links open in new tabs with rel="noopener noreferrer"
- * - tables get an overflow wrapper
- * - fenced code becomes <code-block> elements (code passed base64-encoded
- *   because it travels through an HTML attribute)
- *
- * Intentionally dropped vs mini-lit: KaTeX math extensions. They were already
- * disabled by src/compat/marked-safety-policy.ts (currency `$` collisions), so
- * this only removes dead weight from the bundle.
- *
- * SECURITY: installMarkedSafetyPatch() (src/compat/marked-safety.ts) patches
- * marked.Renderer.prototype at boot — blocking javascript:/data: links and
- * markdown image network requests. Because we construct `new marked.Renderer()`
- * per render and wrap its (patched) methods, those protections apply here.
- */
-
 import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
@@ -32,10 +11,6 @@ import { copyText } from "../copy-text.js";
 import { t } from "../../language/index.js";
 import { showToast } from "../toast.js";
 
-/**
- * Escape raw HTML tags while preserving markdown syntax.
- * Code fences and inline code spans are protected via placeholders.
- */
 function escapeRawHtml(content: string): string {
   const codeBlocks: string[] = [];
   let preserved = content.replace(/```[\s\S]*?```|`[^`\n]+`/g, (match) => {
@@ -45,13 +20,9 @@ function escapeRawHtml(content: string): string {
   });
 
   preserved = preserved
-    // Opening tags like <script>, <div>, etc.
     .replace(/<(\w+)([^>]*)>/g, "&lt;$1$2&gt;")
-    // Closing tags like </script>, </div>, etc.
     .replace(/<\/(\w+)>/g, "&lt;/$1&gt;")
-    // Self-closing tags like <img />, <br/>
     .replace(/<(\w+)([^>]*)\s*\/>/g, "&lt;$1$2/&gt;")
-    // Any remaining < that might be part of HTML
     .replace(/<(?![^\s])/g, "&lt;");
 
   codeBlocks.forEach((block, index) => {
@@ -68,17 +39,14 @@ function unescapeHtmlEntities(code: string): string {
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&#x27;/g, "'")
-    .replace(/&amp;/g, "&"); // Must be last to avoid double-unescaping.
+    .replace(/&amp;/g, "&");
 }
 
 function codeBlockElement(language: string, code: string): string {
-  // Base64 keeps arbitrary code safe inside an HTML attribute; <code-block>
-  // decodes it when encoding="base64" is set.
   const encoded = encodeBase64Utf8(unescapeHtmlEntities(code));
   return `<div class="pi-md-code"><code-block language="${escapeAttr(language)}" encoding="base64" code="${encoded}"></code-block></div>`;
 }
 
-/** Rendered answer text, with real cell separators rather than Markdown pipes. */
 export function markdownText(node: Node): string {
   if (node instanceof Text) return node.data;
   if (!(node instanceof Element)) return "";
@@ -99,7 +67,6 @@ export class MarkdownBlock extends LitElement {
   @property() content = "";
   @property({ type: Boolean }) isThinking = false;
   @property({ type: Boolean }) escapeHtml = true;
-  /** Only completed assistant prose gets workbook links and table actions. */
   @property({ type: Boolean }) answer = false;
 
   protected override updated(): void {
@@ -121,7 +88,6 @@ export class MarkdownBlock extends LitElement {
 
     const container = this.querySelector(".pi-markdown");
     if (!container || typeof Excel === "undefined") return;
-    // One metadata read per completed text block, never per token/reference.
     void excelRun(async (ctx) => {
       const sheets = ctx.workbook.worksheets;
       sheets.load("items/name");
@@ -139,7 +105,6 @@ export class MarkdownBlock extends LitElement {
         const text = node.data;
         const fragment = document.createDocumentFragment();
         let end = 0;
-        // Qualified references only: bare Q3/FY24 can be ordinary prose.
         const refs = /(?<![\p{L}\p{N}_!'\[\]])('(?:[^'\n]|'')+'|[\p{L}_][\p{L}\p{N}_.]*)!(\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6})(?::(\$?[A-Za-z]{1,3}\$?[1-9]\d{0,6}))?(?![\p{L}\p{N}_:])/gu;
         for (const match of text.matchAll(refs)) {
           const [address, sheet, start, finish] = match;
@@ -170,7 +135,7 @@ export class MarkdownBlock extends LitElement {
           node.replaceWith(fragment);
         }
       }
-    }).catch(() => { /* Workbook metadata unavailable: keep readable plain text. */ });
+    }).catch(() => {});
   }
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
@@ -179,12 +144,6 @@ export class MarkdownBlock extends LitElement {
 
   override connectedCallback(): void {
     super.connectedCallback();
-    // NOTE: deliberately NOT carrying mini-lit's legacy `markdown-content`
-    // class — when pi-web-ui's app.css was still loaded, it styled that class
-    // with higher-specificity typography rules that fought our sidebar scale
-    // (e.g. `.markdown-content h2` resolving a 40px display token). All
-    // typography lives under `markdown-block …` selectors in theme/content
-    // CSS instead.
     this.style.display = "block";
   }
 
@@ -195,9 +154,6 @@ export class MarkdownBlock extends LitElement {
 
     const source = this.escapeHtml ? escapeRawHtml(this.content) : this.content;
 
-    // Per-render renderer instance. Its prototype methods were hardened at
-    // boot by installMarkedSafetyPatch(), so wrapping them here keeps the
-    // link/image protections.
     const renderer = new marked.Renderer();
 
     const originalLink = renderer.link.bind(renderer);
@@ -208,12 +164,8 @@ export class MarkdownBlock extends LitElement {
     renderer.table = (token) =>
       `<div class="pi-md-table-wrap">${originalTable(token)}</div>`;
 
-    // `breaks`: a single newline is a line break, as people type in chat.
     const parsed = marked.parse(source, { async: false, renderer, breaks: true });
 
-    // Swap <pre><code> blocks for our <code-block> component. The language
-    // is whatever marked put in the class (already entity-escaped), so
-    // labels such as c++, f# and objective-c keep their code bar.
     let content = parsed.replace(
       /<pre><code class="language-([^"]+)">([\s\S]+?)<\/code><\/pre>/g,
       (_match, language: string, code: string) => codeBlockElement(unescapeHtmlEntities(language), code),

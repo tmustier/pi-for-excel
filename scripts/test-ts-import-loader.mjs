@@ -1,14 +1,3 @@
-/**
- * Test-time ESM resolver for Node's --experimental-strip-types runner.
- *
- * Source files use explicit ".js" import specifiers (for browser/bundler output),
- * while tests execute TypeScript sources directly. This loader retries relative
- * ".js" specifiers as ".ts" so node --test can resolve source modules.
- *
- * It also supports Vite-style `?raw` text imports for local markdown files used
- * by bundled docs/skills catalogs.
- */
-
 import { readFile } from "node:fs/promises";
 
 function hasCode(error) {

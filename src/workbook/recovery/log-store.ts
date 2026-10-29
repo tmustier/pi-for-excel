@@ -1,4 +1,3 @@
-/** Indexed metadata and immutable gzip Blobs. No archive-wide payload reads. */
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import { IndexedDBStorageBackend } from "../../storage/local/indexeddb-storage-backend.js";
@@ -74,7 +73,6 @@ async function accounting(tx: IDBTransaction): Promise<Accounting> {
 
 function withSize(entry: RecoveryMetadata, payloadBytes: number): RecoveryMetadata {
   const next = { ...entry, sizeBytes: 0 };
-  // Include the decimal byte count's own digits in the logical metadata size.
   for (;;) {
     const sizeBytes = payloadBytes + new Blob([JSON.stringify(next)]).size;
     if (sizeBytes === next.sizeBytes) return next;
@@ -100,7 +98,6 @@ async function encode(snapshot: WorkbookRecoverySnapshot): Promise<{ entry: Reco
   return { entry: withSize(snapshotMetadata(snapshot), blob.size), blob };
 }
 
-/** A transaction-local cursor; callbacks may queue IDB work, never compression/host work. */
 function walk(
   index: IDBIndex, range: IDBKeyRange | null, direction: IDBCursorDirection,
   visit: (entry: RecoveryMetadata, cursor: IDBCursorWithValue) => boolean,
@@ -127,12 +124,6 @@ export class RecoveryStore {
     this.budget = budget;
   }
 
-  /**
-   * Schema upgrade only creates empty stores. Copy afterwards, so quota failure
-   * cannot prevent sessions/settings opening. Compression must run outside the
-   * IDB transaction. The final transaction checks the winner/source, then copies,
-   * marks and deletes legacy atomically. Old panes close on versionchange.
-   */
   async migrate(): Promise<void> {
     if (Value.Check(Type.Literal(true), await this.backend.get(STATE, "migrated"))) return;
     const raw: unknown = await this.backend.get("settings", RECOVERY_SETTING_KEY);
@@ -168,7 +159,6 @@ export class RecoveryStore {
     });
   }
 
-  /** Read-only fallback leaves legacy backups usable after a failed migration. */
   private async legacy(): Promise<WorkbookRecoverySnapshot[] | null> {
     try { await this.migrate(); return null; }
     catch (error) {
@@ -184,7 +174,6 @@ export class RecoveryStore {
     if (entry.sizeBytes > this.budget) throw new Error("Too large to back up: compressed backup exceeds the storage ceiling.");
     await this.backend.indexedTransaction(STORES, "readwrite", async (tx) => {
       const state = await accounting(tx);
-      // add, never put: duplicate ids must not replace an existing checkpoint.
       tx.objectStore(META).add(entry);
       tx.objectStore(PAYLOAD).add(blob, entry.id);
       let bytes = state.bytes + entry.sizeBytes;
@@ -261,7 +250,6 @@ export class RecoveryStore {
     const raw: unknown = JSON.parse(text);
     const snapshot = parsePersistedSnapshots(raw, { maxEntries: 1 })[0];
     if (!snapshot || snapshot.id !== id) throw new Error("Invalid backup payload.");
-    // Identity lives in metadata: Save As never rewrites the immutable payload.
     return { ...snapshot, workbookId: record.entry.workbookId,
       ...(record.entry.workbookLabel === undefined ? {} : { workbookLabel: record.entry.workbookLabel }) };
   }

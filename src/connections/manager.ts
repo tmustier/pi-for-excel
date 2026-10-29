@@ -416,7 +416,6 @@ export class ConnectionManager {
     }
   }
 
-  /** Deletes stored status and secrets for matching connections, whether or not they are registered. */
   async deleteStoredRecords(shouldDelete: (connectionId: string) => boolean): Promise<void> {
     const items = await loadConnectionStoreDocumentForUpdate(this.settings);
     const doomed = Object.keys(items).filter(shouldDelete);
@@ -438,16 +437,12 @@ export class ConnectionManager {
     return Array.from(this.definitions.keys()).sort((left, right) => left.localeCompare(right));
   }
 
-  // ── Host-facing APIs (trusted UI surface) ──────────
-
-  /** Returns the full definition for a registered connection, or null. */
   getDefinition(connectionId: string): ConnectionDefinition | null {
     const definition = this.definitions.get(normalizeConnectionId(connectionId));
     if (!definition) return null;
     return toPublicConnectionDefinition(definition);
   }
 
-  /** Returns all registered definitions, sorted by title. */
   listDefinitions(): ConnectionDefinition[] {
     const results: ConnectionDefinition[] = [];
     for (const definition of this.definitions.values()) {
@@ -457,10 +452,6 @@ export class ConnectionManager {
     return results;
   }
 
-  /**
-   * Returns presence flags for each secret field (true = stored, false = absent).
-   * Never exposes raw secret values to the UI.
-   */
   async getSecretFieldPresence(connectionId: string): Promise<Record<string, boolean>> {
     const definition = this.getRequiredDefinition(connectionId);
     const items = await loadConnectionStoreDocument(this.settings);
@@ -475,10 +466,6 @@ export class ConnectionManager {
     return presence;
   }
 
-  /**
-   * Redacts stored secret values for a registered connection from a message.
-   * Useful for tool/runtime error surfaces that must never leak credentials.
-   */
   async redactMessageForConnection(connectionId: string, message: string): Promise<string> {
     const definition = this.getRequiredDefinition(connectionId);
     const normalizedMessage = normalizeNonEmpty(message, "message");
@@ -488,11 +475,6 @@ export class ConnectionManager {
     return redactSecretsInMessage(normalizedMessage, record?.secrets);
   }
 
-  /**
-   * Merge-patch secrets from the host UI (bypasses owner check).
-   * Only non-empty values are merged; empty strings are ignored.
-   * Clears error/invalid status on save (optimistic recovery).
-   */
   async updateSecretsFromHost(connectionId: string, partialSecrets: Record<string, string>): Promise<void> {
     const definition = this.getRequiredDefinition(connectionId);
     const patch = normalizeSecrets(partialSecrets);
@@ -525,9 +507,6 @@ export class ConnectionManager {
     }
   }
 
-  /**
-   * Clear all secrets for a connection from the host UI (bypasses owner check).
-   */
   async clearSecretsFromHost(connectionId: string): Promise<void> {
     const definition = this.getRequiredDefinition(connectionId);
 

@@ -1,20 +1,3 @@
-/**
- * Pi for Excel — Chat input component.
- *
- * A clean card with auto-growing textarea and embedded send/abort button.
- * Purpose-built for a narrow sidebar. Replaces pi-web-ui's MessageEditor.
- *
- * Events:
- *   'pi-send'        → detail: { text: string; followUp: boolean } — Enter and the
- *                      send button both submit through this one event; the
- *                      host decides what the text becomes (command, steer,
- *                      follow-up, queued or sent) and clears the composer
- *   'input'          → the draft changed (typing or programmatic)
- *   'pi-abort'       → (no detail)
- *   'pi-files-drop'  → detail: { files: File[] }
- *   'pi-open-files'  → (no detail)
- */
-
 import { html, LitElement } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, state, query } from "lit/decorators.js";
@@ -40,7 +23,6 @@ function getPlaceholderHintKey(index: number): string {
 export class PiInput extends LitElement {
   @property({ attribute: false }) attachments: readonly string[] = [];
   @property({ type: Boolean }) isStreaming = false;
-  /** The tab is busy (responding, compacting or waiting to retry). */
   @property({ type: Boolean }) busy = false;
   @property({ type: Boolean }) stopping = false;
 
@@ -50,7 +32,6 @@ export class PiInput extends LitElement {
   @query("textarea") private _textarea!: HTMLTextAreaElement;
 
   private _placeholderTimer: ReturnType<typeof setInterval> | undefined;
-  /** Bumped when another tab's draft is shown; renders a fresh textarea. */
   private _draftOwner = 0;
 
   get value(): string { return this._value; }
@@ -66,11 +47,6 @@ export class PiInput extends LitElement {
 
   getTextarea(): HTMLTextAreaElement { return this._textarea; }
 
-  /**
-   * Shows another tab's draft. The browser keeps one undo history per
-   * textarea, so the draft goes into a fresh textarea: Ctrl/Cmd+Z then never
-   * replays typing from the tab shown before.
-   */
   loadDraft(text: string): void {
     const hadFocus = this._textarea !== null && document.activeElement === this._textarea;
     this._draftOwner += 1;
@@ -89,7 +65,6 @@ export class PiInput extends LitElement {
     this.value = "";
   }
 
-  /** Submits the draft exactly as Enter would. */
   submit(opts?: { followUp?: boolean }): void {
     this._send(opts?.followUp === true);
   }
@@ -126,7 +101,6 @@ export class PiInput extends LitElement {
     this.dispatchEvent(new Event("input", { bubbles: true }));
   };
 
-  // Escape (stop) is handled once, by the taskpane's keyboard shortcuts.
   private _onKeydown = (e: KeyboardEvent) => {
     if (!isSubmitKey(e)) return;
     e.preventDefault();
@@ -204,10 +178,6 @@ export class PiInput extends LitElement {
   private _autoGrow() {
     const ta = this._textarea;
     if (!ta) return;
-    // Measuring needs `height: auto`, which collapses the textarea for a
-    // moment. Holding the card at its current height keeps that collapse out
-    // of the pane's layout; otherwise the transcript above grows, the browser
-    // clamps its scroll position, and that jump reads as the user scrolling up.
     const card = ta.closest<HTMLElement>(".pi-input-card");
     if (card) card.style.minHeight = `${card.offsetHeight}px`;
     ta.style.height = "auto";
@@ -230,9 +200,8 @@ export class PiInput extends LitElement {
 
   override connectedCallback() {
     super.connectedCallback();
-    // Rotate placeholder hints every 8s (mostly default, occasionally slash hint)
     this._placeholderTimer = setInterval(() => {
-      if (this.isStreaming || this._value) return; // don't rotate while typing or streaming
+      if (this.isStreaming || this._value) return;
       this._placeholderIndex = (this._placeholderIndex + 1) % PLACEHOLDER_HINT_KEYS.length;
     }, 8000);
   }

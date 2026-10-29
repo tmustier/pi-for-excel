@@ -1,10 +1,3 @@
-/**
- * Experimental feature flags.
- *
- * These flags are local-only toggles for in-progress capabilities and rollout
- * controls. Most are opt-in; some can be default-on with a persisted override.
- */
-
 import { t } from "../language/index.js";
 import { ALLOW_REMOTE_EXTENSION_URLS_STORAGE_KEY } from "../commands/extension-source-policy.js";
 import { dispatchExperimentalFeatureChanged } from "./events.js";
@@ -18,16 +11,13 @@ export type ExperimentalFeatureWiring = "wired" | "flag-only";
 
 export interface ExperimentalFeatureDefinition {
   id: ExperimentalFeatureId;
-  /** Slash-command token, e.g. `/experimental on remote-extension-urls` */
   slug: string;
-  /** Alternate tokens accepted by the resolver. */
   aliases: readonly string[];
   title: string;
   description: string;
   warning?: string;
   wiring: ExperimentalFeatureWiring;
   storageKey: string;
-  /** Used when no explicit value has been persisted yet. */
   defaultEnabled?: boolean;
 }
 
@@ -99,7 +89,6 @@ function safeSetItem(key: string, value: string): void {
     if (typeof localStorage === "undefined") return;
     localStorage.setItem(key, value);
   } catch {
-    // ignore (private mode / disabled storage)
   }
 }
 

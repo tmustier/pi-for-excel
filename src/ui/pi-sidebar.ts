@@ -1,11 +1,3 @@
-/**
- * Pi for Excel — Sidebar layout component.
- *
- * Replaces pi-web-ui's ChatPanel + AgentInterface with a purpose-built
- * layout for the ~350px Excel sidebar. Uses the first-party transcript
- * components (message-list, turn-group) for rendering.
- */
-
 import { html, LitElement, nothing, type PropertyValues } from "lit";
 import { icon } from "./icons.js";
 import { customElement, property, query, state } from "lit/decorators.js";
@@ -45,7 +37,6 @@ const liveJsonValueSchema = Type.Cyclic({
   ]),
 }, "JsonValue");
 
-/** The `result` of a tool_execution_end event, as far as a tool card reads it. */
 const liveToolResultSchema = Type.Object({
   content: Type.Optional(Type.Array(Type.Union([
     Type.Object({ type: Type.Literal("text"), text: Type.String() }),
@@ -59,9 +50,7 @@ function hasRenderableMessages(messages: readonly AgentMessage[]): boolean {
 }
 
 export interface EmptyHint {
-  /** Short text shown on the button. */
   label: string;
-  /** Full prompt sent when the button is clicked. */
   prompt: string;
 }
 
@@ -73,7 +62,6 @@ export interface SessionTabView {
   isActive: boolean;
   isBusy: boolean;
   lockState: SessionTabLockState;
-  /** Run ended in this background tab while the user was elsewhere. */
   attention: "none" | "finished" | "failed";
 }
 
@@ -135,15 +123,9 @@ function formatPrefixChange(reasons: readonly string[]): string {
 const AUTO_SCROLL_DISENGAGE_PX = 32;
 const AUTO_SCROLL_REENGAGE_PX = 20;
 
-/**
- * Inner-scroller hysteresis — same idea as the outer constants above.
- * A per-element scroll listener marks the pane as "detached" when the user
- * scrolls up past the disengage threshold, and clears it near the bottom.
- */
 const INNER_SCROLL_DISENGAGE_PX = AUTO_SCROLL_DISENGAGE_PX;
 const INNER_SCROLL_REENGAGE_PX = AUTO_SCROLL_REENGAGE_PX;
 
-/** Inner scrollable areas inside the streaming message: the thinking body (max-height 300 px). */
 const INNER_SCROLLABLE_SELECTOR = "thinking-block markdown-block";
 
 @customElement("pi-sidebar")
@@ -151,7 +133,6 @@ export class PiSidebar extends LitElement {
   @property({ type: Boolean }) subscriptionWarning = false;
   @property({ attribute: false }) agent?: Agent;
   @property({ attribute: false }) emptyHints: EmptyHint[] = [];
-  /** Handles a submitted draft; returns true when the composer should clear. */
   @property({ attribute: false }) onSend?: (text: string, opts: { followUp: boolean }) => boolean;
   @property({ attribute: false }) onAbort?: () => void;
   @property({ attribute: false }) sessionTabs: SessionTabView[] = [];
@@ -171,7 +152,6 @@ export class PiSidebar extends LitElement {
   @property({ attribute: false }) onOpenResumePicker?: () => void;
   @property({ attribute: false }) onOpenRecovery?: () => void;
   @property({ attribute: false }) onOpenShortcuts?: () => void;
-  /** The active tab is busy (responding, compacting or waiting to retry). */
   @property({ attribute: false }) tabBusy = false;
   @property({ attribute: false }) turnError: string | null = null;
 
@@ -197,13 +177,7 @@ export class PiSidebar extends LitElement {
   @query(".pi-session-tabs__scroller") private _tabsScroller?: HTMLElement;
 
   private _unsubscribe: (() => void) | undefined;
-  /** Results of tools that finished before their batch did (see MessageList.liveToolResults). */
   private _liveToolResults = new Map<string, ToolResultMessage>();
-  /**
-   * The response being streamed, drawn by <message-list> as part of its
-   * turn. Updates batch per frame and clone the message so Lit sees new
-   * identities for nested state (tool call arguments grow in place).
-   */
   @state() private _streamingMessage: AssistantMessage | null = null;
   private _pendingStreamingMessage: AssistantMessage | null = null;
   private _streamingUpdateScheduled = false;
@@ -212,17 +186,11 @@ export class PiSidebar extends LitElement {
   private _resizeObserver: ResizeObserver | undefined;
   private _scrollContainerEl: HTMLElement | undefined;
   private _scrollListener: (() => void) | undefined;
-  /** rAF handle for the inner-container auto-scroll loop (thinking / tool blocks). */
   private _innerScrollRAF: number | undefined;
-  /** Inner elements we have snapped to bottom at least once. */
   private _innerScrollSeen = new WeakSet<HTMLElement>();
-  /** Inner elements the user has manually scrolled away from bottom. */
   private _innerScrollDetached = new WeakSet<HTMLElement>();
-  /** Per-element scroll listeners registered lazily during inner auto-scroll. */
   private _innerScrollListeners = new WeakMap<HTMLElement, () => void>();
-  /** Elements with a pending programmatic scroll — consumed by the next scroll event. */
   private _innerScrollProgrammaticPending = new WeakSet<HTMLElement>();
-  /** Previous value of `_isStreaming` so we can detect edges in `updated()`. */
   private _wasStreaming = false;
   private _utilitiesMenuClickHandler: ((event: MouseEvent) => void) | undefined;
   private _tabContextMenuClickHandler: ((event: MouseEvent) => void) | undefined;
@@ -286,7 +254,6 @@ export class PiSidebar extends LitElement {
     return false;
   }
 
-  /** Force re-sync from agent state (e.g. after replaceMessages). */
   syncFromAgent(): void {
     if (!this.agent) return;
     this._hasMessages = hasRenderableMessages(this.agent.state.messages);
@@ -294,20 +261,12 @@ export class PiSidebar extends LitElement {
     this.requestUpdate();
   }
 
-  /**
-   * Show the active tab's activity (compacting, waiting to retry) in the
-   * working indicator, also while Pi is responding. Pass `null` to clear.
-   */
   setBusyIndicator(label: string | null, hint?: string | null): void {
     this._busyLabel = label;
     this._busyHint = hint ?? null;
     this.requestUpdate();
   }
 
-  /**
-   * Show a host wait (e.g. Excel is in cell-edit mode) that overrides the
-   * working indicator even while a turn is streaming. Pass `null` to clear.
-   */
   setHostWaitIndicator(label: string | null, hint?: string | null): void {
     this._hostWaitLabel = label;
     this._hostWaitHint = hint ?? null;
@@ -373,11 +332,6 @@ export class PiSidebar extends LitElement {
     document.documentElement.style.setProperty("--pi-dock-height", `${Math.round(offset)}px`);
   };
 
-  /**
-   * Publish the dock's height so toasts sit just above it (see toasts.css).
-   * Runs after every render: the dock does not exist until an agent is bound,
-   * and it is re-created when the sidebar re-renders without one.
-   */
   private _observeDock(): void {
     const dock = this.querySelector<HTMLElement>(".pi-dock") ?? undefined;
     if (dock === this._observedDock || typeof ResizeObserver === "undefined") return;
@@ -395,10 +349,6 @@ export class PiSidebar extends LitElement {
     this._setupAutoScroll();
     this._observeDock();
     this._updateSessionTabOverflow();
-    // Reveal the active tab when it, its busy marker, or the tab count changes,
-    // never on other re-renders: the ‹ › arrows scroll the strip, and pulling
-    // it back would make earlier tabs unreachable. Showing an arrow resizes
-    // the scroller, so the reveal also re-runs on the render that follows.
     const activeTab = this.sessionTabs.find((tab) => tab.isActive);
     const revealKey = `${activeTab?.runtimeId ?? ""}:${this.sessionTabs.length}:${activeTab?.isBusy ?? false}`;
     const changedKeys: ReadonlyMap<PropertyKey, unknown> = changed;
@@ -419,13 +369,10 @@ export class PiSidebar extends LitElement {
       }
     }
     if (changed.has("subscriptionWarning") && this.subscriptionWarning) {
-      // A late switch to a subscription model must reveal the notice even
-      // when the conversation is already scrolled to its latest answer.
       requestAnimationFrame(() => this.querySelector(".pi-subscription-warning")?.scrollIntoView({ block: "nearest" }));
     }
   }
 
-  /** Clears at once; updates batch per frame. */
   private _setStreamingMessage(message: AssistantMessage | null): void {
     this._pendingStreamingMessage = message;
     if (message === null) {
@@ -440,16 +387,6 @@ export class PiSidebar extends LitElement {
     });
   }
 
-  /**
-   * One model of a streaming turn:
-   * - the response being streamed is passed to <message-list> as
-   *   `streamingMessage`, so its turn group draws the calls as they stream;
-   * - at message_end pi-agent-core has pushed the finished response into
-   *   state.messages, so the streaming copy is cleared in the same update and
-   *   the list draws it from `messages` from then on, its rows live until
-   *   each one's result arrives;
-   * - each row finishes at its own tool_execution_end.
-   */
   private _setupSubscription() {
     this._unsubscribe?.();
     this._liveToolResults = new Map();
@@ -493,8 +430,6 @@ export class PiSidebar extends LitElement {
           break;
         case "tool_execution_end": {
           if (agent.state.pendingToolCalls.size === 0) this._toolLabel = null;
-          // pi-agent-core types `result` as any. A shape we cannot read just
-          // waits for the batch's toolResult message, as before.
           const raw: unknown = ev.result;
           if (!Value.Check(liveToolResultSchema, raw)) break;
           this._liveToolResults = new Map(this._liveToolResults);
@@ -546,13 +481,6 @@ export class PiSidebar extends LitElement {
     this._scrollToBottom(this._scrollContainerEl);
   }
 
-  /* ── Inner auto-scroll (thinking / tool blocks) ────────── */
-
-  /**
-   * Start the rAF loop that keeps expanded thinking-block and tool-card
-   * inner scroll areas pinned to the bottom while the outer auto-follow
-   * is active.  Only runs while `_isStreaming` is true.
-   */
   private _startInnerAutoScroll(): void {
     if (this._innerScrollRAF !== undefined) return;
     const tick = (): void => {
@@ -567,18 +495,13 @@ export class PiSidebar extends LitElement {
       cancelAnimationFrame(this._innerScrollRAF);
       this._innerScrollRAF = undefined;
     }
-    // Reset per-stream follow state. Keep listener registry so we don't
-    // duplicate listeners if streaming toggles while the same pane stays mounted.
     this._innerScrollSeen = new WeakSet<HTMLElement>();
     this._innerScrollDetached = new WeakSet<HTMLElement>();
   }
 
-  /** Lazily attach a scroll listener that tracks user-initiated detach/re-engage. */
   private _ensureInnerScrollListener(el: HTMLElement): void {
     if (this._innerScrollListeners.has(el)) return;
     const onScroll = () => {
-      // Skip the scroll event fired by our programmatic el.scrollTop assignment.
-      // The flag is set per-element before the assignment and consumed here.
       if (this._innerScrollProgrammaticPending.has(el)) {
         this._innerScrollProgrammaticPending.delete(el);
         return;
@@ -595,19 +518,9 @@ export class PiSidebar extends LitElement {
     this._innerScrollListeners.set(el, onScroll);
   }
 
-  /**
-   * For each expanded inner-scrollable container inside the *streaming*
-   * message, pin it to the bottom — unless the user has manually scrolled
-   * away (tracked by a per-element scroll listener, not a distance guess).
-   */
   private _scrollStreamingInnerContainers(): void {
-    // Intentionally NOT gated on `this._autoScroll`. Inner containers
-    // (thinking blocks, tool cards) should auto-follow independently of
-    // whether the user has scrolled up in the outer chat. Each inner
-    // element has its own detach/re-engage tracking via _innerScrollDetached.
     if (!this._scrollContainerEl) return;
 
-    // The streamed response is the last message or turn group in the list.
     const streaming = this._scrollContainerEl.querySelector(
       ".pi-message-list > :last-child",
     );
@@ -620,11 +533,9 @@ export class PiSidebar extends LitElement {
     for (const el of containers) {
       this._ensureInnerScrollListener(el);
 
-      // Not scrollable yet — content still fits inside the viewport.
       if (el.scrollHeight <= el.clientHeight) continue;
 
       if (!this._innerScrollSeen.has(el)) {
-        // First overflow encounter (just expanded / content just exceeded cap).
         this._innerScrollProgrammaticPending.add(el);
         el.scrollTop = el.scrollHeight;
         this._innerScrollSeen.add(el);
@@ -632,16 +543,12 @@ export class PiSidebar extends LitElement {
         continue;
       }
 
-      // User scrolled up inside this pane — leave it alone.
       if (this._innerScrollDetached.has(el)) continue;
 
-      // Auto-follow — mark as programmatic so the scroll listener skips it.
       this._innerScrollProgrammaticPending.add(el);
       el.scrollTop = el.scrollHeight;
     }
   }
-
-  /* ── Outer auto-scroll ───────────────────────────────────── */
 
   private _setupAutoScroll() {
     const container = this._scrollContainer;
@@ -672,8 +579,6 @@ export class PiSidebar extends LitElement {
     this._scrollListener = () => {
       const top = container.scrollTop;
       const distFromBottom = container.scrollHeight - top - container.clientHeight;
-      // A pane that got shorter (the composer grew, a queue row appeared)
-      // moves the scroll position without the user scrolling; keep following.
       const resized = container.clientHeight !== lastClientHeight;
       lastClientHeight = container.clientHeight;
       if (resized) {
@@ -688,8 +593,6 @@ export class PiSidebar extends LitElement {
   }
 
   private _onSend = (e: CustomEvent<{ text: string; followUp: boolean }>) => {
-    // A new prompt brings the transcript back to its newest message; a steer or
-    // follow-up sent while Pi is busy leaves the user's scroll position alone.
     const startsTurn = !this.tabBusy && !this._isStreaming;
     if (this.onSend?.(e.detail.text, { followUp: e.detail.followUp })) {
       if (startsTurn) this._autoScroll = true;
@@ -793,7 +696,6 @@ export class PiSidebar extends LitElement {
     if (event instanceof MouseEvent && (event.clientX !== 0 || event.clientY !== 0)) {
       point = { x: event.clientX, y: event.clientY };
     } else if (event.currentTarget instanceof Element) {
-      // Keyboard (Shift+F10 / context-menu key): open under the tab.
       const rect = event.currentTarget.getBoundingClientRect();
       point = { x: rect.left, y: rect.bottom };
     }
@@ -865,8 +767,6 @@ export class PiSidebar extends LitElement {
     if (!agent) return html``;
     const state = agent.state;
 
-    // Derive from agent state directly — _hasMessages may lag behind after
-    // batch operations like replaceMessages() that don't fire per-message events.
     const hasMessages = this._hasMessages || hasRenderableMessages(state.messages);
 
     return html`
@@ -961,8 +861,6 @@ export class PiSidebar extends LitElement {
                     title=${tab.title}
                     aria-label=${[
                       t("sidebar.tabs.open", { title: tab.title }),
-                      // The button's label replaces its content, so the state
-                      // markers below must be named here too.
                       tab.isBusy
                         ? t("sidebar.tabs.busy")
                         : tab.attention === "failed"
@@ -1187,7 +1085,7 @@ export class PiSidebar extends LitElement {
     const ctx = getLastContext(sessionId);
     if (!ctx?.tools) return;
     const json = JSON.stringify(ctx.tools, null, 2);
-    navigator.clipboard.writeText(json).catch(() => { /* ignore */ });
+    navigator.clipboard.writeText(json).catch(() => {});
   }
 
   private _renderContextPill() {
@@ -1280,7 +1178,6 @@ export class PiSidebar extends LitElement {
       }),
     ].join("\n");
 
-    // Tools table
     const toolsTableMd = ctx?.tools
       ? [
           `| tool | description | schema |`,
@@ -1293,7 +1190,6 @@ export class PiSidebar extends LitElement {
         ].join("\n")
       : "*(tools were stripped on this call or context snapshot is unavailable)*";
 
-    // System prompt rendered as markdown (not in a code fence)
     const systemMd = ctx?.systemPrompt ?? "*(none captured for this call)*";
 
     const phaseLabel = latestSnapshot.isToolContinuation ? ` · ${t("sidebar.context_pill.continuation")}` : ` · ${t("sidebar.context_pill.first")}`;
@@ -1347,10 +1243,6 @@ export class PiSidebar extends LitElement {
     return `${collapsed.slice(0, 117)}…`;
   }
 
-  /**
-   * A starter hint is added to the end of the draft, never replacing it. It
-   * is inserted as an edit so Ctrl/Cmd+Z takes it back out.
-   */
   private _applyHintPrompt(prompt: string): void {
     const input = this._input;
     if (!input) {

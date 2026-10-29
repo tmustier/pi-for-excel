@@ -61,7 +61,6 @@ void test("answer and table copy use TSV and expose manual fallback without clai
 void test("only valid qualified references on known sheets become answer links, not code or ordinary links", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(async () => {
-      // Narrow external metadata/selection boundary; real Excel is tested separately.
       const context = {
         workbook: { worksheets: { items: [{ name: "Sheet1" }, { name: "Q3 Plan" }, { name: "Bob's" }], load: () => {} } },
         sync: () => Promise.resolve(),

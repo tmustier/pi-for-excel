@@ -1,26 +1,3 @@
-// One command from a fresh orb to Pi running in Excel on the web, with no
-// Microsoft sign-in. See docs/orb-excel-web.md.
-//
-//   node scripts/orb/excel-web-session.mjs [--workbook file.xlsx] [--check]
-//
-// 1. Starts the dev server and proxy (amp orb services ensure) and the Excel
-//    Chrome (scripts/orb/excel-web.sh) if its CDP port is not answering.
-// 2. Opens PI_EXCEL_WEB_FOLDER_LINK, an "Anyone with the link can edit"
-//    OneDrive folder link (an Amp project secret), as a signed-out guest.
-// 3. Uploads this orb's own copy of the workbook (default scripts/orb/blank.xlsx)
-//    into that folder, so parallel orbs never share a workbook.
-// 4. Opens it in Excel, uploads manifest.xml as a developer add-in, opens Pi.
-// 5. With --check, writes, reads back and clears Z1 through Office.js in the
-//    taskpane and prints host/platform.
-// 6. With --prompt "<text>", sends that message to Pi, waits for the turn to
-//    finish, and prints the tools it called and the end of its reply.
-//
-// Model login: if PI_EXCEL_WEB_AUTH_JSON (Amp project secret, pi's auth.json format) is
-// set and ~/.pi/agent/auth.json does not exist, it is written there; the dev
-// server serves it to the taskpane at /__pi-auth, so Pi starts logged in.
-//
-// Env: PI_EXCEL_WEB_CDP_PORT (default 9223), PI_EXCEL_WEB_PROFILE (Chrome
-// profile dir, passed through to excel-web.sh).
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -39,7 +16,7 @@ if (!folderLink) fail("PI_EXCEL_WEB_FOLDER_LINK is not set (Amp project secret; 
 const workbookFile = path.resolve(option("--workbook", path.join(repo, "scripts/orb/blank.xlsx")));
 const manifestFile = path.join(repo, "manifest.xml");
 const port = process.env.PI_EXCEL_WEB_CDP_PORT ?? "9223";
-const cdpBase = `http://127.0.0.1:${port}`; // not localhost: Node resolves it to ::1
+const cdpBase = `http://127.0.0.1:${port}`;
 const orbId = (process.env.AMP_THREAD_ID ?? os.hostname()).replace(/[^A-Za-z0-9-]/g, "").slice(-12);
 const stamp = new Date().toISOString().replace(/\D/g, "").slice(0, 14);
 const workbookName = `orb-${orbId}-${stamp}.xlsx`;
@@ -81,9 +58,6 @@ async function connect(webSocketDebuggerUrl) {
   };
 }
 
-// Evaluates a JS expression in every page/iframe target whose URL starts with
-// `prefix` (substring matching would also hit sign-in frames that carry these
-// URLs in their query string); returns the first non-null JSON-serializable result.
 async function evaluateIn(prefix, expression) {
   for (const target of await targets()) {
     if (!["page", "iframe"].includes(target.type) || !target.url.startsWith(prefix)) continue;
@@ -109,7 +83,6 @@ async function waitFor(what, check, timeoutMs = 60_000) {
       const value = await check();
       if (value) return value;
     } catch (error) {
-      // Frames come and go while Office loads; retry until the deadline.
       lastError = error instanceof Error ? error.message : String(error);
     }
     if (Date.now() > deadline) fail(`timed out waiting for ${what}${lastError ? ` (last error: ${lastError})` : ""}`);
@@ -117,8 +90,6 @@ async function waitFor(what, check, timeoutMs = 60_000) {
   }
 }
 
-// Office ribbon and dialogs live in cross-origin iframes that coordinate
-// clicks hit unreliably; click the element itself by aria-label, text or value.
 const clickExpression = (label) => `(() => {
   const els = [...document.querySelectorAll('button,[role=button],[role=menuitem],[role=tab],a,input[type=button],input[type=submit]')];
   const el = els.find((e) => e.getAttribute('aria-label') === ${JSON.stringify(label)})
@@ -129,8 +100,6 @@ const clickExpression = (label) => `(() => {
 })()`;
 const click = (match, label, timeoutMs) => waitFor(`"${label}"`, () => evaluateIn(match, clickExpression(label)), timeoutMs);
 
-// Excel may ask to enable Developer Mode before accepting a developer add-in.
-// Its checkbox can render ticked while unchecked, so set it explicitly.
 async function acceptDeveloperMode() {
   const accepted = await evaluateIn(EXCEL_FRAME, `(() => {
     const box = [...document.querySelectorAll('input[type=checkbox]')].find((b) => /Developer Mode/i.test(b.closest('label, div')?.textContent ?? ''));
@@ -143,8 +112,6 @@ async function acceptDeveloperMode() {
     log("Accepted the Developer Mode prompt");
   }
 }
-
-// --- 1. Model login, services and Chrome ------------------------------------
 
 const authFile = path.join(os.homedir(), ".pi/agent/auth.json");
 if (process.env.PI_EXCEL_WEB_AUTH_JSON?.trim() && !fs.existsSync(authFile)) {
@@ -160,7 +127,6 @@ const cdpUp = () => fetch(`${cdpBase}/json/version`).then((r) => r.ok, () => fal
 if (!(await cdpUp())) {
   const service = port === "9223" ? "excel-web" : `excel-web-${port}`;
   log(`Starting Chrome (${service}, CDP ${port})`);
-  // Supervised services do not inherit this process's environment.
   const passThrough = ["PI_EXCEL_WEB_CDP_PORT", "PI_EXCEL_WEB_PROFILE", "PI_EXCEL_WEB_HEADLESS"]
     .filter((name) => process.env[name])
     .map((name) => `${name}='${process.env[name].replace(/'/g, "")}'`);
@@ -169,8 +135,6 @@ if (!(await cdpUp())) {
   await waitFor("Chrome CDP", cdpUp, 30_000);
 }
 
-// A rerun in the same orb reuses the workbook whose Pi taskpane is already
-// open instead of uploading another file to the shared folder.
 const reused = (await targets()).some((t) => t.url.startsWith(TASKPANE))
   ? (await targets()).find((t) => t.type === "page" && t.url.includes("/_layouts/15/Doc.aspx"))
   : undefined;
@@ -178,8 +142,6 @@ if (reused) log("Pi is already open; reusing its workbook");
 const workbookUrl = reused ? reused.url : await openNewSession();
 
 async function openNewSession() {
-// --- 2. Folder as guest -----------------------------------------------------
-
 const pageTarget = (await targets()).find((t) => t.type === "page");
 if (!pageTarget) fail("no page target in Chrome");
 const page = await connect(pageTarget.webSocketDebuggerUrl);
@@ -190,13 +152,10 @@ log("Opening the shared folder");
 await navigate(folderLink);
 const folderUrl = await waitFor("the OneDrive folder", async () => {
   const href = await pageUrl();
-  // Redirects pass through ?id=<resource id>; wait for the path form.
   return href.startsWith(ONEDRIVE) && new URL(href).searchParams.get("id")?.startsWith("/") ? href : null;
 });
-const folderPath = new URL(folderUrl).searchParams.get("id"); // /personal/<cid>/Documents/<folder>
+const folderPath = new URL(folderUrl).searchParams.get("id");
 const sitePath = folderPath.split("/").slice(0, 3).join("/");
-
-// --- 3. Upload this orb's workbook ------------------------------------------
 
 log(`Uploading ${workbookName}`);
 const bytes = fs.readFileSync(workbookFile).toString("base64");
@@ -218,13 +177,9 @@ const upload = await waitFor("the guest upload", () => evaluateIn(ONEDRIVE, `(as
 })()`), 30_000);
 log(`Uploaded as "${upload.user}" (file ${upload.id})`);
 
-// --- 4. Excel, add-in upload, Pi --------------------------------------------
-
 const workbookUrl = `https://onedrive.live.com${sitePath}/_layouts/15/Doc.aspx?sourcedoc={${upload.id}}&action=edit`;
 log("Opening the workbook in Excel");
 await navigate(workbookUrl);
-// Clicks on a ribbon that is still loading are dropped, so retry the pair
-// until the Office Add-ins dialog frame exists.
 await waitFor("the Office Add-ins dialog", async () => {
   if ((await targets()).some((t) => t.url.startsWith(OFFICE_DIALOG))) return true;
   if (!(await evaluateIn(EXCEL_FRAME, clickExpression("More Add-ins")))) {
@@ -273,8 +228,6 @@ log("Pi taskpane is open");
 return workbookUrl;
 }
 
-// --- 5. Optional Office.js check ---------------------------------------------
-
 let check = null;
 if (flag("--check")) {
   log("Checking Office.js in the taskpane");
@@ -297,8 +250,6 @@ if (flag("--check")) {
   if (!check.ok) fail(`Office.js read-back mismatch: ${JSON.stringify(check)}`);
 }
 
-// --- 6. Optional agent turn ---------------------------------------------------
-
 let turn = null;
 const prompt = option("--prompt", "");
 if (prompt) {
@@ -308,8 +259,6 @@ if (prompt) {
     const box = [...document.querySelectorAll('textarea')].find((e) => e.offsetParent !== null);
     return model && box ? model.textContent.trim().replace(/^π\\s*/, '') : null;
   })()`), 60_000);
-  // Missing or rejected credentials show a login overlay (position: fixed, so
-  // offsetParent is null; check the box instead) rather than running the turn.
   const loginOverlay = `(() => {
     const el = ['pi-api-key-overlay', 'pi-welcome-login-overlay'].map((id) => document.getElementById(id))
       .find((e) => e && e.getBoundingClientRect().width > 0);
@@ -339,7 +288,6 @@ if (prompt) {
   turn = await evaluateIn(TASKPANE, `(() => {
     const all = document.body.innerText;
     const text = all.slice(all.lastIndexOf(${JSON.stringify(prompt.slice(0, 80))})).replace(/\\n{2,}/g, '\\n');
-    // Each tool card renders its tool name on the line before "INPUT".
     const tools = [...text.matchAll(/\\n([a-z][a-z_]*)\\nINPUT\\n/g)].map((m) => m[1]);
     return { model: ${JSON.stringify(ready)}, tools, replyTail: text.slice(-1200) };
   })()`);

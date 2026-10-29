@@ -1,4 +1,3 @@
-// Component-logic contracts only; this suite does not claim native browser behavior.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -116,12 +115,10 @@ void test("Escape closes a deep-linked page but walks back through pages opened 
   };
 
   try {
-    // /history opens Backups directly: Escape closes instead of revealing Settings.
     await shell.open("backups");
     await pressEscape();
     assert.equal(shell.isOpen(), false);
 
-    // Opened at Settings and navigated to Backups: Escape goes back one level.
     await shell.open("root");
     rendered.root?.navigate("backups");
     await flushAsync();

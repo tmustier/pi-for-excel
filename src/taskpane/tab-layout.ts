@@ -2,14 +2,6 @@ function isTaskpaneTabLayoutPayloadShape(value: unknown): value is Record<string
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Persistence for open session tabs per workbook.
- *
- * Stores tab layout in SettingsStore so reloading the taskpane restores
- * the same set of session tabs, their "Chat N" numbers and the active tab.
- * A session appears in the layout at most once: one session, one tab.
- */
-
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 
@@ -22,9 +14,7 @@ const GLOBAL_WORKBOOK_LAYOUT_KEY = "__global__";
 export interface WorkbookTabLayout {
   sessionIds: string[];
   activeSessionId: string | null;
-  /** Default "Chat N" number per open session. Absent in layouts saved before numbers were kept. */
   tabNumbers?: Record<string, number>;
-  /** Next number a new tab gets, so numbers of closed tabs are not reused after a reload. */
   nextTabNumber?: number;
 }
 
@@ -54,7 +44,6 @@ export function normalizeWorkbookTabLayout(layout: WorkbookTabLayout): WorkbookT
 
   for (const rawSessionId of layout.sessionIds) {
     const normalized = normalizeSessionId(rawSessionId);
-    // Older builds could list one session twice; it restores as one tab.
     if (!normalized || sessionIds.includes(normalized)) continue;
     sessionIds.push(normalized);
   }
@@ -98,7 +87,6 @@ export function parseWorkbookTabLayout(value: unknown): WorkbookTabLayout | null
     activeSessionId: normalizeSessionId(value.activeSessionId),
   };
 
-  // Malformed numbers fall back to fresh numbering rather than dropping the layout.
   if (Value.Check(tabNumbersSchema, value.tabNumbers)) {
     parsed.tabNumbers = value.tabNumbers;
   }

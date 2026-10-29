@@ -1,12 +1,7 @@
-/* ═══════════════════════════════════════════════════════
-   6. WORKING INDICATOR
-   ═══════════════════════════════════════════════════════ */
-
 pi-working-indicator {
   flex-shrink: 0;
 }
 
-/* First tray row of the composer dock (see tabs.css, "Composer dock"). */
 .pi-working {
   display: flex;
   flex-wrap: wrap;
@@ -44,12 +39,10 @@ pi-working-indicator {
   min-width: 0;
 }
 
-/* Crossfade: fade out, swap text, fade in */
 .pi-working--fading {
   opacity: 0;
 }
 
-/* Fixed (non-streaming) busy indicator, e.g. compaction — spinner + label */
 .pi-working__pill {
   display: inline-flex;
   align-items: center;

@@ -1,7 +1,3 @@
-/**
- * Builtin session management commands.
- */
-
 import type { SlashCommand } from "../types.js";
 import { requestConfirmationDialog } from "../../ui/confirm-dialog.js";
 import { showToast } from "../../ui/toast.js";
@@ -23,7 +19,6 @@ export interface SessionCommandActions {
   createManualFullBackup: () => Promise<ManualFullBackupSummary>;
   listManualFullBackups: (limit?: number) => Promise<ManualFullBackupSummary[]>;
   restoreManualFullBackup: (backupId?: string) => Promise<ManualFullBackupSummary | null>;
-  /** Asks `confirm` with the count only after the workbook identity is known and there is something to delete. */
   clearManualFullBackups: (confirm: (count: number) => Promise<boolean>) => Promise<number>;
 }
 

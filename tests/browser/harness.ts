@@ -41,7 +41,6 @@ export interface OpenedBrowserPage {
   finish(): Promise<void>;
 }
 
-/** Connects a synthetic provider for tests that replace the model transport. */
 export async function connectFixtureProvider(page: Page, provider = "mistral", key = "fixture-key"): Promise<void> {
   await page.evaluate(async ({ provider, key }) => {
     const path = "/src/storage/local/app-storage.ts";
@@ -164,10 +163,6 @@ export async function openTaskpane(
     await opened.page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
     const welcomeOverlay = opened.page.locator("#pi-welcome-login-overlay");
     await welcomeOverlay.waitFor({ state: "visible", timeout: 10_000 });
-    // Dispatch on the backdrop element itself rather than clicking a viewport
-    // point: an extension or dialog overlay stacked above the welcome overlay
-    // would otherwise receive the click and the welcome overlay would stay.
-    // Real backdrop-click dismissal is covered by taskpane-contracts.
     await welcomeOverlay.dispatchEvent("click");
     await welcomeOverlay.waitFor({ state: "detached" });
     return opened;

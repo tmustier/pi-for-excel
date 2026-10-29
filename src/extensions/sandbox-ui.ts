@@ -2,13 +2,6 @@ function isExtensionsSandboxUiPayloadShape(value: unknown): value is Record<stri
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Safe UI projection primitives for sandboxed extensions.
- *
- * The sandbox can only send a constrained, structured UI tree.
- * Host runtime normalizes and renders that tree without using innerHTML.
- */
-
 
 export interface SandboxUiTextNode {
   kind: "text";

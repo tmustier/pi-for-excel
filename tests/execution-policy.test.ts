@@ -33,7 +33,6 @@ void test("execution policy classifies every tool and action", () => {
     { name: "mcp", params: { server: "local" }, mode: "read", impact: "none" },
     { name: "files", params: { action: "list" }, mode: "read", impact: "none" },
     { name: "extensions_manager", params: { action: "list" }, mode: "read", impact: "none" },
-    // Skills read/write local skill files, never the workbook.
     { name: "skills", params: { action: "list" }, mode: "read", impact: "none" },
     { name: "skills", params: { action: "install" }, mode: "read", impact: "none" },
     { name: "python_transform_range", params: { range: "Sheet1!A1:B10", code: "result = input_data['values']" }, mode: "mutate", impact: "content" },
@@ -57,7 +56,6 @@ void test("approval requirement: Confirm mode asks for workbook changes; deletin
     { name: "workbook_history", params: { action: "restore", snapshot_id: "abc" }, requirement: "confirm_mode" },
     { name: "workbook_history", params: { action: "delete", snapshot_id: "abc" }, requirement: "always" },
     { name: "workbook_history", params: { action: "clear" }, requirement: "always" },
-    // Its own gate asks, so the coordinator must not ask a second time.
     { name: "execute_office_js", params: { code: "" }, requirement: "none" },
     { name: "extension_tool", params: {}, requirement: "confirm_mode" },
   ];

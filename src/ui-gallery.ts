@@ -1,20 +1,5 @@
-/**
- * UI Gallery — standalone page for visually verifying components.
- *
- * No Office.js dependency. Loads the same CSS as the real taskpane and
- * renders mock components for agent-browser screenshot verification.
- *
- * Access at: http://localhost:3141/src/ui-gallery.html
- *
- * Each section has a data-gallery attribute for targeted screenshots:
- *   agent-browser screenshot --selector '[data-gallery="turn-group"]'
- */
-
-// Boot with the same CSS + patches as the real taskpane.
-// This imports theme.css and installs Lit/marked/theme patches.
 import "./boot.js";
 
-// Register web components we render
 import "./ui/register-components.js";
 
 import { requestApproval } from "./ui/approval-dialog.js";
@@ -63,8 +48,6 @@ function section(id: string, title: string): HTMLDivElement {
   return el;
 }
 
-/* ── 1. Overlay Badges ───────────────────────────────── */
-
 const badgeSection = section("badges", "Overlay Badges");
 const badgeRow = document.createElement("div");
 badgeRow.style.cssText = "display: flex; gap: 8px; flex-wrap: wrap;";
@@ -76,8 +59,6 @@ for (const tone of ["muted", "ok", "warn", "info"]) {
   badgeRow.appendChild(badge);
 }
 badgeSection.appendChild(badgeRow);
-
-/* ── 2. File Item Rows (with badge) ──────────────────── */
 
 const fileItemSection = section("file-items", "File List Items");
 
@@ -109,7 +90,6 @@ function createMockFileItem(name: string, meta: string, badgeLabel?: string): HT
   info.append(nameRow, metaEl);
   row.append(icon, info);
 
-  // Badge is a row-level right-aligned column — same x on every row.
   if (badgeLabel) {
     const badge = document.createElement("span");
     badge.className = "pi-overlay-badge pi-overlay-badge--muted";
@@ -128,10 +108,6 @@ function createMockFileItem(name: string, meta: string, badgeLabel?: string): HT
 fileItemSection.appendChild(createMockFileItem("cache-observability-baselines.md", "Pi documentation · 2.98 KB", "Read only"));
 fileItemSection.appendChild(createMockFileItem("context-management-policy.md", "Pi documentation · 12.0 KB", "Read only"));
 fileItemSection.appendChild(createMockFileItem("quarterly-report.xlsx", "1.2 MB · Uploaded · 2h ago"));
-
-/* ── 3. Turn group ───────────────────────────────────── */
-// One card per turn: the real <message-list> fed with fixture messages,
-// so the gallery exercises turn-model.ts and <turn-group> as shipped.
 
 const turnSection = section("turn-group", "Turn group");
 
@@ -227,7 +203,6 @@ for (const [label, messages] of turnFixtures) {
   turnSection.append(caption, list);
 }
 
-// The approval row: the question is asked in the pending call's row.
 const approvalAbort = new AbortController();
 const approvalParams = { action: "delete_rows", sheet: "Summary", start_row: 40, count: 13 };
 const approvalDetails = humanizeToolInput("modify_structure", approvalParams);
@@ -249,8 +224,6 @@ commandCopyWrap.append(
   createCopyableCommand("npx pi-for-excel-python-bridge"),
 );
 turnSection.appendChild(commandCopyWrap);
-
-/* ── 5. Changes Diff Table ───────────────────────────── */
 
 const diffSection = section("diff-table", "Cell Changes Diff Table");
 
@@ -307,8 +280,6 @@ setSafeInnerHTML(
 );
 diffSection.appendChild(diffWrap);
 
-/* ── 6. Text Preview (file detail) ───────────────────── */
-
 const previewSection = section("text-preview", "File Text Preview");
 
 const sampleMarkdown = `# Context Management Policy
@@ -358,8 +329,6 @@ APAC,Q2 2026,701300,548100,0.218`;
 textPreview.appendChild(textPreviewBody);
 previewSection.appendChild(textPreview);
 
-/* ── 7. Action Buttons ───────────────────────────────── */
-
 const buttonsSection = section("buttons", "Overlay Buttons");
 
 const btnRow = document.createElement("div");
@@ -378,11 +347,8 @@ for (const [label, cls] of [
 }
 buttonsSection.appendChild(btnRow);
 
-/* ── 8. Toast variants ───────────────────────────────── */
-
 const toastSection = section("toasts", "Toast Notifications");
 
-// Same markup as src/ui/toast.ts renders, stacked in a static copy of the region.
 const toastStack = document.createElement("div");
 toastStack.className = "pi-toast-region";
 toastStack.style.cssText = "position: static; transform: none; width: auto;";
@@ -420,8 +386,6 @@ for (const [msg, variant] of [
 }
 toastSection.appendChild(toastStack);
 
-/* ── 8b. Banners (src/ui/banner.ts) ──────────────────── */
-
 const bannerSection = section("banners", "Banners (notice area)");
 const bannerStack = document.createElement("div");
 bannerStack.className = "pi-notices";
@@ -431,8 +395,6 @@ bannerStack.append(
   createBanner({ id: "disclosure", tone: "info", message: "Pi can search the web, use extensions and connect to services you add.", actions: [{ label: "Got it", primary: true, onClick: () => {} }, { label: "Review in Settings", onClick: () => {} }], onDismiss: () => {} }).root,
 );
 bannerSection.appendChild(bannerStack);
-
-/* ── 9. Markdown rendering (font test) ───────────────── */
 
 const mdSection = section("markdown", "Markdown Rendering (font consistency)");
 
@@ -455,8 +417,6 @@ answer.message = {
   stopReason: "stop", timestamp: 1,
 };
 answerSection.append(answer);
-
-/* ── 11. Live turn (real sidebar + Agent, scripted stream) ─ */
 
 const transcriptSection = section("transcript", "Live turn (scripted stream)");
 const transcriptControls = document.createElement("div");

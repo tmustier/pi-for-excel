@@ -1,5 +1,3 @@
-/** Format-selection helpers for recovery snapshots. */
-
 import type { RecoveryFormatAreaShape, RecoveryFormatSelection } from "./types.js";
 
 export function hasSelectedFormatProperty(selection: RecoveryFormatSelection): boolean {
@@ -55,8 +53,6 @@ function estimateMergedAreasUnitCount(area: RecoveryFormatAreaShape): number {
     return cellCount;
   }
 
-  // A merged block must contain at least two cells, so this bounds merge-dense sheets
-  // without pretending merged-area payloads are constant-size.
   return Math.floor(cellCount / 2);
 }
 

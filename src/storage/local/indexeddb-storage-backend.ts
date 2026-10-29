@@ -1,13 +1,6 @@
 /**
- * IndexedDB implementation of StorageBackend.
- * Provides multi-store key-value storage with transactions and quota management.
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
- *
- * Schema compatibility invariant: this backend must open the existing
- * "pi-for-excel" database (same store names, key paths, and indices) so
- * pre-migration user data restores unchanged.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import type { IndexedDBConfig, StorageTransaction } from "./types.js";
@@ -17,16 +10,13 @@ function toIdbError(error: DOMException | null): Error {
   return error ?? new Error("IndexedDB request failed");
 }
 
-/** All stores in this app use string (or numeric) keys; other key shapes are skipped. */
 function normalizeIdbKey(key: IDBValidKey): string[] {
   if (typeof key === "string") return [key];
   if (typeof key === "number") return [key.toString()];
   return [];
 }
 
-/** Fired on `window` when this pane's database open waits for another pane to close it. */
 export const STORAGE_UPGRADE_BLOCKED_EVENT = "pi:storage-upgrade-blocked";
-/** Fired on `window` after this pane closed its database for a newer version's upgrade. */
 export const STORAGE_VERSION_CHANGED_EVENT = "pi:storage-version-changed";
 
 function dispatchStorageEvent(type: string): void {
@@ -46,12 +36,9 @@ export class IndexedDBStorageBackend implements StorageBackend {
       this.dbPromise = new Promise((resolve, reject) => {
         const request = indexedDB.open(this.config.dbName, this.config.version);
         request.onerror = () => reject(toIdbError(request.error));
-        // An older pane still holds the database open; the open continues once it closes.
         request.onblocked = () => dispatchStorageEvent(STORAGE_UPGRADE_BLOCKED_EVENT);
         request.onsuccess = () => {
           const db = request.result;
-          // A newer version wants to upgrade the database: step aside so its
-          // upgrade is not blocked. This pane's storage stops working until reload.
           db.onversionchange = () => {
             db.close();
             dispatchStorageEvent(STORAGE_VERSION_CHANGED_EVENT);
@@ -60,7 +47,6 @@ export class IndexedDBStorageBackend implements StorageBackend {
         };
         request.onupgradeneeded = () => {
           const db = request.result;
-          // Create object stores from config
           for (const storeConfig of this.config.stores) {
             if (db.objectStoreNames.contains(storeConfig.name)) continue;
 
@@ -90,7 +76,6 @@ export class IndexedDBStorageBackend implements StorageBackend {
     });
   }
 
-  /** Put honoring in-line (keyPath) vs out-of-line keys. */
   private putIntoStore(store: IDBObjectStore, key: string, value: unknown): Promise<IDBValidKey> {
     if (store.keyPath) {
       return this.promisifyRequest(store.put(value));
@@ -123,7 +108,6 @@ export class IndexedDBStorageBackend implements StorageBackend {
     const db = await this.getDB();
     const store = db.transaction(storeName, "readonly").objectStore(storeName);
     if (prefix) {
-      // Use IDBKeyRange for efficient prefix filtering
       const range = IDBKeyRange.bound(prefix, `${prefix}\uffff`, false, false);
       const keys = await this.promisifyRequest(store.getAllKeys(range));
       return keys.flatMap(normalizeIdbKey);
@@ -193,7 +177,6 @@ export class IndexedDBStorageBackend implements StorageBackend {
     });
   }
 
-  /** Native indexes/cursors for stores with bounded, indexed queries. */
   async indexedTransaction<T>(
     storeNames: string[],
     mode: IDBTransactionMode,
@@ -201,15 +184,11 @@ export class IndexedDBStorageBackend implements StorageBackend {
   ): Promise<T> {
     const db = await this.getDB();
     const idbTx = db.transaction(storeNames, mode);
-    // Settle only once the transaction commits, so a write that fails at
-    // commit time (for example QuotaExceededError) rejects instead of
-    // reporting success.
     const committed = new Promise<void>((resolve, reject) => {
       idbTx.oncomplete = () => resolve();
       idbTx.onabort = () => reject(toIdbError(idbTx.error));
       idbTx.onerror = () => reject(toIdbError(idbTx.error));
     });
-    // Callers that fail the operation get that error, not the abort it causes.
     void committed.catch(() => {});
     let result: T;
     try {
@@ -223,7 +202,6 @@ export class IndexedDBStorageBackend implements StorageBackend {
       try {
         idbTx.abort();
       } catch {
-        // Already finished or aborted.
       }
       throw error;
     }

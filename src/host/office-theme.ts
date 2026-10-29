@@ -2,8 +2,6 @@ function isHostOfficeThemePayloadShape(value: unknown): value is Record<string, 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** Office theme detection helpers used by OfficeHost. */
-
 
 interface RgbColor {
   r: number;

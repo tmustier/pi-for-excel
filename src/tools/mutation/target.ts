@@ -1,7 +1,6 @@
 import { Type, type Static } from "typebox";
 import { parseRangeRef } from "../../excel/helpers.js";
 
-/** Target fields at the tool-call boundary; the tool owns full validation. */
 export const mutationTargetSchema = Type.Object({
   action: Type.Optional(Type.String()),
   sheet: Type.Optional(Type.String()),

@@ -187,7 +187,6 @@ void test("an identity-less session toggle preserves inherited defaults but resp
 void test("explicitly cleared session scope returns empty", async () => {
   const settings = new MemorySettingsStore();
 
-  // Set then clear web_search → stores [] explicitly
   await setIntegrationEnabledInScope({
     settings,
     scope: "session",

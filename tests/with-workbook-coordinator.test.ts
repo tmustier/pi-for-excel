@@ -434,7 +434,6 @@ void test("a read issued after a write in the same batch sees the written value"
   );
   if (!write || !read || !laterWrite) throw new Error("Wrapped tools missing");
 
-  // The agent loop starts a batch's calls in order, then lets them run concurrently.
   const writing = write.execute("w", {});
   const reading = read.execute("r", {});
   await new Promise((resolve) => setTimeout(resolve, 10));
@@ -443,7 +442,6 @@ void test("a read issued after a write in the same batch sees the written value"
   const [, readResult] = await Promise.all([writing, reading]);
   assert.deepEqual(readResult.details, { echo: "new" });
 
-  // A read issued before a write does not wait for it.
   let releaseLater: () => void = () => {};
   const blockingWrite = makeTool("write_cells", () => new Promise((resolve) => {
     releaseLater = () => resolve({ content: [{ type: "text", text: "late" }], details: { echo: "late" } });
@@ -468,7 +466,6 @@ void test("Stop tells the agent whether a mutation ran", async () => {
   if (!beforeRun) throw new Error("Wrapped tool missing");
   await assert.rejects(beforeRun.execute("s1", {}, stopped.signal), /Stopped before running; nothing changed in the workbook\./u);
 
-  // Stop pressed while a one-batch mutation runs: its change stands, and the result says so.
   const during = new AbortController();
   const [whileRunning] = withWorkbookCoordinator(
     [makeTool("format_cells", () => {
@@ -532,7 +529,6 @@ void test("a write that finishes a few seconds after Stop reports its own result
 
   const result = await call;
   const first = result.content[0];
-  // #791's wrapper may append a note that the change stands; the tool's own report comes first.
   assert.ok((first?.type === "text" ? first.text : "").startsWith("Stopped after writing Calc!K11:K20; backup fae5e5d3"));
 });
 
@@ -572,7 +568,6 @@ void test("deleting backups asks even in Auto mode, before taking the workbook l
       getExecutionMode: () => Promise.resolve("yolo"),
       requestToolApproval: (request) => {
         reasons.push(request.reason);
-        // Nothing holds or waits for the lock while the user decides.
         assert.equal(coordinator.readCalls.length + coordinator.writeCalls.length, 0);
         return Promise.resolve(false);
       },
@@ -583,7 +578,6 @@ void test("deleting backups asks even in Auto mode, before taking the workbook l
   assert.deepEqual(reasons, ["always"]);
   assert.equal(ran, 0);
 
-  // Listing backups never asks.
   await wrapped.execute("tc-list", { action: "list" });
   assert.deepEqual(reasons, ["always"]);
   assert.equal(ran, 1);
@@ -633,7 +627,6 @@ void test("Confirm mode does not ask about a write the tool would refuse anyway"
   assert.equal(approvals, 1);
   assert.equal(executed, 1);
 
-  // An allowed overwrite asks, and the approval names what it replaces.
   await wrapped.execute("tc-overwrite", { occupied: true, allow: true });
   assert.deepEqual(asked, [undefined, { count: 2, sample: [{ address: "Sheet1!A1", content: "=SUM(B1:B3)" }] }]);
 });

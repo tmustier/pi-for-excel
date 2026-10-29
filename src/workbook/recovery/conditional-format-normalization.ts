@@ -2,12 +2,6 @@ function isRecoveryConditionalFormatNormalizationPayloadShape(value: unknown): v
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Conditional-format normalization at the Office.js boundary: turns loaded
- * host values into recovery state, and recovery state back into Office.js
- * rule objects.
- */
-
 import type { Static, TSchema } from "typebox";
 import { Value } from "typebox/value";
 

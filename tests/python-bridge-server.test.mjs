@@ -268,7 +268,6 @@ test("real mode accepts input_json up to its documented limit", async (t) => {
     return;
   }
 
-  // Larger than the 128 KB a single environment variable may hold on Linux.
   const inputJson = JSON.stringify({ values: ["é".repeat(190_000)] });
   const response = await fetch(
     `http://127.0.0.1:${bridge.port}/v1/python-run`,

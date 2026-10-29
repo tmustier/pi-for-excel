@@ -1,5 +1,3 @@
-/* Provider / Resume / Shortcuts overlays */
-
 .pi-provider-picker-list {
   display: flex;
   flex: 1 1 auto;
@@ -17,9 +15,6 @@
   gap: 6px;
 }
 
-/* Saved sessions take the leftover height but never shrink below their
-   content: when recently closed tabs fill the card, the body scrolls instead
-   of squeezing this list to 0 px. */
 .pi-resume-section[data-resume-section="saved"] {
   flex: 1 0 auto;
 }

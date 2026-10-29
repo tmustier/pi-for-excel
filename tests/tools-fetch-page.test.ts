@@ -20,7 +20,6 @@ class ProxySettingsStore extends SettingsStore {
 
   override get<T = unknown>(key: string): Promise<T | null> {
     const value = this.values.get(key);
-    // The fixture values are controlled at the settings storage boundary.
     return Promise.resolve(value === undefined ? null : value as T);
   }
 }

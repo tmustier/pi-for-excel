@@ -140,7 +140,6 @@ def main() -> int:
             return None, "<outside snapshot used range>"
         return grid[addr], None
 
-    # 1. cells_match
     expected = json.loads(Path(args.expected).read_text())
     fails, total = [], 0
     for metric, cells in expected.items():
@@ -170,7 +169,6 @@ def main() -> int:
     if fails:
         verdict["pass"] = False
 
-    # 2. target fixes
     targets: dict[str, dict] = (json.loads(Path(args.targets).read_text())
                                 if args.targets else {})
     target_by_sheet: dict[str, set] = {}
@@ -187,9 +185,6 @@ def main() -> int:
     if any(not r["ok"] for r in fix_results.values()):
         verdict["pass"] = False
 
-    # 3. no-mutation sheets + 4. unintended edits.
-    # Diff over the UNION of seed cells and snapshot cells so cleared or
-    # deleted content is caught even when the final used range shrank.
     unintended = []
     mutation_fail = []
     for sheet_name, grid in grids.items():
@@ -229,7 +224,6 @@ def main() -> int:
     if unintended:
         verdict["pass"] = False
 
-    # human summary
     cm = verdict["cells_match"]
     print(f"cells_match: {cm['passed']}/{cm['total']}")
     for f in cm["failures"]:

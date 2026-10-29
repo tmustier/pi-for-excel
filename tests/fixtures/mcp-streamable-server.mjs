@@ -1,4 +1,3 @@
-/** Real HTTP fixture. SSE replies can deliberately remain open after their answer. */
 import { createServer } from "node:http";
 import { once } from "node:events";
 

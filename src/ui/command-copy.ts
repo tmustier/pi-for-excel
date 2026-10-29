@@ -15,11 +15,6 @@ function selectElementText(element: HTMLElement): void {
   selection.addRange(range);
 }
 
-/**
- * Excel on the web frames the taskpane without clipboard-write permission, so
- * the async API is refused there; `execCommand("copy")` from the click still
- * works. Focus returns to the button afterwards.
- */
 function copyViaHiddenTextarea(text: string): boolean {
   const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const textarea = document.createElement("textarea");
@@ -53,7 +48,6 @@ function copyToClipboard(text: string, onCopied: () => void, fallbackElement: HT
   void navigator.clipboard.writeText(text).then(onCopied, fallback);
 }
 
-/** Create the shared command row used by inline setup cards. */
 export function createCopyableCommand(command: string): HTMLDivElement {
   const row = document.createElement("div");
   row.className = "pi-command-copy";

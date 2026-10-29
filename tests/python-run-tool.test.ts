@@ -127,7 +127,6 @@ void test("python_run falls back to Pyodide only when the default bridge is unre
       text: /pyodide fallback/u,
     },
     {
-      // "ModuleNotFoundError" contains "enotfound"; the code ran on the bridge.
       name: "python error on the bridge",
       fetch: () => Promise.resolve(new Response(JSON.stringify({
         ok: false, error: traceback, action: "run_python", exit_code: 1, stderr: traceback,
@@ -136,7 +135,6 @@ void test("python_run falls back to Pyodide only when the default bridge is unre
       text: /Python failed in local Python \(bridge at https:\/\/localhost:3340\) \(exit code 1\): ModuleNotFoundError: No module named 'pandas'/u,
     },
     {
-      // The code may still be running; running it again in Pyodide could run it twice.
       name: "bridge timeout",
       fetch: () => Promise.resolve(new Response(JSON.stringify({
         ok: false, error: "Process timed out after 2000ms.",

@@ -91,7 +91,6 @@ function runImageWorker(
   });
 }
 
-/** Normalize one image before it is sent to the model or retained in replayable history. */
 export async function processImageInput(
   image: ImageContent,
   options: ImageProcessingOptions = {},
@@ -304,7 +303,6 @@ export async function normalizeToolResultImages(
   return changed ? normalized : content;
 }
 
-/** Install prompt and tool-result normalization at the low-level Agent ingress. */
 export function installImageInputNormalization(
   agent: Agent,
   options: Pick<ImageNormalizationOptions, "autoResizeImages" | "processor"> = {},

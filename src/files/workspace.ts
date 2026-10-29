@@ -1,12 +1,3 @@
-/**
- * Files workspace manager.
- *
- * Backend selection strategy:
- * 1) persisted native directory handle (when permission is still granted)
- * 2) OPFS
- * 3) in-memory fallback (non-browser/test environments)
- */
-
 import { t } from "../language/index.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
@@ -80,11 +71,9 @@ export interface WorkspaceMutationOptions {
 export interface ImportFilesResult {
   imported: number;
   paths: string[];
-  /** Imports saved under a suffixed name because `from` was already taken. */
   renamed: Array<{ from: string; to: string }>;
 }
 
-/** Toast suffix telling the user which imports were kept alongside an existing file. */
 export function describeImportRenames(result: ImportFilesResult): string {
   const [first] = result.renamed;
   if (!first) return "";
@@ -111,11 +100,6 @@ function isDirectoryPickerHost(value: unknown): value is DirectoryPickerHost {
     && "showDirectoryPicker" in value && typeof value.showDirectoryPicker === "function";
 }
 
-/**
- * Chrome refuses `showDirectoryPicker` in a cross-origin subframe ("Cross
- * origin sub frames aren't allowed to show a file picker"). Excel on the web
- * hosts the taskpane in exactly such a frame.
- */
 function isCrossOriginSubframe(win: Window): boolean {
   if (win.top === null || win.top === win.self) return false;
   try {
@@ -202,8 +186,6 @@ function parsePersistedAuditTrail(value: unknown): FilesWorkspaceAuditEntry[] {
   const entries: FilesWorkspaceAuditEntry[] = [];
   for (const entry of value.entries) {
     if (!Value.Check(FilesWorkspaceAuditEntrySchema, entry)) continue;
-    // Clean only removes properties the schema does not declare, so a value
-    // that passed the check is still an entry afterwards.
     entries.push(Value.Clean(FilesWorkspaceAuditEntrySchema, entry) as FilesWorkspaceAuditEntry);
   }
 
@@ -225,7 +207,6 @@ function createAuditEntryId(): string {
   return `audit_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-/** Retries a storage update once; a transient IndexedDB failure should not drop a tag or audit entry. */
 async function retryOnce(run: () => Promise<void>): Promise<void> {
   try {
     await run();
@@ -266,7 +247,6 @@ async function persistNativeHandle(handle: FileSystemDirectoryHandle | null): Pr
       await settings.delete(NATIVE_HANDLE_SETTING_KEY);
     }
   } catch {
-    // ignore persistence failures; fallback still works for the current session.
   }
 }
 
@@ -387,9 +367,6 @@ export function buildWorkspaceContextSummary(args: WorkspaceContextSummaryArgs):
 
   const importFiles = sortFilesByPath(workspaceFiles.filter((file) => file.path.startsWith(IMPORTS_PREFIX)));
 
-  // Without a workbook identity (e.g. an unsaved workbook, Excel on the web
-  // as a guest) files cannot be tagged; untagged files, such as files the user
-  // dropped on the composer, are then this workbook's files.
   const currentWorkbookFiles = sortFilesByPath(workspaceFiles.filter((file) => {
     if (file.workbookTag?.workbookId !== (args.currentWorkbookId ?? undefined)) {
       return false;
@@ -469,14 +446,7 @@ export class FilesWorkspace {
   private workspaceStorageBackend: WorkspaceBackend | null = null;
   private workspaceStorageBackendPromise: Promise<WorkspaceBackend> | null = null;
 
-  /**
-   * Last known workbook tags. Every taskpane on this computer shares the
-   * stored tags and audit trail, so they are re-read before use and changed
-   * only through atomic updates; this map is the fallback when there is no
-   * settings storage.
-   */
   private readonly metadataByPath = new Map<string, WorkspaceFileWorkbookTag>();
-  /** Audit entries kept in memory only when there is no settings storage. */
   private auditEntries: FilesWorkspaceAuditEntry[] = [];
 
   private readonly settings: WorkspaceSettings | null | undefined;
@@ -564,7 +534,6 @@ export class FilesWorkspace {
         await backend.deleteFile(path);
         deletedPaths.push(path);
       } catch {
-        // best-effort cleanup: ignore per-file delete failures
       }
     }
 
@@ -583,7 +552,6 @@ export class FilesWorkspace {
 
     if (!cleanupPromise) {
       cleanupPromise = this.cleanupExpiredScratchFiles(backend).catch(() => {
-        // best-effort cleanup: fail open on startup/first interaction
       });
       this.scratchCleanupByBackend.set(backend, cleanupPromise);
     }
@@ -636,7 +604,6 @@ export class FilesWorkspace {
     }
   }
 
-  /** Current workbook tags as stored now (another taskpane may have changed them). */
   private async readMetadata(): Promise<ReadonlyMap<string, WorkspaceFileWorkbookTag>> {
     const settings = await this.resolveSettings();
     if (!settings) return this.metadataByPath;
@@ -649,7 +616,6 @@ export class FilesWorkspace {
     return this.metadataByPath;
   }
 
-  /** Atomically applies `change` to the stored tags. */
   private async updateMetadata(change: (byPath: Map<string, WorkspaceFileWorkbookTag>) => void): Promise<void> {
     const settings = await this.resolveSettings();
     if (!settings) {
@@ -684,7 +650,6 @@ export class FilesWorkspace {
     }
   }
 
-  /** Atomically applies `change` to the stored audit trail. */
   private async updateAuditTrail(
     change: (entries: FilesWorkspaceAuditEntry[]) => FilesWorkspaceAuditEntry[],
   ): Promise<void> {
@@ -1006,7 +971,6 @@ export class FilesWorkspace {
     return this.getNativeDirectoryUnavailableReason() === null;
   }
 
-  /** Why "Connect folder" cannot work here, or null when it can. */
   getNativeDirectoryUnavailableReason(): "unsupported" | "cross-origin-frame" | null {
     if (typeof window === "undefined" || !isDirectoryPickerHost(window)) return "unsupported";
     return isCrossOriginSubframe(window) ? "cross-origin-frame" : null;
@@ -1105,8 +1069,6 @@ export class FilesWorkspace {
         backend: activeBackend.kind,
         context: options.audit,
       });
-      // No change event: listing changes no file, and the Files dialog
-      // re-renders (and re-lists) on every change.
     }
 
     return mergedFiles;
@@ -1210,8 +1172,6 @@ export class FilesWorkspace {
         path: normalizedPath,
         bytes: resolved.size,
       });
-      // No change event: a read changes no file. Emitting one made the Files
-      // detail view re-render, re-read and re-emit in a loop (P-153).
     }
 
     return resolved;
@@ -1376,17 +1336,12 @@ export class FilesWorkspace {
     dispatchWorkspaceChanged({ reason: "rename" });
   }
 
-  /**
-   * Import files without replacing existing ones: a name that is already
-   * taken gets a " (2)", " (3)", … suffix before its extension.
-   */
   async importFiles(files: Iterable<File>, options: WorkspaceMutationOptions = {}): Promise<ImportFilesResult> {
     const target = await this.resolveMutationTarget({
       ...requestedLocationArgs(options.locationKind),
       defaultToWorkspace: true,
     });
 
-    // Case-insensitive so imports never clobber on case-insensitive local folders.
     const takenPaths = new Set(
       (await target.backend.listFiles()).map((entry) => entry.path.toLowerCase()),
     );
@@ -1469,13 +1424,6 @@ export class FilesWorkspace {
     dispatchWorkspaceChanged({ reason: "audit" });
   }
 
-  /**
-   * Starts a download whose file is not ready yet (#794: e.g. a full backup
-   * that is captured first). No window is opened: #796 found that a
-   * window.open in the same task cancels Excel for Mac's native Save sheet,
-   * while a blob <a download> works without user activation, so `download`
-   * just saves the file once it is ready. `cancel` has nothing to undo.
-   */
   beginDownload(): PendingWorkspaceDownload {
     if (typeof document === "undefined") {
       throw new Error("Downloads are not available in this environment.");
@@ -1510,8 +1458,6 @@ export class FilesWorkspace {
       ? result.mimeType
       : inferMimeType(result.name, result.mimeType);
 
-    // Sanitize script-capable MIME types (HTML, SVG, JS) to prevent
-    // active-content execution at the app origin when opened via blob URL.
     const safeMimeType = resolveSafeBlobUrlMimeType(mimeType);
 
     saveBlobAsFile(new Blob([toArrayBuffer(bytes)], { type: safeMimeType }), result.name);

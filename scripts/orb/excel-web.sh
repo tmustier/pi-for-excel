@@ -1,14 +1,4 @@
 #!/usr/bin/env bash
-# Opens Excel on the web with a persistent Chrome profile and CDP on
-# 127.0.0.1:${PI_EXCEL_WEB_CDP_PORT:-9223}, so agents drive the same window
-# (agent-browser --cdp 9223 ...). See docs/orb-excel-web.md.
-#
-#   scripts/orb/excel-web.sh [url]
-#
-# Runs headed in the orb Desktop when it is up (`amp orb desktop ensure`
-# starts it; a manual Microsoft sign-in needs it). Without a Desktop, or with
-# PI_EXCEL_WEB_HEADLESS=1, it runs headless, which is enough for an anonymous
-# edit link or restored cookies.
 set -euo pipefail
 
 : "${XDG_SESSION_TYPE:=wayland}" "${WAYLAND_DISPLAY:=wayland-0}" "${DISPLAY:=:0}"

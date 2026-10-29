@@ -1,10 +1,3 @@
-/**
- * Extensions hub — Connections tab.
- *
- * External tools master toggle, web search config, MCP server management,
- * and bridge URLs.
- */
-
 import { INTEGRATION_IDS, type IntegrationId } from "../../integrations/catalog.js";
 import type { SettingsAccess, SettingsUpdater } from "../../storage/local/settings-store.js";
 import type { McpServerConfig } from "../../tools/mcp-config.js";
@@ -66,8 +59,6 @@ import { t } from "../../language/index.js";
 import type { ExtensionsHubDependencies } from "./settings-pages/dependencies.js";
 import { renderExtensionConnectionsSection } from "./extensions-hub-extension-connections.js";
 
-// ── Helpers ─────────────────────────────────────────
-
 function normalizeProvider(value: string): WebSearchProvider {
   if (value === "jina" || value === "firecrawl" || value === "serper" || value === "tavily" || value === "brave") return value;
   return "jina";
@@ -100,10 +91,6 @@ type ConnectionsMutation = (
   msg?: string,
 ) => Promise<void>;
 
-/**
- * "Available in" row plus session/workbook switches that decide whether Pi
- * gets an integration's tools. Shared by web search and MCP.
- */
 function appendIntegrationScopeControls(args: {
   body: HTMLElement;
   integrationId: IntegrationId;
@@ -197,7 +184,6 @@ function appendIntegrationScopeControls(args: {
   body.appendChild(scopeDetails);
 }
 
-// Resolved lazily — t() must not run at module scope (language set at boot).
 function bridgeSetupHint(): string {
   return t("ext-hub-connections.setupHint");
 }
@@ -257,8 +243,6 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
   return setup;
 }
 
-// ── Main render ─────────────────────────────────────
-
 export async function renderConnectionsTab(args: {
   container: HTMLElement;
   settings: SettingsAccess & SettingsUpdater;
@@ -272,7 +256,6 @@ export async function renderConnectionsTab(args: {
   const workbookContext = await deps.resolveWorkbookContext();
   const workbookId = workbookContext.workbookId;
 
-  // Load state
   const [
     externalEnabled,
     sessionIntegrationIds,
@@ -309,7 +292,6 @@ export async function renderConnectionsTab(args: {
 
   container.replaceChildren();
 
-  // ── Master toggle ─────────────────────────────
   const surface = document.createElement("div");
   surface.className = "pi-overlay-surface";
 
@@ -328,7 +310,6 @@ export async function renderConnectionsTab(args: {
   surface.appendChild(masterToggle.root);
   container.appendChild(surface);
 
-  // ── Web search section ────────────────────────
   container.appendChild(createSectionHeader({ label: t("extensions-hub-connections.webSearch") }));
 
   const model = deps.getActiveModel?.();
@@ -351,7 +332,6 @@ export async function renderConnectionsTab(args: {
     badges: [{ text: webBadgeText, tone: webBadgeTone }],
   });
 
-  // Provider picker
   const providerSelect = document.createElement("select");
   providerSelect.className = "pi-item-card__config-input pi-item-card__config-select";
   for (const [key, info] of Object.entries(WEB_SEARCH_PROVIDER_INFO)) {
@@ -372,8 +352,6 @@ export async function renderConnectionsTab(args: {
 
   webCard.body.appendChild(createConfigRow(t("extensions-hub-connections.providerLabel"), providerSelect));
 
-  // API key row. The saved key is never put into the input: the box is for a
-  // new key only, and shows the masked saved key as its placeholder.
   const apiKeyInput = createConfigInput({
     placeholder: apiKey
       ? t("ext-hub-connections.savedKeyPlaceholder", { masked: maskSecret(apiKey) })
@@ -463,14 +441,12 @@ export async function renderConnectionsTab(args: {
 
   container.appendChild(webCard.root);
 
-  // ── Extension connections section ─────────────
   await renderExtensionConnectionsSection({
     container,
     connectionManager: deps.connectionManager,
     extensionManager: deps.extensionManager,
   });
 
-  // ── MCP servers section ───────────────────────
   const mcpAddForm = createAddForm();
   const mcpAddVisible = { value: false };
 
@@ -487,8 +463,6 @@ export async function renderConnectionsTab(args: {
   const mcpList = document.createElement("div");
   mcpList.className = "pi-hub-stack";
 
-  // Whether Pi gets the `mcp` tool at all; configured servers are useless
-  // to Pi until this is on for the session or workbook.
   const mcpAccessEnabled = mcpSessionEnabled || mcpWorkbookEnabled;
   const mcpAccessCard = createItemCard({
     icon: lucide(Zap),
@@ -524,7 +498,6 @@ export async function renderConnectionsTab(args: {
   }
   container.appendChild(mcpList);
 
-  // MCP add form (hidden by default)
   const nameInput = createAddFormInput(t("ext-hub-connections.serverNamePlaceholder"));
   const urlInput = createAddFormInput(t("ext-hub-connections.serverUrlPlaceholder"));
   const tokenInput = createAddFormInput(t("ext-hub-connections.bearerTokenPlaceholder"));
@@ -558,7 +531,6 @@ export async function renderConnectionsTab(args: {
   mcpAddForm.hidden = true;
   container.appendChild(mcpAddForm);
 
-  // ── Bridges section ───────────────────────────
   const showPython = true;
   const showTmux = true;
 
@@ -604,8 +576,6 @@ export async function renderConnectionsTab(args: {
   }
 }
 
-// ── MCP server card ─────────────────────────────────
-
 async function renderMcpServerCard(
   server: McpServerConfig,
   settings: SettingsAccess & SettingsUpdater,
@@ -622,10 +592,8 @@ async function renderMcpServerCard(
     badges: [getStatusBadge(server.enabled, toolLabel)],
   });
 
-  // URL
   card.body.appendChild(createConfigRow(t("extensions-hub-connections.url"), createConfigValue(server.url)));
 
-  // Token
   const tokenValue = server.token ? maskSecret(server.token) : t("ext-hub-connections.badgeNoToken");
   card.body.appendChild(createConfigRow(t("extensions-hub-connections.token"), createConfigValue(tokenValue)));
 
@@ -647,7 +615,6 @@ async function renderMcpServerCard(
     card.body.appendChild(createConfigRow(tool, revoke));
   }
 
-  // Enabled toggle
   const enabledRow = document.createElement("div");
   enabledRow.className = "pi-item-card__config-row";
   const enabledLabel = document.createElement("span");
@@ -671,7 +638,6 @@ async function renderMcpServerCard(
   enabledRow.append(enabledLabel, enabledToggle.root);
   card.body.appendChild(enabledRow);
 
-  // Actions
   const testBtn = createButton(t("ext-hub-connections.testButton"), {
     compact: true,
     onClick: () => {
@@ -705,8 +671,6 @@ async function renderMcpServerCard(
 
   return card.root;
 }
-
-// ── Bridge card ─────────────────────────────────────
 
 function renderBridgeCard(args: {
   icon: IconContent;

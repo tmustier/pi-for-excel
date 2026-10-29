@@ -1,24 +1,6 @@
 #!/usr/bin/env bash
-#
-# UI verification helper for agent workflows.
-#
-# Usage:
-#   ./scripts/ui-verify.sh                    # Full gallery screenshot
-#   ./scripts/ui-verify.sh diff-table         # Screenshot specific section
-#   ./scripts/ui-verify.sh taskpane           # Screenshot the real taskpane
-#   ./scripts/ui-verify.sh stop               # Close browser + stop dev server (if we started it)
-#
-# Sections (data-gallery attributes in ui-gallery.html):
-#   badges, file-items, turn-group, diff-table,
-#   text-preview, buttons, toasts, banners, markdown
-#
-# Prerequisites:
-#   - agent-browser CLI installed
-#   - npm run dev running on port 3141 (script starts it if needed)
-#
 set -euo pipefail
 
-# Auto-detect scheme: Vite enables HTTPS when key.pem + cert.pem exist.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(dirname "$SCRIPT_DIR")"
 
@@ -43,7 +25,6 @@ DEV_PID_FILE="$SCREENSHOT_DIR/dev.pid"
 
 mkdir -p "$SCREENSHOT_DIR"
 
-# Start dev server if not running
 ensure_dev_server() {
   if lsof -nP -iTCP:3141 -sTCP:LISTEN &>/dev/null; then
     return 0
@@ -55,7 +36,6 @@ ensure_dev_server() {
   DEV_PID=$!
   echo "$DEV_PID" > "$DEV_PID_FILE"
 
-  # Wait for server
   for i in $(seq 1 30); do
     if lsof -nP -iTCP:3141 -sTCP:LISTEN &>/dev/null; then
       echo "Dev server ready (pid $DEV_PID)"
@@ -68,7 +48,6 @@ ensure_dev_server() {
   exit 1
 }
 
-# Stop a dev server we previously started
 stop_dev_server() {
   if [[ -f "$DEV_PID_FILE" ]]; then
     local pid
@@ -110,13 +89,11 @@ case "${1:-gallery}" in
     ;;
 
   *)
-    # Specific section screenshot
     SECTION="$1"
     ensure_dev_server
 
     OUTFILE="$SCREENSHOT_DIR/${SECTION}-$(date +%H%M%S).png"
 
-    # Open gallery if not already there
     CURRENT_URL=$(npx agent-browser --session "$SESSION_NAME" get url 2>/dev/null || echo "")
     if [[ "$CURRENT_URL" != *"ui-gallery"* ]]; then
       npx agent-browser $BROWSER_FLAGS --session "$SESSION_NAME" open "$GALLERY_URL" \

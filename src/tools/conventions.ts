@@ -1,7 +1,3 @@
-/**
- * conventions — read/write persistent formatting conventions.
- */
-
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { getAppStorage } from "../storage/local/app-storage.js";

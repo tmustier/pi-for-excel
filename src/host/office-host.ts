@@ -1,5 +1,3 @@
-/** Office.js-backed host implementation. */
-
 import type { DocumentInstanceIdentity } from "./document-instance.js";
 import { createOfficeDocumentInstanceIdentity } from "./office-document-instance.js";
 import { createOfficeDocumentUrlReader } from "./office-document-url.js";

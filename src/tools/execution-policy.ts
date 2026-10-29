@@ -1,10 +1,3 @@
-/**
- * Tool execution policy.
- *
- * Classifies tool calls as read-only vs workbook-mutating,
- * and whether a successful mutation should refresh workbook structure context.
- */
-
 export type ToolExecutionMode = "read" | "mutate";
 export type ToolContextImpact = "none" | "content" | "structure";
 
@@ -14,22 +7,16 @@ const ALWAYS_READ_TOOLS = new Set<string>([
   "search_workbook",
   "trace_dependencies",
   "explain_formula",
-  // Instructions, conventions and skills mutate local prompt/config state, not workbook cells/structure.
   "instructions",
   "conventions",
   "skills",
-  // External bridge traffic does not mutate workbook state directly.
   "tmux",
   "python_run",
   "libreoffice_convert",
   "web_search",
   "fetch_page",
   "mcp",
-  // Workspace file operations do not mutate the workbook; their consent gate
-  // lives in experimental-tool-gates/local-change-gates.ts.
   "files",
-  // Extension registry operations mutate local settings/runtime, not workbook
-  // content; consent is gated in local-change-gates.ts.
   "extensions_manager",
 ]);
 
@@ -39,9 +26,7 @@ const ALWAYS_MUTATE_TOOLS = new Set<string>([
   "modify_structure",
   "format_cells",
   "conditional_format",
-  // Bridge-assisted transform writes values back into the workbook.
   "python_transform_range",
-  // Arbitrary host JSAPI can mutate workbook content and structure.
   "execute_office_js",
   "execute_wps_js",
 ]);
@@ -86,11 +71,6 @@ function isChartsStructureAction(params: unknown): boolean {
   return action === "create" || action === "delete";
 }
 
-/**
- * Return execution mode for a tool call.
- *
- * Unknown tools default to `mutate` as a safe fallback.
- */
 export function getToolExecutionMode(toolName: string, params: unknown): ToolExecutionMode {
   if (ALWAYS_READ_TOOLS.has(toolName)) return "read";
   if (ALWAYS_MUTATE_TOOLS.has(toolName)) return "mutate";
@@ -114,17 +94,6 @@ export function getToolExecutionMode(toolName: string, params: unknown): ToolExe
   return "mutate";
 }
 
-/**
- * When a tool call needs the user's approval before it runs.
- *
- * - `confirm_mode`: workbook mutations, in Confirm mode only.
- * - `always`: actions that destroy the user's means of undoing Pi's changes,
- *   in every mode. Deleting backups is not a workbook change (it stays `read`
- *   for the workbook lock), but it makes earlier changes irreversible.
- * - `none`: reads, local configuration, and tools whose own gate asks
- *   (`execute_office_js` / `execute_wps_js`, see
- *   `experimental-tool-gates/wrappers.ts`), so a call is never asked twice.
- */
 export type ToolApprovalRequirement = "none" | "confirm_mode" | "always" | "irreversible";
 
 const TOOLS_WITH_OWN_APPROVAL_GATE = new Set<string>([
@@ -144,13 +113,6 @@ export function getToolApprovalRequirement(toolName: string, params: unknown): T
   return getToolExecutionMode(toolName, params) === "mutate" ? "confirm_mode" : "none";
 }
 
-/**
- * Return context impact for a tool call.
- *
- * Lean default:
- * - only clearly structural mutations trigger workbook blueprint invalidation
- * - data/format/comment/view mutations are treated as content-only
- */
 export function getToolContextImpact(toolName: string, params: unknown): ToolContextImpact {
   const mode = getToolExecutionMode(toolName, params);
   if (mode === "read") return "none";

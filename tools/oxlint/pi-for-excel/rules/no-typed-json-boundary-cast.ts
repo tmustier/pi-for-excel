@@ -31,7 +31,6 @@ function boundaryKind(node: ESTree.Node, sourceText: (node: ESTree.Node) => stri
   return null;
 }
 
-/** Decoded JSON and fetch payloads land as unknown, then a concrete parser refines them. */
 export const noTypedJsonBoundaryCastRule = defineRule({
   meta: {
     type: "problem",

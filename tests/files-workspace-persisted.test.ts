@@ -1,10 +1,3 @@
-/**
- * Persisted files-workspace records: what `FilesWorkspace` reads back from the
- * two settings keys it writes. Each payload goes through the real product path
- * (construct the workspace over the settings, then list) and the test states
- * which entries survive.
- */
-
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

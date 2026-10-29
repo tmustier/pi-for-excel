@@ -29,21 +29,12 @@ interface RefreshRequest {
   allowNetwork: boolean;
 }
 
-/**
- * Whole-model equality. Every field on a `Model` reaches the wire or the UI
- * (reasoning, thinking levels, input modalities, cost, headers, compat, ...),
- * so an active session must pick up any difference, not just identity and
- * token limits.
- */
 export function areRuntimeModelsEquivalent(left: RuntimeModelShape, right: RuntimeModelShape): boolean {
   return canonicalJson(toJsonValue(left)) === canonicalJson(toJsonValue(right));
 }
 
-// Structural identity floor for callers holding `Model<any>` (agent state); the
-// comparison itself covers every member of the object, not just these.
 type RuntimeModelShape = Pick<Model<Api>, "id" | "provider" | "api">;
 
-/** Owns provider catalogue refresh, publication, coalescing and runtime reconciliation. */
 export class ModelRefreshOwner {
   readonly models: MutableModels;
 
@@ -92,26 +83,18 @@ export class ModelRefreshOwner {
     };
   }
 
-  /** Restore configured providers and cached catalogues without touching the network. */
   restoreCached(): Promise<void> {
     return this.requestRefresh({ syncConfiguredProviders: true, allowNetwork: false });
   }
 
-  /** Re-read custom-provider configuration, then refresh its catalogues. */
   refreshConfiguredProviders(allowNetwork = true): Promise<void> {
     return this.requestRefresh({ syncConfiguredProviders: true, allowNetwork });
   }
 
-  /** Refresh all currently registered providers. Concurrent calls share one provider pass. */
   refresh(allowNetwork = true): Promise<void> {
     return this.requestRefresh({ syncConfiguredProviders: false, allowNetwork });
   }
 
-  /**
-   * Finds a persisted model in the current catalogue. A custom gateway that was
-   * renamed has a new provider name but the same endpoint and model id, so it
-   * is matched by those instead of being treated as gone.
-   */
   resolveModel(persisted: Model<Api>): Model<Api> | undefined {
     const direct = this.models.getModel(persisted.provider, persisted.id);
     if (direct) return direct;
@@ -121,15 +104,10 @@ export class ModelRefreshOwner {
     return this.models.getModel(custom.provider, custom.id) ?? undefined;
   }
 
-  /** Reconcile a runtime that was deliberately skipped while busy. */
   reconcileRuntimes(): void {
     this.reconcileRuntimeModels();
   }
 
-  /**
-   * Restore cached catalogues first, then perform discovery once credentials are ready.
-   * A restore that settles after the startup bound schedules exactly one post-restore pass.
-   */
   async startup(credentialRestore: Promise<void>, timeoutMs: number): Promise<void> {
     await this.restoreCached();
 
@@ -187,7 +165,6 @@ export class ModelRefreshOwner {
     return this.refreshPromise;
   }
 
-  /** A provider registered after the active pass started is not covered by it. */
   private providersChangedDuringPass(): boolean {
     return this.modelRuntime.providerRevision !== this.activeProviderRevision;
   }
@@ -208,7 +185,6 @@ export class ModelRefreshOwner {
       this.activeProviderRevision = this.modelRuntime.providerRevision;
 
       if (allowNetwork) {
-        // Availability must not wait for catalogue requests: publish the cached state first.
         const cached = await this.modelRuntime.refresh({ allowNetwork: false });
         await this.publish(Array.from(cached.errors.keys()).sort());
       }

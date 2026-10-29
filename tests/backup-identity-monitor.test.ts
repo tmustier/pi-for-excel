@@ -47,9 +47,6 @@ function setup(initial: WorkbookContext, document: DocumentInstanceIdentity | nu
 const SAVED: WorkbookContext = { workbookId: "url_sha256:book-1", workbookName: "Book1.xlsx", source: "document.url" };
 
 void test("backups survive saves and reloads on a saved workbook (autosave hosts)", async () => {
-  // Excel on the web and AutoSave report the workbook as saved at every
-  // poll. Backups used to be cleared on the first poll after a taskpane
-  // opened, leaving nothing to revert.
   const { log, monitor, createLog } = setup(SAVED);
 
   await monitor.checkOnce();
@@ -84,8 +81,6 @@ void test("the first save of a never-saved workbook moves its backups to the sav
 });
 
 void test("switching between two saved workbooks moves nothing", async () => {
-  // Hosts whose taskpane follows the active workbook (WPS) change identity
-  // when the user switches workbooks; that is not a save.
   const { log, monitor, setContext } = setup(SAVED);
   assert.ok(await log.append(write));
   await monitor.checkOnce();

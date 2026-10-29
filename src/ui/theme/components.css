@@ -1,10 +1,3 @@
-/**
- * Component-level UI styles.
- *
- * This file is an import-only entrypoint so modules can stay focused and
- * maintainable without changing final cascade order.
- */
-
 @import "./components/tabs.css";
 @import "./components/input.css";
 @import "./components/empty-state.css";

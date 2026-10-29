@@ -1,14 +1,3 @@
-/**
- * Turn group rows: one sentence per tool call, in the tense of its state.
- *
- * The tool card describers (tool-renderers.ts) know what each call did and
- * where ("Fill", "'Cash Flow'!D10:L10"). A row conjugates that verb for its
- * state (`Filled`, `Filling`, `Could not fill`, `Stopped filling`), keeps
- * the reference in mono, and moves the card's badge ("— 9 changed") into a
- * single meta fact ("9 cells"). Verbs stay in English here, as the card
- * verbs do; the structural strings are localized.
- */
-
 import type { ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 import { html, nothing, type TemplateResult } from "lit";
 import { Code, Globe, Puzzle, Table, Terminal, type IconNode } from "lucide";
@@ -26,22 +15,17 @@ import {
   stripDimensions,
 } from "./tool-renderers.js";
 
-/** How a row reads: what the call is doing, did, failed to do, or was stopped doing. */
 export type ToolRowTense = "live" | "done" | "failed" | "stopped";
 
-/** The family of tool a row belongs to; the group header stacks one icon per family used. */
 export type ToolKind = "sheet" | "python" | "web" | "code" | "extension";
 
 export interface ToolRowDescription {
   sentence: TemplateResult;
-  /** One fact about the result ("9 cells", "6 results"), or null. */
   meta: string | null;
-  /** The error text the model received, for failed rows. */
   reason: string | null;
 }
 
 interface VerbForms {
-  /** Infinitive, as a button label and after "Could not": "Fill" */
   base: string;
   past: string;
   live: string;
@@ -64,7 +48,6 @@ const VERBS: Record<string, VerbForms> = {
   Delete: { base: "Delete", past: "Deleted", live: "Deleting" },
   Insert: { base: "Insert", past: "Inserted", live: "Inserting" },
   Modify: { base: "Modify", past: "Modified", live: "Modifying" },
-  // Result summaries already read in the past tense ("Deleted 3 row(s) …").
   Deleted: { base: "Delete", past: "Deleted", live: "Deleting" },
   Inserted: { base: "Insert", past: "Inserted", live: "Inserting" },
   Added: { base: "Add", past: "Added", live: "Adding" },
@@ -135,7 +118,6 @@ const TOOL_KINDS: Record<string, ToolKind> = {
   extensions_manager: "extension",
 };
 
-/** In the order the group header stacks them. */
 export const TOOL_KIND_ICONS: ReadonlyMap<ToolKind, IconNode> = new Map([
   ["sheet", Table],
   ["python", Terminal],
@@ -152,7 +134,6 @@ function lowerFirst(text: string): string {
   return text.charAt(0).toLowerCase() + text.slice(1);
 }
 
-/** The imperative verb for an approval button: "Fill", "Delete". */
 export function toolActionVerb(toolName: string, params: unknown): string | null {
   if (!isSupportedToolName(toolName)) return null;
   const desc = describeToolCall(toolName, params, undefined, undefined);
@@ -163,7 +144,6 @@ function cellCount(count: number): string {
   return count === 1 ? t("turn.row.cell") : t("turn.row.cells", { count });
 }
 
-/** One fact about what the call produced, from its details or its result text. */
 function describeMeta(toolName: string, resultText: string | undefined, details: ExcelToolDetails | undefined, badge: string | null): string | null {
   switch (details?.kind) {
     case "write_cells":
@@ -209,10 +189,6 @@ function describeMeta(toolName: string, resultText: string | undefined, details:
   return badge;
 }
 
-/**
- * The row for a tool call. `tense` is the row's state; the sentence keeps
- * the card describer's reference (mono, clickable when it is a range).
- */
 export function describeToolRow(
   toolName: string,
   params: ToolCall["arguments"],
@@ -244,13 +220,11 @@ export function describeToolRow(
   const { detail, badge } = desc.detail.startsWith("— ") ? { detail: "", badge: desc.detail.slice(2) }
     : badgeIndex < 0 ? { detail: desc.detail, badge: null }
     : { detail: desc.detail.slice(0, badgeIndex), badge: desc.detail.slice(badgeIndex + 3) };
-  // A stopped write already says "Stopped" and how far it got.
   const forms = VERBS[desc.action];
   const verb = desc.action === t("tool-card.stopped.action") ? desc.action
     : tense === "failed" ? t("turn.row.couldNot", { action: lowerFirst(forms?.base ?? desc.action) })
     : tense === "stopped" ? t("turn.row.stopped", { action: lowerFirst(forms?.live ?? desc.action) })
     : tense === "live" ? forms?.live ?? desc.action : forms?.past ?? desc.action;
-  // Result summaries end in a full stop ("Added sheet "Q3"."); a row does not.
   const refText = stripDimensions(detail).replace(/\.$/u, "");
   const reference = desc.address
     ? (refText && refText !== desc.address ? cellRefDisplay(refText, desc.address) : cellRefs(desc.address))
@@ -274,10 +248,6 @@ function formatJson(value: unknown): { code: string; language: string } {
   }
 }
 
-/**
- * The row's expanded body: the tool card's input and result sections for a
- * workbook tool; the raw input and output for an extension tool.
- */
 export function renderToolRowDetail(toolName: string, params: ToolCall["arguments"], result: ToolResultMessage | undefined): TemplateResult {
   if (isSupportedToolName(toolName)) return renderToolCardBody(toolName, params, result);
   const input = params === undefined || params === null ? null : formatJson(params);

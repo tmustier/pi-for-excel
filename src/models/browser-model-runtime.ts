@@ -69,10 +69,8 @@ export interface BrowserProviderRegistration {
   api: BrowserProviderApi;
   baseUrl: string;
   models: readonly BrowserProviderModelDefinition[];
-  /** Omit to derive the discovery URL; null keeps only the supplied models. */
   modelsUrl?: string | null;
   resolveApiKey: () => Promise<string | undefined>;
-  /** Keyless local providers can opt in while still satisfying Pi AI auth semantics. */
   allowKeyless?: boolean;
 }
 
@@ -83,7 +81,6 @@ export interface CreateBrowserModelRuntimeOptions {
   modelCatalogs: ModelsStore;
   getProxyUrl: () => Promise<string | undefined>;
   fetchFn?: typeof globalThis.fetch;
-  /** Relay URL for a built-in provider's pi.dev catalogue. Omit to use only bundled models. */
   modelCatalogUrl?: (providerId: string) => string;
 }
 
@@ -123,11 +120,6 @@ function streamsForApi(api: BrowserProviderApi): ProviderStreams {
   return anthropicMessagesStreams;
 }
 
-/**
- * Pi AI's OpenAI and Anthropic clients refuse to send a request without an API key.
- * Keyless servers such as llama.cpp, Ollama and LM Studio ignore the header, so keyless
- * providers send this placeholder instead of failing before the request.
- */
 const KEYLESS_PROVIDER_API_KEY = "pi-for-excel-keyless";
 
 function createStoredApiKeyAuth(args: {
@@ -232,7 +224,6 @@ function sanitizeCatalogEntry(
 ): ModelsStoreEntry {
   const models: Model<Api>[] = [];
   for (const model of entry.models) {
-    // Dynamic browser providers only register chat transports.
     if (!isModelType(model, "chat")) continue;
     try {
       models.push(createModel({
@@ -250,7 +241,6 @@ function sanitizeCatalogEntry(
         },
       }));
     } catch {
-      // Ignore malformed/stale entries rather than restoring unsafe metadata.
     }
   }
 
@@ -260,7 +250,6 @@ function sanitizeCatalogEntry(
   };
 }
 
-/** Rebind cached discovery results to the currently registered transport. */
 class BrowserModelCatalogsStore implements ModelsStore {
   private readonly persisted: ModelsStore;
   private readonly specs = new Map<string, DynamicProviderCatalogSpec>();
@@ -536,7 +525,6 @@ function customProviderRegistrations(provider: CustomProvider): BrowserProviderR
   }));
 }
 
-/** Browser-native Pi AI provider runtime with IndexedDB credentials/catalogues. */
 export class BrowserModelRuntime {
   readonly models: MutableModels;
 
@@ -568,7 +556,6 @@ export class BrowserModelRuntime {
       const adapted = provider.auth.apiKey
         ? provider
         : createBrowserAdapterProvider(provider);
-      // Providers that refresh their own catalogue (Radius) keep it.
       const browserProvider = catalogUrl && !adapted.refreshModels
         ? withRemoteCatalog(adapted, {
           catalogUrl,
@@ -581,10 +568,6 @@ export class BrowserModelRuntime {
     }
   }
 
-  /**
-   * Increases whenever a custom or extension provider is registered or removed.
-   * A refresh pass only covers the providers registered when it started.
-   */
   get providerRevision(): number {
     return this.dynamicProviderRevision;
   }
@@ -675,11 +658,6 @@ export class BrowserModelRuntime {
     return this.extensionProviderOwners.has(providerId);
   }
 
-  /**
-   * Route for providers this runtime registered: custom and extension providers use the
-   * proxy when it is enabled, unless a custom gateway connects directly. Undefined for
-   * built-in providers, whose routing stays with the stream layer.
-   */
   providerRoute(providerId: string): ProviderRoute | undefined {
     if (this.directCustomProviderIds.has(providerId)) return "direct";
     if (this.customProviderIds.has(providerId) || this.extensionProviderOwners.has(providerId)) {

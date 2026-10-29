@@ -1,5 +1,3 @@
-/** Typed boundary adapter for the Office document file capability. */
-
 export interface OfficeAsyncErrorLike {
   message?: unknown;
 }
@@ -59,11 +57,9 @@ function parseOfficeDocumentFileAdapter(rawOffice: unknown): OfficeDocumentFileA
   const document = context.document as OfficeDocumentFileBoundary;
   if (typeof document.getFileAsync !== "function") return null;
 
-  // The function check above establishes the required file-capability contract.
   const fileDocument = document as OfficeDocumentFileAdapter;
   return {
     getFileAsync(fileType, options, callback): void {
-      // Office document methods require their owning document as the receiver.
       fileDocument.getFileAsync(fileType, options, callback);
     },
   };

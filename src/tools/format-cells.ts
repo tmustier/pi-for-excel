@@ -1,10 +1,3 @@
-/**
- * format_cells — Apply formatting to a range (separate from write_cells).
- *
- * Handles: font (bold, italic, color, size), fill color, number format,
- * borders, alignment, column width.
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -35,11 +28,6 @@ import {
 import { getResolvedConventions } from "../conventions/store.js";
 import { getAppStorage } from "../storage/local/app-storage.js";
 
-/**
- * After a failed call: did any formatting land? A call Excel refused outright
- * (e.g. a protected sheet) changed nothing, and a backup of it would only
- * shadow older backups for /revert. Assume it changed if the range can't be read.
- */
 async function formattingChangedSince(address: string, before: FormatCellsCapturedState): Promise<boolean> {
   try {
     const now = await captureFormatCellsState(address, before.selection, { maxCellCount: MAX_RECOVERY_CELLS });
@@ -490,17 +478,13 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<FormatCellsDetails>> => {
-      // Captured before formatting starts; kept outside `try` so a call that
-      // fails partway can still store it (see the catch below).
       let capturedState: FormatCellsCapturedState | undefined;
       try {
-        // ── Load stored conventions ──────────────────────────────────
         const storage = getAppStorage();
         const conventionConfig = await getResolvedConventions(storage.settings);
 
         const normalizedBorders = normalizeBorderParams(params);
 
-        // ── Resolve styles + overrides into flat properties ──────────
         const styleOverrides: CellStyle = {
           ...(params.number_format !== undefined ? { numberFormat: params.number_format } : {}),
           ...(params.number_format_dp !== undefined ? { numberFormatDp: params.number_format_dp } : {}),
@@ -628,9 +612,6 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
         const failure = await describeExcelFailure(parseExcelError(e), { range: params.range });
         const message = failure.reason;
 
-        // Excel applies a batch op by op, so a failure partway can leave some
-        // formatting changed. Store the state captured before the call so the
-        // user can still revert whatever was applied.
         let backupNote = "";
         if (capturedState && await formattingChangedSince(params.range, capturedState)) {
           try {
@@ -661,8 +642,6 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
         });
 
         return {
-          // #791 says whether anything may have reached Excel; #794's backup note
-          // only applies when it may have.
           content: [{ type: "text", text: `Error formatting ${params.range}${unchangedClause(failure, "no formatting was applied")}. ${message}${failure.maybeApplied ? backupNote : ""}` }],
           details: { kind: "format_cells", address: params.range },
           isError: true,
@@ -672,16 +651,12 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
   };
 }
 
-// ── Border application ───────────────────────────────────────────────
-
-/** Map a border weight string to the Office.js enum value. */
 function toBorderWeight(weight: BorderVisibleWeight): "Thin" | "Medium" | "Thick" {
   if (weight === "thin") return "Thin";
   if (weight === "medium") return "Medium";
   return "Thick";
 }
 
-/** Apply a single border edge. */
 function applyEdge(
   formatTarget: Excel.RangeFormat,
   edge: BorderEdgeIndex,
@@ -701,12 +676,6 @@ function applyEdge(
   }
 }
 
-/**
- * Resolve and apply borders. Priority:
- *   1. Individual edge params (border_top, etc.) — highest
- *   2. Style-resolved edges (from named styles)
- *   3. `borders` shorthand (all edges + inside) — lowest
- */
 function applyBorders(
   formatTarget: Excel.RangeFormat,
   borderParams: NormalizedBorderParams,

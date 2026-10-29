@@ -1,7 +1,3 @@
-/**
- * Text-entry target detection helpers.
- */
-
 function toElement(target: EventTarget | null | undefined): Element | null {
   if (!target) return null;
   if (typeof Element !== "undefined" && target instanceof Element) return target;

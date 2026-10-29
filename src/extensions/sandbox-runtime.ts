@@ -2,14 +2,6 @@ function isExtensionsSandboxRuntimePayloadShape(value: unknown): value is Record
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Sandboxed extension runtime host (iframe + postMessage RPC).
- *
- * Scope: default runtime for untrusted extension execution (with rollback switch).
- * This bridge intentionally starts small and only forwards a constrained,
- * sanitized UI projection format (no raw HTML injection).
- */
-
 import type { AgentEvent, AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
@@ -441,7 +433,6 @@ class SandboxRuntimeHost {
       try {
         unsubscribe();
       } catch {
-        // ignore cleanup failures during shutdown
       }
     }
     this.eventSubscriptions.clear();
@@ -496,9 +487,6 @@ class SandboxRuntimeHost {
     };
 
     try {
-      // Sandboxed srcdoc iframes have opaque origins, so the initial port transfer
-      // must use a wildcard target. All subsequent sandbox RPC stays on the
-      // dedicated MessagePort instead of window.postMessage.
       targetWindow.postMessage(bootstrap, "*", [channel.port2]);
     } catch (error) {
       port.removeEventListener("message", this.onPortMessage);

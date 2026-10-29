@@ -1,8 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   13. QUEUE DISPLAY — steer / follow-up messages
-   ═══════════════════════════════════════════════════════ */
-
-/* Second tray row of the composer dock (see tabs.css, "Composer dock"). */
 .pi-queue {
   flex-shrink: 0;
   margin: 2px 22px 0;
@@ -18,7 +13,6 @@
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
-/* Under the working line, the queue continues the same tray. */
 .pi-dock--busy > .pi-queue {
   margin-top: 0;
   border-top: var(--pi-divider);
@@ -50,7 +44,6 @@
   white-space: nowrap;
 }
 
-/* The whole text shows while the row is hovered or one of its buttons has focus. */
 .pi-queue__item:hover .pi-queue__text,
 .pi-queue__item:focus-within .pi-queue__text {
   white-space: pre-wrap;

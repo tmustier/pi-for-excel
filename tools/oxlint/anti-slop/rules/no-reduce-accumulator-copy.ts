@@ -64,7 +64,6 @@ function isGlobalCopyOwner(sourceCode: SourceCode, node: ESTree.Node, name: stri
   return variable === null || variable.defs.length === 0;
 }
 
-/** Reject non-spread copies of reducer accumulators; pair with oxc/no-accumulating-spread. */
 export const noReduceAccumulatorCopyRule = defineRule({
   meta: {
     type: "problem",

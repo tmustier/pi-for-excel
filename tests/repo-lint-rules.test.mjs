@@ -10,7 +10,6 @@ const root = fileURLToPath(new URL("../", import.meta.url));
 const oxlint = fileURLToPath(new URL("../node_modules/oxlint/bin/oxlint", import.meta.url));
 const plugin = fileURLToPath(new URL("../tools/oxlint/pi-for-excel/index.ts", import.meta.url));
 
-/** Lints one fixture with a single repository rule enabled, so each case shows only that rule. */
 function lint(rule, source) {
   const directory = mkdtempSync(join(tmpdir(), "pi-repo-lint-"));
   try {

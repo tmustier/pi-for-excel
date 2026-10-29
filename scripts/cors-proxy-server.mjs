@@ -1,25 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Minimal CORS proxy for Pi for Excel.
- *
- * Why this exists:
- * - Some provider OAuth/token endpoints (and some LLM APIs) block browser requests via CORS.
- * - In dev we rely on Vite's proxy. In production, you can run this locally and point
- *   Pi for Excel's proxy setting at it (default: https://localhost:3003; if
- *   3003 is busy and PORT is not set, the helper chooses a random free port).
- *
- * Usage:
- *   npm run proxy:https   # HTTPS (recommended for Office webviews)
- *   npm run proxy         # HTTP  (may be blocked as mixed content)
- *
- * Proxy format:
- *   https://<listen-host>:<listen-port>/?url=<target-url>
- *
- * Example:
- *   curl 'https://localhost:3003/?url=https%3A%2F%2Fexample.com'
- */
-
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
@@ -80,9 +58,6 @@ const OAUTH_CALLBACK_SERVER_ENABLED = !["0", "false", "no"].includes(
   (process.env.OAUTH_CALLBACK_SERVER || "").trim().toLowerCase(),
 );
 const OAUTH_CALLBACK_CAPTURE_TTL_MS = 10 * 60 * 1000;
-// Callback ports belong to other apps too (1455 is the Codex CLI's), so a
-// listener is bound only while the taskpane polls for that provider's login
-// and released after a capture or once polling stops for this long.
 const OAUTH_CALLBACK_LISTENER_IDLE_MS = (() => {
   const ms = Number.parseInt(process.env.OAUTH_CALLBACK_LISTENER_IDLE_MS || "", 10);
   return Number.isInteger(ms) && ms > 0 ? ms : 60_000;
@@ -116,12 +91,9 @@ const OAUTH_CALLBACK_PROVIDER_CONFIGS = [
 ];
 
 const rootDir = path.resolve(process.cwd());
-// Central deployments (docs/central-proxy.md) can point at org-issued certs.
 const keyPath = process.env.TLS_KEY_PATH || path.join(rootDir, "key.pem");
 const certPath = process.env.TLS_CERT_PATH || path.join(rootDir, "cert.pem");
 
-// SECURITY: loopback-only by default. Central deployments must opt in to
-// specific IPv4 client ranges; invalid entries are fatal (fail closed).
 const allowedClientCidrs = (() => {
   const raw = process.env.ALLOWED_CLIENT_CIDRS;
   if (!raw || raw.trim().length === 0) return [];
@@ -150,9 +122,6 @@ const HOP_BY_HOP_HEADERS = new Set([
   "upgrade",
 ]);
 
-// SECURITY: local CORS proxies are a common footgun. Even if bound to localhost,
-// a browser tab on any origin can still call it unless we restrict CORS.
-// Default allowlist matches our dev + hosted origins; override via env var.
 const DEFAULT_ALLOWED_ORIGINS = new Set([
   "https://localhost:3141",
   "https://pi-for-excel.vercel.app",
@@ -197,7 +166,6 @@ const DEFAULT_ALLOWED_TARGET_HOSTS = new Set([
   "cloudcode-pa.googleapis.com",
   "daily-cloudcode-pa.sandbox.googleapis.com",
   "api.z.ai",
-  // Web search providers
   "s.jina.ai",
   "api.firecrawl.dev",
   "google.serper.dev",
@@ -218,10 +186,6 @@ const configuredAllowedTargetHosts = hasConfiguredAllowedTargetHosts
   ? parseAllowedTargetHosts(process.env.ALLOWED_TARGET_HOSTS)
   : new Set();
 
-// SECURITY: fail closed on explicit-but-unparseable ALLOWED_TARGET_HOSTS.
-// Falling back to the default allowlist would silently re-enable legacy
-// override semantics (loopback/private bypass, GitHub-enterprise path
-// bypass) that a configured central proxy relies on being off.
 if (hasConfiguredAllowedTargetHosts && configuredAllowedTargetHosts.size === 0) {
   console.error("[pi-for-excel] ALLOWED_TARGET_HOSTS was set but contained no valid host entries.");
   console.error("[pi-for-excel] Expected comma-separated hostnames or IP literals (e.g. api.deepseek.com,10.97.193.77).");
@@ -452,7 +416,6 @@ function handleOAuthProviderCallbackRequest(entry, req, res) {
 
   res.statusCode = 200;
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  // The login has its code: hand the port back as soon as the page is sent.
   res.once("finish", () => releaseOAuthCallbackListener(entry));
   res.end(buildOAuthCallbackHtml(config, capture));
 }
@@ -493,7 +456,6 @@ function handleOAuthCallbackApiRequest(rawUrl, res) {
 
   const capture = oauthCallbackCaptures.get(oauthCallbackKey(providerId, state));
   if (!capture) {
-    // Polling means a Pi login is in progress: bind its callback port only now.
     const listener = findOAuthCallbackListener(providerId);
     if (listener) armOAuthCallbackListener(listener);
     sendJson(res, 200, { status: "pending" });
@@ -519,9 +481,6 @@ function extractProxyTransport(rawUrl) {
 }
 
 function extractTargetUrl(rawUrl) {
-  // rawUrl looks like: /?url=https%3A%2F%2Fapi.example.com/path
-  // NOTE: some callers append path segments after the encoded baseUrl,
-  // so we decode everything after `url=` rather than using URLSearchParams.
   const idx = rawUrl.indexOf("url=");
   if (idx === -1) return null;
   const encoded = rawUrl.slice(idx + 4);
@@ -545,7 +504,6 @@ function buildOutboundHeaders(inHeaders) {
     if (lower === "user-agent") continue;
     if (lower === "accept-language") continue;
 
-    // Strip browser-only / CORS-triggering headers (mimic server requests)
     if (lower === "origin") continue;
     if (lower === "referer") continue;
     if (lower.startsWith("sec-fetch-")) continue;
@@ -555,7 +513,6 @@ function buildOutboundHeaders(inHeaders) {
     // When proxying we want the upstream to behave like a server-to-server call.
     if (lower === "anthropic-dangerous-direct-browser-access") continue;
 
-    // Never forward cookies through a generic proxy
     if (lower === "cookie") continue;
 
     if (HOP_BY_HOP_HEADERS.has(lower)) continue;
@@ -579,10 +536,6 @@ const handler = async (req, res) => {
     return;
   }
 
-  // Health endpoint for load balancers / monitoring. Sits after the client
-  // address check but before origin enforcement (health checks often send no
-  // Origin header). Browser-based status probes still need CORS headers when
-  // they come from an allowed add-in origin. Never proxies anything.
   if ((req.url || "").split("?")[0] === "/healthz") {
     setCorsHeaders(req, res);
     if (req.method === "OPTIONS") {
@@ -681,8 +634,6 @@ const handler = async (req, res) => {
     allowLoopbackTargets,
     allowPrivateTargets,
     allowedHosts: effectiveAllowedTargetHosts,
-    // SECURITY: when the operator explicitly configured ALLOWED_TARGET_HOSTS,
-    // loopback/private override flags must not bypass it (central proxies).
     requireAllowlistForOverriddenTargets: configuredAllowedTargetHosts.size > 0,
   });
 
@@ -720,10 +671,6 @@ const handler = async (req, res) => {
     return;
   }
 
-  // A client that goes away (stop button, closed taskpane, navigation) must
-  // cancel the upstream request too, or the provider keeps generating and
-  // billing. `res` closes on both normal completion and disconnect; aborting
-  // after completion is a no-op.
   const upstreamAbort = new AbortController();
   res.on("close", () => {
     if (!res.writableFinished) upstreamAbort.abort();
@@ -740,18 +687,15 @@ const handler = async (req, res) => {
       method: req.method,
       headers,
       body,
-      // Required when using a stream body in Node fetch
       ...(body ? { duplex: "half" } : {}),
       redirect: "manual",
       signal: upstreamAbort.signal,
     });
 
-    // Log without query string to avoid leaking tokens
     console.log(`[proxy] ${req.method || "GET"} ${safeTarget} -> ${upstream.status} (${Date.now() - startedAt}ms)`);
 
     res.statusCode = upstream.status;
 
-    // Copy response headers
     upstream.headers.forEach((value, key) => {
       const lower = key.toLowerCase();
       if (lower === "set-cookie") return;
@@ -761,7 +705,6 @@ const handler = async (req, res) => {
       // make the browser try to decompress *again* and fail while reading.
       if (lower === "content-encoding") return;
 
-      // Content-Length can be wrong after decompression; let Node set it.
       if (lower === "content-length") return;
 
       // Keep our CORS headers (set by setCorsHeaders). Upstream values could
@@ -783,13 +726,11 @@ const handler = async (req, res) => {
       try {
         res.end();
       } catch {
-        // ignore
       }
     });
     nodeStream.pipe(res);
   } catch (err) {
     if (upstreamAbort.signal.aborted) {
-      // The client is gone; there is nobody to send a 502 to and nothing went wrong upstream.
       console.log(`[proxy] ${req.method || "GET"} ${safeTarget} cancelled by client`);
       res.destroy();
       return;
@@ -900,7 +841,6 @@ function findOAuthCallbackListener(providerId) {
   return oauthCallbackListeners.find((entry) => entry.configs.some((config) => config.providerId === providerId));
 }
 
-/** Bind the provider's callback port for an in-progress login, or extend its idle deadline. */
 function armOAuthCallbackListener(entry) {
   clearTimeout(entry.idleTimer);
   entry.idleTimer = setTimeout(() => releaseOAuthCallbackListener(entry), OAUTH_CALLBACK_LISTENER_IDLE_MS);
@@ -913,7 +853,6 @@ function armOAuthCallbackListener(entry) {
   server.once("error", (err) => {
     if (entry.server !== server) return;
     entry.server = null;
-    // Another app (e.g. the Codex CLI) owns the port; leave it alone and retry on the next poll.
     const code = typeof err?.code === "string" ? err.code : "listen_error";
     if (entry.lastListenError === code) return;
     entry.lastListenError = code;

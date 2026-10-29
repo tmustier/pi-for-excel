@@ -215,7 +215,6 @@ class FirstReadRejectingSettings {
     }
 
     const value = this.values.get(key);
-    // This fixture mirrors the persisted settings boundary.
     return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
   }
 

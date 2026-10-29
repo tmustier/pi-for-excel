@@ -1,7 +1,3 @@
-/**
- * Chat input focus helpers shared across overlays, shortcuts, and taskpane init.
- */
-
 export const PI_REQUEST_INPUT_FOCUS_EVENT = "pi:request-input-focus";
 
 export function requestChatInputFocus(): void {

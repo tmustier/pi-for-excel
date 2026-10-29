@@ -1,10 +1,3 @@
-/**
- * Extensions hub — Skills tab.
- *
- * Bundled skills (read-only cards), external skills (expandable with remove),
- * and install form for pasting SKILL.md content.
- */
-
 import { getFilesWorkspace } from "../../files/workspace.js";
 import { listAgentSkills, mergeAgentSkillDefinitions } from "../../skills/catalog.js";
 import {
@@ -36,8 +29,6 @@ import {
 import { lucide, ClipboardList } from "../../ui/lucide-icons.js";
 import { t } from "../../language/index.js";
 
-// ── Types ───────────────────────────────────────────
-
 interface SkillsSnapshot {
   bundled: AgentSkillDefinition[];
   external: AgentSkillDefinition[];
@@ -47,8 +38,6 @@ interface SkillsSnapshot {
   activationLoadError: string | null;
 }
 
-// ── Snapshot builder ────────────────────────────────
-
 async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Promise<SkillsSnapshot> {
   const bundled = listAgentSkills();
   let external: AgentSkillDefinition[] = [];
@@ -57,8 +46,6 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
   let activationLoadError: string | null = null;
 
   try {
-    // Same set Pi loads at runtime: managed skills/external/<name>/SKILL.md
-    // plus workspace-discovered skills/<name>/SKILL.md.
     external = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
   } catch (err) {
     externalLoadError = err instanceof Error ? err.message : "Unknown error";
@@ -79,8 +66,6 @@ async function buildSnapshot(settings: SkillActivationMutableSettingsStore): Pro
 function normalizeSkillName(name: string): string {
   return name.trim().toLowerCase();
 }
-
-// ── Main render ─────────────────────────────────────
 
 export async function renderSkillsTab(args: {
   container: HTMLElement;
@@ -131,7 +116,6 @@ export async function renderSkillsTab(args: {
   statusLine.textContent = t("ext-hub-skills.statusLine", { active: snapshot.active.length, bundled: activeBundledCount, external: activeExternalCount });
   container.appendChild(statusLine);
 
-  // ── Bundled section ───────────────────────────
   container.appendChild(createSectionHeader({
     label: t("extensions-hub-skills.bundledSection"),
     count: snapshot.bundled.length,
@@ -156,7 +140,6 @@ export async function renderSkillsTab(args: {
     container.appendChild(list);
   }
 
-  // ── External section ──────────────────────────
   container.appendChild(createSectionHeader({
     label: t("extensions-hub-skills.externalSection"),
     count: snapshot.external.length,
@@ -193,8 +176,6 @@ export async function renderSkillsTab(args: {
 
             await runMutation(async () => {
               const workspace = getFilesWorkspace();
-              // Workspace-discovered skills are plain files the user added;
-              // remove exactly the SKILL.md this card shows.
               const removed = skill.location.startsWith("skills/external/")
                 ? await removeExternalAgentSkillFromWorkspace({ workspace, name: skill.name })
                 : await workspace.deleteFile(skill.location).then(() => true);
@@ -211,7 +192,6 @@ export async function renderSkillsTab(args: {
     container.appendChild(list);
   }
 
-  // Warnings
   if (snapshot.externalLoadError) {
     const warn = document.createElement("p");
     warn.className = "pi-overlay-hint pi-hub-warn-text";
@@ -226,7 +206,6 @@ export async function renderSkillsTab(args: {
     container.appendChild(warn);
   }
 
-  // ── Install section ───────────────────────────
   container.appendChild(createSectionHeader({ label: t("extensions-hub-skills.installSection") }));
 
   const installForm = createAddForm();
@@ -265,14 +244,11 @@ export async function renderSkillsTab(args: {
   installForm.appendChild(installActions);
   container.appendChild(installForm);
 
-  // Footer hint
   const footer = document.createElement("p");
   footer.className = "pi-overlay-hint";
   footer.textContent = t("extensions-hub-skills.footer-hint");
   container.appendChild(footer);
 }
-
-// ── Bundled skill card ──────────────────────────────
 
 function renderBundledSkillCard(args: {
   skill: AgentSkillDefinition;
@@ -298,8 +274,6 @@ function renderBundledSkillCard(args: {
 
   return card.root;
 }
-
-// ── External skill card (expandable) ────────────────
 
 function renderExternalSkillCard(args: {
   skill: AgentSkillDefinition;
@@ -333,10 +307,8 @@ function renderExternalSkillCard(args: {
     rightContent: toggle.root,
   });
 
-  // Location
   card.body.appendChild(createConfigRow(t("ext-hub-skills.location"), createConfigValue(args.skill.location)));
 
-  // Remove button
   card.body.appendChild(createActionsRow(
     createButton(t("ext-hub-skills.remove"), {
       danger: true,

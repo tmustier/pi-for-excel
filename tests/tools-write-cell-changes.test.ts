@@ -70,7 +70,6 @@ void test("write_cells blocks values that a merged area would drop, and allows i
     assert.match(text(inside), /Merged!A1:D1 is merged/u);
     assert.match(text(inside), /B1 would be dropped/u);
 
-    // The 2×2 block starts on the merge's top-left cell; only the other three are lost.
     const block = await tool.execute("merge-block", { start_cell: "Merged!B4", values: [["a", "b"], ["c", "d"]] });
     assert.equal(block.isError, true);
     assert.match(text(block), /Merged!B4:C6 is merged; only its top-left cell holds a value, so C4, B5, C5 would be dropped/u);
@@ -99,7 +98,6 @@ void test("write_cells refuses to write into a spilled range and names the ancho
     assert.match(text(child), /A3 is spilled from Spill!A1 \(=SEQUENCE\(5\)\)/u);
     assert.equal(sheet.value("A1"), 1, "the anchor is not broken");
 
-    // Replacing the anchor itself is an ordinary overwrite.
     const anchor = await tool.execute("spill-anchor", { start_cell: "Spill!A1", values: [["=A9"]], allow_overwrite: true });
     assert.equal(anchor.isError, undefined);
   });
@@ -310,7 +308,6 @@ void test("findErrors reports Excel errors but not text that starts with #", () 
 
 void test("a chunked write interrupted by cell-edit mode reports exactly which rows landed", async () => {
   const host = new FakeExcelHost(["Big"]);
-  // ~4.5 MB of text: written in several chunks, each synced on its own.
   const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
   host.failWrite = { at: 2, error: new OfficeError("InvalidOperationInCellEditMode", "Excel is in cell-editing mode.") };
   const audits: Array<{ blocked: boolean; outputAddress?: string }> = [];
@@ -335,7 +332,6 @@ void test("a chunked write interrupted by cell-edit mode reports exactly which r
 });
 
 function bigRows(count: number): string[][] {
-  // ~300 characters a row: 15,000 rows are written in several chunks.
   return Array.from({ length: count }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
 }
 
@@ -398,7 +394,6 @@ void test("Stop after the last chunk says the whole write stands", async () => {
 
 void test("a chunk Excel never confirmed is reported as unknown, not as unwritten", async () => {
   const host = new FakeExcelHost(["Big"]);
-  // Shape #792's excelRun timeout is expected to throw: no Office code, outcome unknown.
   host.failWrite = { at: 2, error: Object.assign(new Error("Excel did not answer in 60 s"), { code: "excel_timeout", outcomeUnknown: true }) };
   await withFakeExcel(host, async () => {
     const result = await createWriteCellsTool(noBackups).execute("timeout-mid", { start_cell: "Big!A1", values: bigRows(15_000) });
@@ -427,7 +422,6 @@ void test("a timeout while reading the target says nothing was written, without 
 void test("after an Excel.run timeout mid-write, the abandoned run writes nothing more than the result reports", async () => {
   const host = new FakeExcelHost(["Big"]);
   await withFakeExcel(host, async () => {
-    // As #792's excelRun does: race the whole Excel.run against a timeout. The run itself goes on.
     const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
     Reflect.set(globalThis, "Excel", {
       run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
@@ -437,7 +431,6 @@ void test("after an Excel.run timeout mid-write, the abandoned run writes nothin
         }, 30); }),
       ]),
     });
-    // The third sync (the second chunk) is held past the timeout, then lands.
     host.delaySync = { at: 3, ms: 80 };
     const result = await createWriteCellsTool(noBackups).execute("timeout-abandoned", { start_cell: "Big!A1", values: bigRows(15_000) });
     const reported = text(result);
@@ -447,7 +440,6 @@ void test("after an Excel.run timeout mid-write, the abandoned run writes nothin
     const written = /Partly written\*\* — Big!A1:A(\d+)/u.exec(reported);
     const uncertain = /rows (\d+)–(\d+) \(Big!A\d+:A\d+\) may or may not have been written/u.exec(reported);
     assert.ok(written?.[1] && uncertain?.[2], reported);
-    // Everything that landed, even after the result was returned, is within what the result allowed for.
     assert.ok(landed <= Number(uncertain[2]), `landed ${landed} rows; result: ${reported}`);
     assert.ok(landed >= Number(written[1]));
   });
@@ -465,7 +457,7 @@ void test("fill_formula that times out while inspecting never fills afterwards",
         }, 30); }),
       ]),
     });
-    host.delaySync = { at: 1, ms: 80 }; // the first read is held past the timeout
+    host.delaySync = { at: 1, ms: 80 };
     const result = await createFillFormulaTool().execute("fill-timeout", { range: "Sheet1!B1:B3", formula: "=A1" });
     await new Promise((resolve) => { setTimeout(resolve, 200); });
 
@@ -495,7 +487,6 @@ void test("approval names the non-empty cells a write would replace", () => {
     formulas: [["", 5, ""], ["=A1*2", "", 0], [1, 2, 3]],
   });
   assert.equal(occupied?.count, 6);
-  // Reading order, formulas shown as formulas, a zero counts, capped at three.
   assert.deepEqual(occupied?.sample, [
     { address: "'My Sheet'!C2", content: "5" },
     { address: "'My Sheet'!B3", content: "=A1*2" },

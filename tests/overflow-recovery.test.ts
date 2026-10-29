@@ -15,7 +15,6 @@ const EMPTY_USAGE: Usage = {
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
 
-// Real error shape from #558 (LiteLLM custom gateway, 65k model).
 const LITELLM_OVERFLOW_ERROR =
   "400 litellm.ContextWindowExceededError: litellm.BadRequestError: ContextWindowExceededError: " +
   "Hosted_vllmException - This model's maximum context length is 65536 tokens. However, you requested " +

@@ -1,18 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Local Python / LibreOffice bridge for Pi for Excel.
- *
- * Modes:
- * - stub (default): deterministic simulated responses for local development.
- * - real: executes local python + libreoffice commands with guardrails.
- *
- * Endpoints:
- * - GET  /health
- * - POST /v1/python-run
- * - POST /v1/libreoffice-convert
- */
-
 import http from "node:http";
 import https from "node:https";
 import fs from "node:fs";
@@ -107,7 +92,6 @@ const PYTHON_WRAPPER_CODE = [
   "import sys",
   "import traceback",
   "",
-  // Code and input arrive on stdin: an environment variable is capped at 128 KB on Linux (E2BIG).
   "payload = json.loads(sys.stdin.buffer.read().decode('utf-8') or '{}')",
   "raw_input = payload.get('input_json') or ''",
   "input_data = None",
@@ -132,11 +116,6 @@ const PYTHON_WRAPPER_CODE = [
 ].join("\n");
 
 class HttpError extends Error {
-  /**
-   * @param {number} status
-   * @param {string} message
-   * @param {Record<string, unknown>} [details] extra response fields
-   */
   constructor(status, message, details = {}) {
     super(message);
     this.name = "HttpError";
@@ -145,24 +124,14 @@ class HttpError extends Error {
   }
 }
 
-/**
- * @param {*} value
- * @returns {boolean}
- */
 function isPythonBridgeServerPayloadShape(value) {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * @param {string | undefined} origin
- */
 function isAllowedOrigin(origin) {
   return typeof origin === "string" && allowedOrigins.has(origin);
 }
 
-/**
- * @param {string | undefined} addr
- */
 function isLoopbackAddress(addr) {
   if (!addr) return false;
   if (addr === "::1" || addr === "0:0:0:0:0:0:0:1") return true;
@@ -171,10 +140,6 @@ function isLoopbackAddress(addr) {
   return false;
 }
 
-/**
- * @param {http.IncomingMessage} req
- * @param {http.ServerResponse} res
- */
 function setCorsHeaders(req, res) {
   const origin = req.headers.origin;
   if (isAllowedOrigin(origin)) {
@@ -190,31 +155,18 @@ function setCorsHeaders(req, res) {
   res.setHeader("Access-Control-Max-Age", "86400");
 }
 
-/**
- * @param {http.ServerResponse} res
- * @param {number} status
- * @param {*} payload
- */
 function respondJson(res, status, payload) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
   res.end(JSON.stringify(payload));
 }
 
-/**
- * @param {http.ServerResponse} res
- * @param {number} status
- * @param {string} text
- */
 function respondText(res, status, text) {
   res.statusCode = status;
   res.setHeader("Content-Type", "text/plain; charset=utf-8");
   res.end(text);
 }
 
-/**
- * @param {string | undefined} headerValue
- */
 function extractBearerToken(headerValue) {
   if (typeof headerValue !== "string") return null;
   const prefix = "Bearer ";
@@ -223,10 +175,6 @@ function extractBearerToken(headerValue) {
   return token.length > 0 ? token : null;
 }
 
-/**
- * @param {string} left
- * @param {string} right
- */
 function secureEquals(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -234,9 +182,6 @@ function secureEquals(left, right) {
   return timingSafeEqual(leftBuffer, rightBuffer);
 }
 
-/**
- * @param {http.IncomingMessage} req
- */
 function isAuthorized(req) {
   if (!authToken) return true;
 
@@ -246,9 +191,6 @@ function isAuthorized(req) {
   return secureEquals(candidate, authToken);
 }
 
-/**
- * @param {http.IncomingMessage} req
- */
 async function readJsonBody(req) {
   const chunks = [];
   let size = 0;
@@ -276,9 +218,6 @@ async function readJsonBody(req) {
   }
 }
 
-/**
- * @param {*} value
- */
 function normalizeOptionalString(value) {
   if (typeof value !== "string") return undefined;
 
@@ -286,10 +225,6 @@ function normalizeOptionalString(value) {
   return trimmed.length > 0 ? trimmed : undefined;
 }
 
-/**
- * @param {*} value
- * @param {{ name: string; min: number; max: number; defaultValue: number }} options
- */
 function parseBoundedInteger(value, options) {
   if (value === undefined) return options.defaultValue;
   if (typeof value !== "number" || !Number.isInteger(value)) {
@@ -301,9 +236,6 @@ function parseBoundedInteger(value, options) {
   return value;
 }
 
-/**
- * @param {string} value
- */
 function isAbsolutePath(value) {
   if (value.startsWith("/")) return true;
   if (/^[A-Za-z]:[\\/]/.test(value)) return true;
@@ -311,10 +243,6 @@ function isAbsolutePath(value) {
   return false;
 }
 
-/**
- * @param {*} value
- * @param {string} field
- */
 function normalizeAbsolutePath(value, field) {
   const pathValue = normalizeOptionalString(value);
   if (!pathValue) {
@@ -328,18 +256,12 @@ function normalizeAbsolutePath(value, field) {
   return pathValue;
 }
 
-/**
- * @param {string | undefined} output
- */
 function normalizeOutput(output) {
   if (typeof output !== "string") return undefined;
   const normalized = output.replace(/\r/g, "").trim();
   return normalized.length > 0 ? normalized : undefined;
 }
 
-/**
- * @param {*} payload
- */
 function parsePythonRunRequest(payload) {
   if (!isPythonBridgeServerPayloadShape(payload)) {
     throw new HttpError(400, "Request body must be a JSON object.");
@@ -381,9 +303,6 @@ function parsePythonRunRequest(payload) {
   };
 }
 
-/**
- * @param {*} payload
- */
 function parseLibreOfficeRequest(payload) {
   if (!isPythonBridgeServerPayloadShape(payload)) {
     throw new HttpError(400, "Request body must be a JSON object.");
@@ -419,10 +338,6 @@ function parseLibreOfficeRequest(payload) {
   };
 }
 
-/**
- * @param {string} command
- * @param {string[]} args
- */
 function probeBinary(command, args) {
   const probe = spawnSync(command, args, {
     encoding: "utf8",
@@ -485,9 +400,6 @@ function probeLibreOfficeBinary() {
   };
 }
 
-/**
- * @param {{ command: string; args: string[]; timeoutMs: number; env?: NodeJS.ProcessEnv; stdin?: string }} options
- */
 async function runCommandCapture(options) {
   let timedOut = false;
   let overflow = false;
@@ -499,7 +411,6 @@ async function runCommandCapture(options) {
     });
 
     if (options.stdin !== undefined && child.stdin) {
-      // The process may exit before reading everything; its exit code reports why.
       child.stdin.on("error", () => {});
       child.stdin.end(options.stdin, "utf8");
     }
@@ -564,9 +475,6 @@ async function runCommandCapture(options) {
   return result;
 }
 
-/**
- * @param {string} stdout
- */
 function splitPythonResult(stdout) {
   const normalized = stdout.replace(/\r/g, "");
   const marker = `\n${RESULT_JSON_MARKER}\n`;
@@ -595,10 +503,6 @@ function splitPythonResult(stdout) {
   };
 }
 
-/**
- * @param {{ code: string; input_json?: string; timeout_ms: number }} request
- * @param {{ command: string }} pythonInfo
- */
 async function runPython(request, pythonInfo) {
   const result = await runCommandCapture({
     command: pythonInfo.command,
@@ -613,7 +517,6 @@ async function runPython(request, pythonInfo) {
       .map((value) => value.trim())
       .find((value) => value.length > 0) || `python exited with code ${result.code}`;
 
-    // The code ran: return its exit code and output with the error.
     throw new HttpError(400, message, {
       action: "run_python",
       exit_code: result.code,
@@ -643,9 +546,6 @@ async function runPython(request, pythonInfo) {
   };
 }
 
-/**
- * @param {{ input_path: string; target_format: string; output_path?: string; overwrite: boolean; timeout_ms: number }} request
- */
 function resolveOutputPath(request) {
   if (request.output_path) {
     return request.output_path;
@@ -655,9 +555,6 @@ function resolveOutputPath(request) {
   return path.join(parsed.dir, `${parsed.name}.${request.target_format}`);
 }
 
-/**
- * @param {string} filePath
- */
 function ensureFileExists(filePath) {
   let stats;
   try {
@@ -671,10 +568,6 @@ function ensureFileExists(filePath) {
   }
 }
 
-/**
- * @param {string} outputPath
- * @param {boolean} overwrite
- */
 function ensureOutputWritable(outputPath, overwrite) {
   if (fs.existsSync(outputPath) && !overwrite) {
     throw new HttpError(409, `output_path already exists: ${outputPath}`);
@@ -686,11 +579,6 @@ function ensureOutputWritable(outputPath, overwrite) {
   }
 }
 
-/**
- * @param {string} tempDir
- * @param {string} inputPath
- * @param {string} targetFormat
- */
 function findConvertedFile(tempDir, inputPath, targetFormat) {
   const baseName = path.parse(inputPath).name;
   const expected = path.join(tempDir, `${baseName}.${targetFormat}`);
@@ -708,10 +596,6 @@ function findConvertedFile(tempDir, inputPath, targetFormat) {
   return null;
 }
 
-/**
- * @param {{ input_path: string; target_format: string; output_path?: string; overwrite: boolean; timeout_ms: number }} request
- * @param {{ command: string }} libreOfficeInfo
- */
 async function runLibreOfficeConvert(request, libreOfficeInfo) {
   ensureFileExists(request.input_path);
 
@@ -782,9 +666,6 @@ function createStubBackend() {
       };
     },
 
-    /**
-     * @param {{ code: string; input_json?: string; timeout_ms: number }} request
-     */
     async handlePython(request) {
       let resultJson;
       if (request.input_json) {
@@ -801,9 +682,6 @@ function createStubBackend() {
       };
     },
 
-    /**
-     * @param {{ input_path: string; target_format: string; output_path?: string; overwrite: boolean; timeout_ms: number }} request
-     */
     async handleLibreOffice(request) {
       const outputPath = resolveOutputPath(request);
 
@@ -869,9 +747,6 @@ function createRealBackend() {
       };
     },
 
-    /**
-     * @param {{ code: string; input_json?: string; timeout_ms: number }} request
-     */
     async handlePython(request) {
       if (!pythonInfo.available) {
         throw new HttpError(501, "python binary not available");
@@ -880,9 +755,6 @@ function createRealBackend() {
       return runPython(request, { command: pythonInfo.command });
     },
 
-    /**
-     * @param {{ input_path: string; target_format: string; output_path?: string; overwrite: boolean; timeout_ms: number }} request
-     */
     async handleLibreOffice(request) {
       if (!libreOfficeInfo.available) {
         throw new HttpError(501, "libreoffice binary not available");

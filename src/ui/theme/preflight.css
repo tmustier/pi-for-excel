@@ -1,10 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   0. PREFLIGHT — first-party base reset
-   Replaces Tailwind v4's preflight (dropped with pi-web-ui/app.css).
-   The component CSS in this theme was written against these resets;
-   keep them faithful to Tailwind preflight semantics.
-   ═══════════════════════════════════════════════════════ */
-
 *,
 ::before,
 ::after {
@@ -119,14 +112,11 @@ textarea {
   resize: vertical;
 }
 
-/* Thin, quiet scrollbars everywhere (Firefox + spec-compliant engines).
-   WebKit fallbacks live in base.css. */
 * {
   scrollbar-width: thin;
   scrollbar-color: var(--alpha-12) transparent;
 }
 
-/* Visibility utility used by pi-sidebar / keyboard-shortcuts / tool cards. */
 [hidden] {
   display: none !important;
 }

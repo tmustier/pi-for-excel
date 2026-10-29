@@ -3,9 +3,6 @@ import { test } from "node:test";
 
 import { isPiAuthRequestAllowed, type PiAuthRequestPolicyInput } from "../src/dev-auth-policy.ts";
 
-// Policy table for the dev credential endpoint. The HTTP wiring of this policy is
-// covered by tests/dev-auth-server.test.ts against a real Vite server; this table
-// pins the rows that HTTP/1.1 alone cannot reach (HTTP/2 `:authority`, opt-in).
 const POLICY: ReadonlyArray<{ input: PiAuthRequestPolicyInput; allowed: boolean; why: string }> = [
   { input: { remoteAddress: "127.0.0.1", hostHeader: "localhost:3141" }, allowed: true, why: "loopback socket + local host" },
   { input: { remoteAddress: "::1", hostHeader: "[::1]:3141" }, allowed: true, why: "IPv6 loopback + bracketed host" },

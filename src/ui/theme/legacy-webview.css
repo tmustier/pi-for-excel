@@ -1,17 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   Legacy WebView fallbacks
-   ═══════════════════════════════════════════════════════
-
-   WPS Spreadsheets can embed older Chromium/CEF builds that do not support
-   modern OKLCH colors. Custom properties accept the literal `oklch(...)` text
-   even in those engines, then every consuming declaration is dropped when the
-   value is substituted into `color`, `background`, or `border`.
-
-   Theme tokens are plain sRGB since the sidebar redesign, so they need no
-   fallback here. What remains are sRGB stand-ins for component rules that
-   still hardcode OKLCH; each goes when its component is reworked.
-*/
-
 @supports not (color: oklch(1 0 0)) {
 
   .pi-session-tabs::after {

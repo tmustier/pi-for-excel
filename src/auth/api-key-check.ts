@@ -1,12 +1,3 @@
-/**
- * Checks an API key before it is saved, by listing the provider's models.
- *
- * Listing models is free and needs only the key. A key the provider rejects
- * (401/403) is not saved. When the check cannot run (unknown provider, offline,
- * blocked by CORS, server error), the key is saved unverified: a network problem
- * now says nothing about the key.
- */
-
 export type ApiKeyCheckResult =
   | { status: "valid" }
   | { status: "rejected"; httpStatus: number }

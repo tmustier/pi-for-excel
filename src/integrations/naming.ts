@@ -1,10 +1,3 @@
-/**
- * Terminology for built-in external capability bundles.
- *
- * Keep user-facing strings centralized so renaming "integrations"
- * later only requires edits in one place.
- */
-
 export const TOOLS_COMMAND_NAME = "tools";
 
 export const INTEGRATION_LABEL = "Integration";

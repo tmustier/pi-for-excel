@@ -83,7 +83,6 @@ void test("a tab's own parallel writes hold the lock; only another tab's write w
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => { release = resolve; });
   const op = (sessionId: string, opId: string) => ({ workbookId: "wb", sessionId, opId });
-  // What a listener sees when each write is announced as queued.
   const seenWhenQueued: string[] = [];
   local.subscribe((event) => {
     if (event.type !== "queued") return;

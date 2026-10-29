@@ -1,4 +1,3 @@
-/** Remembered consent is scoped to a server identity, endpoint and tool. */
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import type { SettingsReader, SettingsUpdater } from "../storage/local/settings-store.js";

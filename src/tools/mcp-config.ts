@@ -2,10 +2,6 @@ function isToolsMcpConfigPayloadShape(value: unknown): value is Record<string, u
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * MCP server configuration storage.
- */
-
 import {
   loadConnectionStoreDocument,
   loadConnectionStoreDocumentForUpdate,
@@ -17,7 +13,6 @@ import type { SettingsWriter } from "../storage/local/settings-store.js";
 export const MCP_SERVERS_SETTING_KEY = "mcp.servers.v1";
 const MCP_SERVERS_DOC_VERSION = 1;
 
-/** Connection-store record for MCP server bearer tokens keyed by server id. */
 export const MCP_SERVER_TOKENS_CONNECTION_ID = "builtin.mcp.servers";
 
 export interface McpServerConfig {
@@ -350,8 +345,6 @@ export async function saveMcpServers(
   const normalized = uniqueById(normalizeServers(servers));
   const tokensByServerId = readTokenMapFromServers(normalized);
 
-  // Write tokens first so a failed connection-store write never strips legacy
-  // token fields from mcp.servers.v1 before persistence succeeds.
   const previousTokenMap = await loadConnectionStoreMcpTokensForUpdate(settings);
   await writeConnectionStoreMcpTokens(settings, tokensByServerId);
 
@@ -366,7 +359,6 @@ export async function saveMcpServers(
         await writeConnectionStoreMcpTokens(settings, previousTokenMap);
       }
     } catch {
-      // best-effort rollback only; rethrow original failure below.
     }
 
     throw error;

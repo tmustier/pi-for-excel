@@ -219,7 +219,6 @@ void test("a run that ends in a background tab marks it until the tab is opened;
   const attentionOf = (runtimeId: string) =>
     manager.snapshotTabs().find((tab) => tab.runtimeId === runtimeId)?.attention;
 
-  // Background run finishes.
   busy.set("second", true);
   manager.notifyRuntimeChanged();
   assert.equal(attentionOf("second"), "none");
@@ -229,11 +228,9 @@ void test("a run that ends in a background tab marks it until the tab is opened;
   assert.equal(attentionOf("second"), "finished");
   assert.deepEqual(settled, [{ runtimeId: "second", outcome: "finished", wasActive: false, title: "Chat 2" }]);
 
-  // Settles once: further emits while idle report nothing new.
   manager.notifyRuntimeChanged();
   assert.equal(settled.length, 1);
 
-  // Failure overrides; a new run clears the mark while it works.
   busy.set("second", true);
   manager.notifyRuntimeChanged();
   assert.equal(attentionOf("second"), "none");
@@ -242,11 +239,9 @@ void test("a run that ends in a background tab marks it until the tab is opened;
   manager.notifyRuntimeChanged();
   assert.equal(attentionOf("second"), "failed");
 
-  // Opening the tab clears it.
   manager.switchRuntime("second");
   assert.equal(attentionOf("second"), "none");
 
-  // A user stop in the (now background) first tab: no mark, no event.
   settled.length = 0;
   busy.set("first", true);
   manager.notifyRuntimeChanged();
@@ -256,7 +251,6 @@ void test("a run that ends in a background tab marks it until the tab is opened;
   assert.equal(attentionOf("first"), "none");
   assert.equal(settled.length, 0);
 
-  // The active tab finishing is reported as active and never marked.
   busy.set("second", true);
   manager.notifyRuntimeChanged();
   busy.set("second", false);

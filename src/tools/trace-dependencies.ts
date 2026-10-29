@@ -1,13 +1,3 @@
-/**
- * trace_dependencies — Return formula lineage for a cell.
- *
- * Supports tracing both:
- * - precedents (what feeds this cell)
- * - dependents (what this cell feeds)
- *
- * Uses Office.js direct APIs when available and falls back to formula parsing.
- */
-
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
@@ -83,7 +73,6 @@ function resolveTraceSource(state: TraceBuildState): TraceDependencySource {
   return "none";
 }
 
-/** A precedent range too large to trace cell by cell; its values are not loaded. */
 function rangeNode(cellRef: string): DepNodeDetail | null {
   return parseRangeRef(cellRef).address.includes(":")
     ? { address: cellRef, value: null, precedents: [] }
@@ -135,7 +124,6 @@ function estimateAddressCellCount(address: string): number {
       const height = Math.abs(end.row - start.row) + 1;
       total += width * height;
     } catch {
-      // Skip malformed area segment.
     }
   }
 
@@ -372,7 +360,6 @@ async function traceCell(
     ? rawFormula
     : undefined;
 
-  // Precedent tracing requires a formula at the current node.
   if (mode === "precedents" && !formula) {
     return null;
   }

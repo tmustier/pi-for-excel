@@ -1,14 +1,3 @@
-/**
- * Persistent agent rules storage.
- *
- * We store two scopes:
- * - user-level rules (global to this install)
- * - workbook-level rules (scoped by workbook identity)
- *
- * Storage keys are intentionally unchanged from the original "instructions"
- * naming to preserve backward compatibility with persisted data.
- */
-
 export const USER_RULES_SOFT_LIMIT = 2_000;
 export const WORKBOOK_RULES_SOFT_LIMIT = 4_000;
 

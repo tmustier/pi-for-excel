@@ -4,8 +4,6 @@ import { test } from "node:test";
 import { ConnectionManager } from "../src/connections/manager.ts";
 import type { ConnectionDefinition } from "../src/connections/types.ts";
 
-// ── In-memory settings store ────────────────────────
-
 function createMemorySettings(): {
   get(key: string): Promise<unknown>;
   set(key: string, value: unknown): Promise<void>;
@@ -69,8 +67,6 @@ const MULTI_FIELD_DEFINITION: ConnectionDefinition = {
   ],
 };
 
-// ── getDefinition ───────────────────────────────────
-
 void test("getDefinition returns null for unregistered connection", () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   assert.equal(manager.getDefinition("nonexistent"), null);
@@ -103,8 +99,6 @@ void test("getDefinition returns detached objects", () => {
   assert.equal(second.secretFields[0].label, "API key");
 });
 
-// ── listDefinitions ─────────────────────────────────
-
 void test("listDefinitions returns empty array when none registered", () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   assert.deepEqual(manager.listDefinitions(), []);
@@ -119,7 +113,6 @@ void test("listDefinitions returns definitions sorted by title", () => {
   assert.equal(defs.length, 2);
   assert.equal(defs[0].title, "Apollo");
   assert.equal(defs[1].title, "Vendor API");
-  // No ownerId leaked
   assert.equal(Reflect.get(defs[0], "ownerId"), undefined);
 });
 
@@ -170,8 +163,6 @@ void test("registerDefinition validates and normalizes httpAuth configuration", 
     /unknown secret field "missingField"/,
   );
 });
-
-// ── getSecretFieldPresence ──────────────────────────
 
 void test("getSecretFieldPresence returns all false when no secrets stored", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
@@ -227,8 +218,6 @@ void test("getSecretsForOwner returns owner-scoped secret copies", async () => {
   );
 });
 
-// ── redactMessageForConnection ──────────────────────
-
 void test("redactMessageForConnection masks stored secrets", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   manager.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
@@ -268,8 +257,6 @@ void test("markInvalid redacts stored secret values from failure reasons", async
   assert.ok(!snapshot?.lastError?.includes("top-secret-token"));
   assert.ok(!snapshot?.lastError?.includes("client-123"));
 });
-
-// ── updateSecretsFromHost ───────────────────────────
 
 void test("updateSecretsFromHost retries transient reads without replacing sibling connections", async () => {
   const settings = new TransientReadSettings();
@@ -312,18 +299,16 @@ void test("updateSecretsFromHost merges partial patch preserving existing fields
   const manager = new ConnectionManager({ settings: createMemorySettings() });
   manager.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
 
-  // Set initial secrets
   await manager.setSecrets("ext.vendor", "ext.vendor.vendor", {
     clientId: "id-old",
     clientSecret: "secret-old",
   });
 
-  // Patch only clientSecret
   await manager.updateSecretsFromHost("ext.vendor.vendor", { clientSecret: "secret-new" });
 
   const presence = await manager.getSecretFieldPresence("ext.vendor.vendor");
-  assert.equal(presence.clientId, true);   // preserved
-  assert.equal(presence.clientSecret, true); // updated
+  assert.equal(presence.clientId, true);
+  assert.equal(presence.clientSecret, true);
 });
 
 void test("updateSecretsFromHost ignores empty values in patch", async () => {
@@ -331,11 +316,10 @@ void test("updateSecretsFromHost ignores empty values in patch", async () => {
   manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
   await manager.setSecrets("ext.apollo", "ext.apollo.apollo", { apiKey: "sk-existing" });
 
-  // Patch with empty string — should be no-op
   await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "" });
 
   const presence = await manager.getSecretFieldPresence("ext.apollo.apollo");
-  assert.equal(presence.apiKey, true); // unchanged
+  assert.equal(presence.apiKey, true);
 });
 
 void test("updateSecretsFromHost clears error status on save", async () => {
@@ -379,8 +363,6 @@ void test("subscribers observe a connected state after host credentials change",
   await manager.updateSecretsFromHost("ext.apollo.apollo", { apiKey: "sk-test" });
   assert.equal(await observed, "connected");
 });
-
-// ── clearSecretsFromHost ────────────────────────────
 
 void test("clearSecretsFromHost wipes secrets and sets status to missing", async () => {
   const manager = new ConnectionManager({ settings: createMemorySettings() });
@@ -432,7 +414,6 @@ void test("clearSecretsFromHost normalizes connection id", async () => {
   manager.registerDefinition("ext.apollo", APOLLO_DEFINITION);
   await manager.setSecrets("ext.apollo", "ext.apollo.apollo", { apiKey: "sk-test" });
 
-  // Use uppercase variant — should still clear the right record
   await manager.clearSecretsFromHost("EXT.APOLLO.APOLLO");
 
   const snapshot = await manager.getSnapshot("ext.apollo.apollo");

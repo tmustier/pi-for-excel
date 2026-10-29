@@ -1,15 +1,3 @@
-/**
- * <message-list> — the transcript.
- *
- * First-party replacement for pi-web-ui's MessageList (docs/ui-ownership.md).
- * Custom role renderers (message-renderer-registry) take precedence; then
- * user and assistant messages render via the built-in elements. Assistant
- * responses are drawn by turn (turn-model.ts): the prose before the first
- * tool call, one <turn-group> for every tool call of the turn, then the
- * answer. The response being streamed is part of the list, so a turn's
- * group gains rows as the model asks for them.
- */
-
 import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
 import { html, LitElement, nothing, type TemplateResult } from "lit";
@@ -26,16 +14,9 @@ export class MessageList extends LitElement {
   @property({ type: Array }) messages: AgentMessage[] = [];
   @property({ type: Array }) tools: AgentTool[] = [];
   @property({ type: Object }) pendingToolCalls: ReadonlySet<string> = new Set();
-  /** The turn is running: tool calls without a result are still to come. */
   @property({ type: Boolean }) isStreaming = false;
   @property({ type: String }) errorSummary: string | null = null;
-  /**
-   * Results pi-agent-core reported at tool_execution_end. In a parallel batch
-   * each tool finishes on its own, but its toolResult message is only added
-   * once the whole batch is done; these let each row finish as it happens.
-   */
   @property({ type: Object }) liveToolResults: ReadonlyMap<string, ToolResultMessage> = new Map();
-  /** The response being streamed, which pi-agent-core adds to `messages` only when it ends. */
   @property({ type: Object }) streamingMessage: AssistantMessage | null = null;
 
   private _approvalHost: ReturnType<typeof registerInlineApprovalHost> | undefined;

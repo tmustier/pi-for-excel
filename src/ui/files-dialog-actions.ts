@@ -53,7 +53,6 @@ function closeWindowSafely(windowHandle: Window | null): void {
   try {
     windowHandle.close();
   } catch {
-    // Ignore close errors.
   }
 }
 
@@ -83,8 +82,6 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
     document.body.appendChild(anchor);
     anchor.click();
     anchor.remove();
-    // Best-effort — anchor click may also silently fail in WebView.
-    // We can't verify whether it worked, so no error toast here.
   }
 
   setTimeout(() => {
@@ -92,11 +89,6 @@ function openBlobInNewTab(blob: Blob, pendingWindow: Window | null): void {
   }, 60_000);
 }
 
-/**
- * Copy text content to clipboard — reliable in Office WebView where
- * window.open / blob URLs silently fail. Hosts that refuse both the clipboard
- * API and `execCommand("copy")` get the manual-copy dialog instead of a toast.
- */
 async function copyTextToClipboard(text: string, fileName: string): Promise<void> {
   if (await copyText(text) === "copied") {
     showToast(t("files-dialog-actions.toast.copied", { fileName }));
@@ -164,10 +156,6 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   if (isBuiltIn && options.file.kind === "text") {
     // Built-in docs: copy and download instead of opening a browser tab,
     // which silently fails in the Office WebView.
-    // This add-in always runs inside the Office WebView (loaded via
-    // manifest.xml into Excel's sidebar), so this path covers all
-    // production usage. Dev-server testing in a browser is unaffected
-    // because built-in docs are only available via the workspace.
     const copyButton = document.createElement("button");
     copyButton.type = "button";
     copyButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
@@ -200,7 +188,6 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
           locationKind: options.fileRef.locationKind,
         });
         if (result.text === undefined) throw new Error("Could not read file.");
-        // A data: URL saves nothing in Excel for Mac; a blob URL does.
         saveBlobAsFile(
           new Blob([result.text], { type: resolveSafeBlobUrlMimeType(options.file.mimeType || "text/plain") }),
           options.file.name,
@@ -212,7 +199,6 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
 
     actions.append(copyButton, downloadButton);
   } else {
-    // Non-built-in files: use the standard blob URL approach.
     const openButton = document.createElement("button");
     openButton.type = "button";
     openButton.className = options.file.kind === "text"

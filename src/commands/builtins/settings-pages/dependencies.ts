@@ -1,8 +1,3 @@
-/**
- * Runtime dependencies for the settings pages, wired once from
- * `taskpane/init.ts` via `configureSettingsPages`.
- */
-
 import type { Api, Model, Models } from "@earendil-works/pi-ai";
 import type { ConnectionManager } from "../../../connections/manager.js";
 import type { ExecutionMode } from "../../../execution/mode.js";
@@ -14,7 +9,6 @@ export interface WorkbookContextSnapshot {
   workbookLabel: string;
 }
 
-/** Dependencies shared by the extensions pages (connections/plugins/skills). */
 export interface ExtensionsHubDependencies {
   getActiveModel?: () => Model<Api> | null;
   getActiveSessionId: () => string | null;
@@ -33,7 +27,6 @@ export interface SettingsPagesDependencies {
   extensionsHub?: ExtensionsHubDependencies;
   onRulesSaved?: () => Promise<void> | void;
   backups?: BackupsPageCallbacks;
-  /** True while any tab is responding or running queued work. */
   isAnyTabBusy?: () => boolean;
 }
 

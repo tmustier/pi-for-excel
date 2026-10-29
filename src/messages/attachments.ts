@@ -1,15 +1,6 @@
 /**
- * First-party attachment + custom message role types.
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono) as part of the UI ownership migration
- * (docs/ui-ownership.md).
- *
- * Pi for Excel does not currently create attachment or artifact messages
- * (document parsing was never bundled), but the roles remain part of the
- * message union so that:
- * - restored/shared sessions containing them keep loading, and
- * - convertToLlm() keeps handling them exactly as before.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import type { ImageContent, TextContent } from "@earendil-works/pi-ai";
@@ -21,10 +12,8 @@ export interface Attachment {
   fileName: string;
   mimeType: string;
   size: number;
-  /** Base64 file content. */
   content: string;
   extractedText?: string;
-  /** Base64 preview image (PNG unless `type` is "image"). */
   preview?: string;
 }
 
@@ -33,7 +22,6 @@ export type UserMessageWithAttachments = {
   content: string | (TextContent | ImageContent)[];
   timestamp: number;
   attachments?: Attachment[];
-  /** Images were normalized once at prompt ingress and must not change with later model switches. */
   imageInputsNormalized?: boolean;
 };
 
@@ -63,11 +51,6 @@ export function isArtifactMessage(message: AgentMessage): message is ArtifactMes
   return message.role === "artifact";
 }
 
-/**
- * Convert attachments to content blocks for the LLM.
- * - Images become ImageContent blocks.
- * - Documents with extractedText become TextContent blocks with a filename header.
- */
 export function convertAttachments(attachments: Attachment[]): (TextContent | ImageContent)[] {
   const content: (TextContent | ImageContent)[] = [];
 

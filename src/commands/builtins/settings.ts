@@ -1,7 +1,3 @@
-/**
- * Builtin settings/auth commands.
- */
-
 import type { ExecutionMode } from "../../execution/mode.js";
 import { formatExecutionModeLabel, toggleExecutionMode } from "../../execution/mode.js";
 import { showToast } from "../../ui/toast.js";

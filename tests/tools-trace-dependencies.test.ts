@@ -121,7 +121,6 @@ void test("trace_dependencies defaults to precedents and parses formula referenc
   calc.cells.set("D1", { value: 12, formula: "" });
   input.cells.set("C5", { value: 20, formula: "" });
 
-  // The tool implementation returns this details shape but omits the second AgentTool generic.
   const result = await withExcel(createContext([calc, input]), () =>
     createTraceDependenciesTool().execute("trace-1", { cell: "Calc!D10", depth: 1 })) as
     AgentToolResult<TraceDependenciesDetails | undefined>;
@@ -133,7 +132,6 @@ void test("trace_dependencies defaults to precedents and parses formula referenc
       value: 42,
       numberFormat: "General",
       formula: "=SUM(A1:B2,'Input Data'!$C$5,D1)+IF(A2=\"E9\",0,0)",
-      // Every cell of A1:B2 is a precedent, not just A1; A2 is not repeated for IF(A2=...).
       precedents: [
         { address: "Calc!A1", value: 10, numberFormat: "General", precedents: [] },
         { address: "Calc!B1", value: null, numberFormat: "General", precedents: [] },
@@ -162,7 +160,6 @@ void test("trace_dependencies finds dependents that reference the target inside 
     ["", "", "=SUM(A1:B2)"],
   ]);
 
-  // The tool implementation returns this details shape but omits the second AgentTool generic.
   const result = await withExcel(createContext([calc]), () =>
     createTraceDependenciesTool().execute("trace-2", {
       cell: "Calc!B2",
@@ -190,7 +187,6 @@ void test("trace_dependencies keeps every cell of a small precedent range from t
     const range = baseGetRange(address);
     if (address === "K2") {
       Object.assign(range, {
-        // Excel reports a precedent range as one address, e.g. "Calc!E2:E3".
         getDirectPrecedents: () => ({ addresses: ["Calc!E2:E3,Calc!A1:Z100"], load: () => undefined }),
       });
     }
@@ -208,6 +204,5 @@ void test("trace_dependencies keeps every cell of a small precedent range from t
     ["Calc!E3", 2],
     ["Calc!A1:Z100", null],
   ]);
-  // The 2,600-cell range is never loaded.
   assert.ok(!loadedAddresses.includes("A1:Z100"));
 });

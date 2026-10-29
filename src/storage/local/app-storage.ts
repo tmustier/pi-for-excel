@@ -1,8 +1,6 @@
 /**
- * High-level storage API providing access to all storage operations.
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import type { CustomProvidersStore } from "./custom-providers-store.js";
@@ -45,13 +43,8 @@ export class AppStorage {
   }
 }
 
-// Global instance management
 let globalAppStorage: AppStorage | null = null;
 
-/**
- * Get the global AppStorage instance.
- * Throws if not initialized.
- */
 export function getAppStorage(): AppStorage {
   if (!globalAppStorage) {
     throw new Error("AppStorage not initialized. Call setAppStorage() first.");
@@ -59,9 +52,6 @@ export function getAppStorage(): AppStorage {
   return globalAppStorage;
 }
 
-/**
- * Set the global AppStorage instance.
- */
 export function setAppStorage(storage: AppStorage): void {
   globalAppStorage = storage;
 }

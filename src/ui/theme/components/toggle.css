@@ -1,14 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   Toggle switch & toggle row — shared component
-   
-   iOS-style toggle (32×18px, green when on, grey when off)
-   and label+toggle row layout for settings/config UIs.
-   
-   Used by: disclosure bar, extensions hub, settings overlays.
-   ═══════════════════════════════════════════════════════ */
-
-/* ── Toggle row ─────────────────────────────────────── */
-
 .pi-toggle-row {
   display: flex;
   justify-content: space-between;
@@ -38,8 +27,6 @@
   font-size: var(--text-sm);
   color: var(--muted-foreground);
 }
-
-/* ── Toggle switch (CSS-only) ───────────────────────── */
 
 .pi-toggle {
   position: relative;
@@ -81,7 +68,6 @@
   z-index: 1;
 }
 
-/* Fallback: support ::after thumb for existing disclosure-bar usage */
 .pi-toggle__track::after {
   content: "";
   display: block;
@@ -96,13 +82,10 @@
   box-shadow: 0 1px 2px var(--alpha-12);
 }
 
-/* Hide ::after pseudo-thumb when explicit __thumb element exists */
 .pi-toggle:has(.pi-toggle__thumb) .pi-toggle__track::after {
   display: none;
 }
 
-/* Checked state — use ~ (general sibling) so it works with both
-   markup variants: input+track and input+thumb+track */
 .pi-toggle__input:checked ~ .pi-toggle__track {
   background: var(--pi-green);
   border-color: var(--pi-green);
@@ -116,13 +99,11 @@
   transform: translateX(14px);
 }
 
-/* Focus */
 .pi-toggle__input:focus-visible ~ .pi-toggle__track {
   outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
-/* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .pi-toggle__track,
   .pi-toggle__track::after,

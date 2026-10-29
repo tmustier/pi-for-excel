@@ -262,7 +262,6 @@
   }
 }
 
-/* Prompt overlay used during OAuth code/device flows */
 .pi-prompt-card {
   text-align: left;
   width: min(420px, 92vw);
@@ -412,7 +411,6 @@
   background: var(--pi-green-strong);
 }
 
-/* Welcome provider rows */
 .pi-login-trigger {
   justify-content: space-between;
   width: 100%;
@@ -553,7 +551,6 @@
 
 
 
-/* Language switch at the top of the welcome card */
 .pi-welcome-lang-bar {
   display: flex;
   justify-content: flex-end;
