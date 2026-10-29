@@ -43,6 +43,7 @@ function fromOfficeReadyInfo(info: OfficeReadyInfoLike): SpreadsheetHostReadyInf
 export class OfficeHost implements SpreadsheetHost {
   readonly kind = "office";
   readonly displayName = "Microsoft Excel";
+  readonly servesOneDocument = true;
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
   readonly documentInstance: DocumentInstanceIdentity = createOfficeDocumentInstanceIdentity();
   private readonly documentUrl = createOfficeDocumentUrlReader();

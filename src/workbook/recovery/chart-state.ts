@@ -143,28 +143,37 @@ async function findChartByName(
   return match;
 }
 
+type ChartIdLookup =
+  | { kind: "found"; target: ChartTarget }
+  | { kind: "not-found" }
+  | { kind: "ids-unavailable" };
+
 async function findChartById(
   context: Excel.RequestContext,
   chartId: string,
-): Promise<ChartTarget | null> {
+): Promise<ChartIdLookup> {
   const sheets = context.workbook.worksheets;
-  sheets.load("items/name");
-  await context.sync();
+  try {
+    sheets.load("items/name");
+    await context.sync();
 
-  for (const sheet of sheets.items) {
-    sheet.charts.load("items/id");
+    for (const sheet of sheets.items) {
+      sheet.charts.load("items/id");
+    }
+    await context.sync();
+  } catch {
+    return { kind: "ids-unavailable" };
   }
-  await context.sync();
 
   for (const sheet of sheets.items) {
     for (const chart of sheet.charts.items) {
       if (chart.id === chartId) {
-        return { sheet, chart };
+        return { kind: "found", target: { sheet, chart } };
       }
     }
   }
 
-  return null;
+  return { kind: "not-found" };
 }
 
 async function findChartByNameOrNull(
@@ -282,19 +291,19 @@ export async function applyChartState(
 
     if (targetState.kind === "chart_absent") {
       if (targetState.chartId) {
-        let target: ChartTarget | null;
-        try {
-          target = await findChartById(context, targetState.chartId);
-        } catch {
-          throw new Error(
-            `Could not verify the created chart's identity by id; nothing was deleted. ` +
-            `Delete chart "${currentChartName}" manually if it still exists.`,
-          );
-        }
-
-        if (target) {
-          target.chart.delete();
-          await context.sync();
+        const lookup = await findChartById(context, targetState.chartId);
+        switch (lookup.kind) {
+          case "ids-unavailable":
+            throw new Error(
+              `Could not verify the created chart's identity by id; nothing was deleted. ` +
+              `Delete chart "${currentChartName}" manually if it still exists.`,
+            );
+          case "found":
+            lookup.target.chart.delete();
+            await context.sync();
+            break;
+          case "not-found":
+            break;
         }
 
         return { state: null, address };

@@ -83,6 +83,18 @@ void test("a dependency tree is validated to its leaves, not only at the root", 
     root: { ...tree.root, precedents: [{ address: "Sheet1!B1", value: 2, precedents: [{ ...leaf, address: 7 }] }] },
   };
   assert.equal(decodeToolDetails(brokenGrandchild), undefined);
+
+  const emptyAndErrorCells = { ...tree, root: { ...tree.root, value: "", precedents: [{ ...leaf, value: null }, { ...leaf, value: "#DIV/0!" }, { ...leaf, value: true }] } };
+  assert.equal(decodeToolDetails(emptyAndErrorCells)?.kind, "trace_dependencies");
+  assert.equal(decodeToolDetails({ ...tree, root: { ...tree.root, value: { error: "#DIV/0!" } } }), undefined);
+  assert.equal(decodeToolDetails({ ...tree, root: { ...tree.root, value: [1] } }), undefined);
+});
+
+void test("CSV cell grids accept host scalars and reject structured cells", () => {
+  const csv = { kind: "read_range_csv", startCol: 0, startRow: 1, values: [["Region", 1.5, true, null, ""]], csv: "Region,1.5,true,," };
+  assert.equal(decodeToolDetails(csv)?.kind, "read_range_csv");
+  assert.equal(decodeToolDetails({ ...csv, values: [["Region", { v: 1 }]] }), undefined);
+  assert.equal(decodeToolDetails({ ...csv, values: [[undefined]] }), undefined);
 });
 
 void test("truncation metadata is readable whether or not the tool attached its own details", () => {

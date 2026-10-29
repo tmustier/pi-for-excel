@@ -143,7 +143,36 @@
         "src/**/*.ts"
       ],
       "rules": {
-        "pi-for-excel/exported-function-return-types": "error"
+        "pi-for-excel/exported-function-return-types": "error",
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "(^|/)host/office-document-url\\.js$",
+                "message": "The raw document URL stays inside src/host. Persist only workbookId from getWorkbookContext()."
+              },
+              {
+                "regex": "(^|/)host/wps/jsapi\\.js$",
+                "importNames": ["getWpsWorkbookFullName"],
+                "message": "The raw workbook path stays inside src/host. Persist only workbookId from getWorkbookContext()."
+              },
+              {
+                "regex": "(^|/)host/workbook-context\\.js$",
+                "importNames": ["getWorkbookContextFromDocumentUrl", "getWorkbookContextFromWpsFullName"],
+                "message": "Raw identity sources are hashed by the host adapters. Use getWorkbookContext() from src/workbook/context.ts."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": [
+        "src/host/**/*.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": "off"
       }
     },
     {
