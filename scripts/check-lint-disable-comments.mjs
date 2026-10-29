@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 
@@ -24,7 +23,7 @@ function disableDirectiveBeforeReason(line) {
 for (const dir of searchRoots) {
   for (const file of collectFiles(join(root, dir))) {
     const rel = relative(root, file).replace(/\\/g, "/");
-    if (rel === "scripts/check-lint-disable-comments.mjs") continue;
+    if (rel === "scripts/check-lint-disable-comments.mjs" || rel === "scripts/check-comment-burndown.mjs") continue;
     const lines = readFileSync(file, "utf8").split("\n");
     for (const [index, line] of lines.entries()) {
       if (/eslint-(?:disable|enable)/u.test(line)) {
