@@ -144,6 +144,7 @@
       ],
       "rules": {
         "pi-for-excel/exported-function-return-types": "error",
+        "pi-for-excel/no-module-scope-translation": "error",
         "eslint/no-restricted-imports": [
           "error",
           {

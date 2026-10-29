@@ -252,14 +252,12 @@ export async function showResumeDialog(opts: {
 
   renderLists();
 
-  let opening = false;
-
   dialog.overlay.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLElement)) return;
 
-    const item = target.closest<HTMLElement>(".pi-resume-item");
-    if (!item || opening) return;
+    const item = target.closest<HTMLButtonElement>(".pi-resume-item");
+    if (!item) return;
 
     const id = item.dataset.id;
     if (!id) return;
@@ -269,7 +267,8 @@ export async function showResumeDialog(opts: {
       ? RESUME_ITEM_KIND_RECENTLY_CLOSED
       : RESUME_ITEM_KIND_SESSION;
 
-    opening = true;
+    const items = dialog.overlay.querySelectorAll<HTMLButtonElement>(".pi-resume-item");
+    for (const button of items) button.disabled = true;
     dialog.card.setAttribute("aria-busy", "true");
     void (async () => {
       try {
@@ -321,7 +320,7 @@ export async function showResumeDialog(opts: {
           ? t("resume.toast.resumedCurrent", { title: opened.title })
           : t("resume.toast.resumedNew", { title: opened.title }));
       } finally {
-        opening = false;
+        for (const button of items) button.disabled = false;
         dialog.card.removeAttribute("aria-busy");
       }
     })();

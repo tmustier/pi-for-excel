@@ -98,6 +98,19 @@ test("auth storage rule rejects every localStorage reference", () => {
   `).length, 3);
 });
 
+test("module-scope translation rule rejects t() that runs during module evaluation", () => {
+  assert.equal(lint("no-module-scope-translation", `
+    declare function t(key: string): string;
+    export const title = t("title");
+    export const labels = { save: t("save") };
+    export class Panel { static heading = t("heading"); }
+    export const lazy = () => t("lazy");
+    export function render(): string { return t("render"); }
+    export class Card { label = t("label"); }
+    export const fallback = (value = t("fallback")): string => value;
+  `).length, 3);
+});
+
 test("repository lint config scopes each local rule to the code it protects", () => {
   const config = JSON.parse(readFileSync(join(root, ".oxlintrc.json"), "utf8"));
   const scopes = Object.fromEntries(config.overrides.flatMap((override) =>
@@ -108,6 +121,7 @@ test("repository lint config scopes each local rule to the code it protects", ()
   assert.deepEqual(scopes, {
     "pi-for-excel/exported-function-return-types": ["src/**/*.ts"],
     "pi-for-excel/no-auth-local-storage": ["src/auth/**/*.ts"],
+    "pi-for-excel/no-module-scope-translation": ["src/**/*.ts"],
     "pi-for-excel/no-typed-json-boundary-cast": ["src/**/*.ts", "tests/**/*.ts"],
   });
 });

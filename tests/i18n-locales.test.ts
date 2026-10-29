@@ -133,22 +133,8 @@ void test("POLICY: locale keys, UI sinks, and initialization stay localization-s
     }
   }
 
-  const moduleScopeCalls: string[] = [];
-  for (const file of sourceFiles) {
-    let depth = 0;
-    for (const [index, line] of readFileSync(file, "utf8").split("\n").entries()) {
-      if (depth === 0 && /\bt\(\s*"/.test(line) && !/^\s*(\*|\/\/)/.test(line)) {
-        moduleScopeCalls.push(`${file.slice(root.length + 1)}:${index + 1}`);
-      }
-      for (const character of line) {
-        if (character === "{" || character === "(") depth++;
-        else if (character === "}" || character === ")") depth = Math.max(0, depth - 1);
-      }
-    }
-  }
-
   assert.deepEqual(
-    { unusedKeys, hardcodedUiStrings, moduleScopeCalls },
-    { unusedKeys: [], hardcodedUiStrings: [], moduleScopeCalls: [] },
+    { unusedKeys, hardcodedUiStrings },
+    { unusedKeys: [], hardcodedUiStrings: [] },
   );
 });

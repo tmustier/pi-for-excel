@@ -3,6 +3,7 @@ import { customElement, property } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 
+import { createSafeRenderer } from "../../compat/marked-safety.js";
 import { encodeBase64Utf8 } from "../../utils/base64-text.js";
 import { escapeAttr } from "../../utils/html.js";
 import { excelRun } from "../../excel/helpers.js";
@@ -154,7 +155,7 @@ export class MarkdownBlock extends LitElement {
 
     const source = this.escapeHtml ? escapeRawHtml(this.content) : this.content;
 
-    const renderer = new marked.Renderer();
+    const renderer = createSafeRenderer();
 
     const originalLink = renderer.link.bind(renderer);
     renderer.link = (token) =>

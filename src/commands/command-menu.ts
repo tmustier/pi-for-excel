@@ -31,7 +31,7 @@ function runCommand(command: SlashCommand): void {
 }
 
 export function showCommandMenu(filter: string, anchor: HTMLElement): void {
-  filteredCommands = commandRegistry.list(filter);
+  filteredCommands = commandRegistry.hiddenAlias(filter) ? [] : commandRegistry.menu(filter);
   if (filteredCommands.length === 0) {
     hideCommandMenu();
     return;
