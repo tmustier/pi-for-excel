@@ -2231,7 +2231,7 @@ export async function initTaskpane(opts: {
   tabLayoutPersistence.enable(tabLayoutReadSucceeded ? undefined : startupTabLayout);
   tabLayoutPersistence.persist(startupTabLayout);
 
-  if (spreadsheetHost.kind === "office") {
+  if (spreadsheetHost.servesOneDocument) {
     const identityFollower = createWorkbookIdentityFollower({
       settings,
       resolveIdentity: async () => (await resolvePersistentWorkbookKey("read"))?.workbookId ?? null,

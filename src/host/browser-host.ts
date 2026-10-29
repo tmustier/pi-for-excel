@@ -13,6 +13,7 @@ import type {
 export class BrowserHost implements SpreadsheetHost {
   readonly kind = "browser";
   readonly displayName = "Browser";
+  readonly servesOneDocument = false;
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
   readonly documentInstance = null;
 

@@ -1,13 +1,15 @@
-import { Type } from "typebox";
+import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 
 import { colToLetter, parseCell } from "../excel/helpers.js";
 
-export type CellValue = string | number | boolean | null | undefined;
+export const cellValueSchema = Type.Union([Type.String(), Type.Number(), Type.Boolean(), Type.Null()]);
+
+export type CellValue = Static<typeof cellValueSchema>;
 
 export const cellValueGridSchema = Type.Refine(
   Type.Unsafe<CellValue[][]>({}),
-  (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) =>
-    cell === null || typeof cell === "string" || typeof cell === "number" || typeof cell === "boolean")),
+  (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) => Value.Check(cellValueSchema, cell))),
   () => "cell values must be a grid of strings, numbers, booleans or nulls",
 );
 
@@ -17,7 +19,7 @@ export const textGridSchema = Type.Refine(
   () => "cell text must be a grid of strings",
 );
 
-export function formatCellValue(v: CellValue): string {
+export function formatCellValue(v: CellValue | undefined): string {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v : String(v);
 }
@@ -46,7 +48,7 @@ function displayDenotesValue(text: string, value: number): boolean {
 }
 
 export function formatDisplayedCell(
-  value: CellValue,
+  value: CellValue | undefined,
   text: string | undefined,
   numberFormat: string | undefined,
 ): { text: string; usedRaw: boolean } {

@@ -73,6 +73,19 @@ void test("normalizes workbook identity by ignoring query/hash URL parts", async
   }
 });
 
+void test("the workbook context carries a hash of the document URL, never the URL or its path", async () => {
+  const restore = setOfficeDocumentUrl("https://tenant.sharepoint.com/sites/finance/Shared%20Documents/Forecast.xlsx?web=1");
+
+  try {
+    const context = await getWorkbookContext();
+    assert.match(context.workbookId ?? "", /^url_sha256:[0-9a-f]+$/u);
+    assert.deepEqual(Object.keys(context).sort(), ["source", "workbookId", "workbookName"]);
+    assert.doesNotMatch(JSON.stringify(context), /sharepoint|finance|Shared/u);
+  } finally {
+    restore();
+  }
+});
+
 void test("produces different workbook identities for different workbook paths", async () => {
   const restoreFirst = setOfficeDocumentUrl("https://example.com/reports/Forecast-A.xlsx?x=1");
   let firstId: string | null = null;

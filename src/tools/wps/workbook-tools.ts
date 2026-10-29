@@ -1,4 +1,5 @@
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
+import { Value } from "typebox/value";
 
 import { buildWorkbookCellChangeSummary } from "../../audit/cell-diff.js";
 import {
@@ -35,7 +36,7 @@ import {
   type WpsEtWorksheet,
 } from "../../host/wps/jsapi.js";
 import { getErrorMessage } from "../../utils/errors.js";
-import { formatAsMarkdownTable, extractFormulas, findErrors } from "../../utils/format.js";
+import { cellValueGridSchema, formatAsMarkdownTable, extractFormulas, findErrors } from "../../utils/format.js";
 import type { ReadRangeCsvDetails, WriteCellsDetails } from "../tool-details.js";
 import { countOccupiedCells, validateFormula } from "../write-cells.js";
 import {
@@ -730,13 +731,15 @@ function formatWpsCsvOutput(
   const start = parseCell(startCell);
   return {
     content: [{ type: "text", text: lines.join("\n") }],
-    details: {
-      kind: "read_range_csv",
-      startCol: start.col,
-      startRow: start.row,
-      values: snapshot.values,
-      csv,
-    },
+    details: Value.Check(cellValueGridSchema, snapshot.values)
+      ? {
+        kind: "read_range_csv",
+        startCol: start.col,
+        startRow: start.row,
+        values: snapshot.values,
+        csv,
+      }
+      : undefined,
   };
 }
 

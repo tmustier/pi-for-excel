@@ -3,6 +3,7 @@ import { Value } from "typebox/value";
 
 import { workbookCellChangeSummarySchema } from "../audit/cell-diff.js";
 import { connectionToolErrorDetailsSchema } from "../connections/types.js";
+import { cellValueSchema } from "../utils/format.js";
 import { StringEnum } from "./string-enum.js";
 
 export const recoveryCheckpointDetailsSchema = Type.Object({
@@ -172,12 +173,10 @@ const traceDependencySourceSchema = StringEnum(["api", "formula_scan", "mixed", 
 
 export type TraceDependencySource = Static<typeof traceDependencySourceSchema>;
 
-const hostCellValueSchema = Type.Unknown();
-
 export const depNodeDetailSchema = Type.Cyclic({
   DepNode: Type.Object({
     address: Type.String(),
-    value: hostCellValueSchema,
+    value: cellValueSchema,
     numberFormat: Type.Optional(Type.String()),
     formula: Type.Optional(Type.String()),
     precedents: Type.Array(Type.Ref("DepNode")),
@@ -224,7 +223,7 @@ export const readRangeCsvDetailsSchema = Type.Object({
   kind: Type.Literal("read_range_csv"),
   startCol: Type.Number(),
   startRow: Type.Number(),
-  values: Type.Array(Type.Array(hostCellValueSchema)),
+  values: Type.Array(Type.Array(cellValueSchema)),
   csv: Type.String(),
 });
 

@@ -1,4 +1,5 @@
 import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import {
   cellAddress,
@@ -11,6 +12,7 @@ import {
   qualifiedAddress,
 } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { cellValueGridSchema } from "../utils/format.js";
 import type {
   DepNodeDetail,
   TraceDependenciesDetails,
@@ -97,7 +99,7 @@ async function loadLeafNode(
 
   return {
     address: qualifiedAddress(sheet.name, range.address),
-    value: range.values[0]?.[0],
+    value: Value.Parse(cellValueGridSchema, range.values)[0]?.[0] ?? null,
     ...(numberFormat !== undefined ? { numberFormat } : {}),
     ...(formula !== undefined ? { formula } : {}),
     precedents: [],
@@ -342,11 +344,12 @@ async function traceCell(
   const fullAddr = qualifiedAddress(sheet.name, range.address);
   const rawFmt: unknown = range.numberFormat[0]?.[0];
   const numberFormat = typeof rawFmt === "string" && rawFmt !== "" ? rawFmt : undefined;
+  const value = Value.Parse(cellValueGridSchema, range.values)[0]?.[0] ?? null;
 
   if (visited.has(fullAddr)) {
     return {
       address: fullAddr,
-      value: range.values[0]?.[0],
+      value,
       ...(numberFormat !== undefined ? { numberFormat } : {}),
       formula: "(circular reference — already visited)",
       precedents: [],
@@ -355,7 +358,6 @@ async function traceCell(
   visited.add(fullAddr);
 
   const rawFormula: unknown = range.formulas[0]?.[0];
-  const value: unknown = range.values[0]?.[0];
   const formula = typeof rawFormula === "string" && rawFormula.startsWith("=")
     ? rawFormula
     : undefined;

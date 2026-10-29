@@ -30,6 +30,7 @@ export interface SpreadsheetHostSessionStorage {
 export interface SpreadsheetHost {
   readonly kind: SpreadsheetHostKind;
   readonly displayName: string;
+  readonly servesOneDocument: boolean;
   readonly sessionStorage: SpreadsheetHostSessionStorage;
 
   whenReady(): Promise<SpreadsheetHostReadyInfo>;

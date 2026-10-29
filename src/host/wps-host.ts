@@ -23,6 +23,7 @@ export const WPS_UNSUPPORTED_PHASE_1_MESSAGE =
 export class WpsHost implements SpreadsheetHost {
   readonly kind = "wps";
   readonly displayName = "WPS Spreadsheets";
+  readonly servesOneDocument = false;
   readonly sessionStorage: SpreadsheetHostSessionStorage = settingsBackedSessionStorage;
   readonly documentInstance = null;
 
