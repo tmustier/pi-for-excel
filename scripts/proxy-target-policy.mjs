@@ -128,41 +128,27 @@ export function getBlockedTargetReasonForHostname(hostname, opts = {}) {
     allowLoopbackTargets = false,
     allowPrivateTargets = false,
     allowedHosts = new Set(),
-    requireAllowlistForOverriddenTargets = false,
+    defaultAllowedHosts = new Set(),
   } = opts;
 
   const host = normalizeHost(hostname);
   if (!host) return "blocked_target_invalid_host";
 
-  const loopback = isLoopbackHostname(host);
-  if (loopback && !allowLoopbackTargets) {
-    return "blocked_target_loopback";
+  const operatorAllowlisted = allowedHosts instanceof Set && allowedHosts.size > 0;
+
+  if (isLoopbackHostname(host)) {
+    if (!allowLoopbackTargets) return "blocked_target_loopback";
+    return operatorAllowlisted && !allowedHosts.has(host) ? "blocked_target_not_allowlisted" : null;
   }
 
-  if (loopback && allowLoopbackTargets) {
-    if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
-      return "blocked_target_not_allowlisted";
-    }
-    return null;
+  if (isIpLiteral(host) && isPrivateOrLocalIp(host)) {
+    if (!allowPrivateTargets) return "blocked_target_private_ip";
+    return operatorAllowlisted && !allowedHosts.has(host) ? "blocked_target_not_allowlisted" : null;
   }
 
-  const privateOrLocalLiteral = isIpLiteral(host) && isPrivateOrLocalIp(host);
-  if (!allowPrivateTargets && privateOrLocalLiteral) {
-    return "blocked_target_private_ip";
-  }
-
-  if (allowPrivateTargets && privateOrLocalLiteral) {
-    if (requireAllowlistForOverriddenTargets && !isAllowedTargetHost(host, allowedHosts)) {
-      return "blocked_target_not_allowlisted";
-    }
-    return null;
-  }
-
-  if (!isAllowedTargetHost(host, allowedHosts)) {
-    return "blocked_target_not_allowlisted";
-  }
-
-  return null;
+  return isAllowedTargetHost(host, operatorAllowlisted ? allowedHosts : defaultAllowedHosts)
+    ? null
+    : "blocked_target_not_allowlisted";
 }
 
 export function getBlockedTargetReasonForResolvedIps(resolvedIps, opts = {}) {
@@ -203,14 +189,14 @@ export function evaluateTargetHostPolicy(opts = {}) {
     allowLoopbackTargets = false,
     allowPrivateTargets = false,
     allowedHosts = new Set(),
-    requireAllowlistForOverriddenTargets = false,
+    defaultAllowedHosts = new Set(),
   } = opts;
 
   const hostReason = getBlockedTargetReasonForHostname(hostname, {
     allowLoopbackTargets,
     allowPrivateTargets,
     allowedHosts,
-    requireAllowlistForOverriddenTargets,
+    defaultAllowedHosts,
   });
 
   if (hostReason) {

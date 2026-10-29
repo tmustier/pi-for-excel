@@ -1,5 +1,3 @@
-import "./boot.js";
-
 import "./ui/register-components.js";
 
 import "./ui/tool-renderers.js";

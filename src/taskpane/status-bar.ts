@@ -4,7 +4,7 @@ import { t } from "../language/index.js";
 import { getActiveProviders } from "../models/active-providers.js";
 import { showToast } from "../ui/toast.js";
 import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
-import { formatUsageDebug, isDebugEnabled } from "../debug/debug.js";
+import { formatUsageForStatusBar, isDebugEnabled } from "../debug/debug.js";
 import { estimateContextTokens } from "../utils/context-tokens.js";
 import type { ExecutionMode } from "../execution/mode.js";
 import {
@@ -122,7 +122,7 @@ function renderStatusBar(
   const debugOn = isDebugEnabled();
 
   const usageDebug = debugOn && lastUsage
-    ? `<span class="pi-status-ctx__debug">${escapeHtml(formatUsageDebug(lastUsage))}</span>`
+    ? `<span class="pi-status-ctx__debug">${escapeHtml(formatUsageForStatusBar(lastUsage))}</span>`
     : "";
 
   let lockBadge = "";

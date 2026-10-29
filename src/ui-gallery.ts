@@ -1,5 +1,3 @@
-import "./boot.js";
-
 import "./ui/register-components.js";
 
 import { requestApproval } from "./ui/approval-dialog.js";

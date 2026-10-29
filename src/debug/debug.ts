@@ -68,6 +68,6 @@ export function formatK(n: number): string {
   return String(Math.round(n));
 }
 
-export function formatUsageDebug(usage: Usage): string {
+export function formatUsageForStatusBar(usage: Usage): string {
   return `in:${formatK(usage.input)} out:${formatK(usage.output)} cr:${formatK(usage.cacheRead)} cw:${formatK(usage.cacheWrite)}`;
 }

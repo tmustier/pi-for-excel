@@ -182,6 +182,25 @@
       "rules": {
         "pi-for-excel/no-auth-local-storage": "error"
       }
+    },
+    {
+      "files": [
+        "src/debug/debug.ts"
+      ],
+      "rules": {
+        "eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": ["*"],
+                "allowTypeImports": true,
+                "message": "src/debug/debug.ts stays dependency-free so the status bar can read flags synchronously."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

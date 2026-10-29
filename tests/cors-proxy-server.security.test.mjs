@@ -6,9 +6,10 @@ import http from "node:http";
 import net from "node:net";
 import { setTimeout as delay } from "node:timers/promises";
 
+import { DEV_BASE_URL } from "../scripts/generate-dev-manifest.mjs";
 import { evaluateTargetHostPolicy } from "../scripts/proxy-target-policy.mjs";
 
-const ORIGIN = "https://localhost:3141";
+const ORIGIN = DEV_BASE_URL;
 const PROXY_SCRIPT_PATH = new URL("../scripts/cors-proxy-server.mjs", import.meta.url).pathname;
 
 async function getFreePort() {
@@ -933,4 +934,14 @@ test("proxy exits on explicit ALLOWED_TARGET_HOSTS with no valid entries (fail c
 
   assert.equal(code, 1);
   assert.match(stderr, /ALLOWED_TARGET_HOSTS was set but contained no valid host entries/);
+});
+
+test("default allowed origins include the dev server origin", async (t) => {
+  const proxy = await startProxy({ ALLOWED_ORIGINS: "" });
+  t.after(async () => {
+    await proxy.stop();
+  });
+
+  const response = await fetch(`http://127.0.0.1:${proxy.port}/healthz`, { headers: { Origin: DEV_BASE_URL } });
+  assert.equal(response.headers.get("access-control-allow-origin"), DEV_BASE_URL);
 });

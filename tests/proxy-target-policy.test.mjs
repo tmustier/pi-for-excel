@@ -45,13 +45,16 @@ test("target-host policy applies deny, allowlist, and override precedence", () =
     [{ hostname: "api.openai.com", allowedHosts: strict }, { allowed: true }],
     [{ hostname: "example.com", allowedHosts: strict }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
     [{ hostname: "127.0.0.1", allowedHosts: strict }, { allowed: false, reason: "blocked_target_loopback" }],
-    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowPrivateTargets: true, allowedHosts: strict }, { allowed: true }],
-    [{ hostname: "10.0.0.5", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
-    [{ hostname: "10.97.193.77", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: true }],
-    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]), requireAllowlistForOverriddenTargets: true }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
-    [{ hostname: "localhost", allowLoopbackTargets: true, allowedHosts: new Set(["localhost"]), requireAllowlistForOverriddenTargets: true }, { allowed: true }],
-    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowedHosts: strict }, { allowed: true }],
-    [{ hostname: "10.0.0.5", allowPrivateTargets: true, allowedHosts: strict }, { allowed: true }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowPrivateTargets: true, allowedHosts: strict }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "10.0.0.5", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]) }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "10.97.193.77", allowPrivateTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]) }, { allowed: true }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, allowedHosts: new Set(["api.openai.com", "10.97.193.77"]) }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "localhost", allowLoopbackTargets: true, allowedHosts: new Set(["localhost"]) }, { allowed: true }],
+    [{ hostname: "api.openai.com", defaultAllowedHosts: strict }, { allowed: true }],
+    [{ hostname: "example.com", defaultAllowedHosts: strict }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "api.openai.com", allowedHosts: new Set(["api.deepseek.com"]), defaultAllowedHosts: strict }, { allowed: false, reason: "blocked_target_not_allowlisted" }],
+    [{ hostname: "127.0.0.1", allowLoopbackTargets: true, defaultAllowedHosts: strict }, { allowed: true }],
+    [{ hostname: "10.0.0.5", allowPrivateTargets: true, defaultAllowedHosts: strict }, { allowed: true }],
   ];
   for (const [input, expected] of cases) assert.deepEqual(evaluateTargetHostPolicy(input), expected, JSON.stringify(input));
 

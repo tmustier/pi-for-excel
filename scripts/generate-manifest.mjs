@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 
-const DEV_BASE_URL = "https://localhost:3141";
+import { DEV_BASE_URL } from "./generate-dev-manifest.mjs";
 
 function fail(msg) {
   console.error(`[pi-for-excel] ${msg}`);
