@@ -64,7 +64,7 @@ type Params = Static<typeof schema>;
 export interface PythonBridgeConfig {
   url: string;
   token?: string;
-  source?: "configured" | "default";
+  configured: boolean;
 }
 
 export interface PythonBridgeRequest {
@@ -217,7 +217,7 @@ async function getSettingsStore(): Promise<SettingsStore> {
 
 export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig | null> {
   let rawUrl = DEFAULT_PYTHON_BRIDGE_URL;
-  let source: "configured" | "default" = "default";
+  let configured = false;
   let token: string | undefined;
 
   try {
@@ -227,7 +227,7 @@ export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig
     const configuredUrl = typeof urlValue === "string" ? urlValue.trim() : "";
     if (configuredUrl.length > 0) {
       rawUrl = configuredUrl;
-      source = "configured";
+      configured = true;
     }
 
     const tokenValue = await settings.get(PYTHON_BRIDGE_TOKEN_SETTING_KEY);
@@ -242,7 +242,7 @@ export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig
     return {
       url: normalizedUrl,
       ...(token !== undefined ? { token } : {}),
-      source,
+      configured,
     };
   } catch {
     return null;
@@ -430,7 +430,7 @@ export function shouldFallbackToPyodideAfterBridgeError(
   error: unknown,
   bridgeConfig: PythonBridgeConfig,
 ): boolean {
-  return bridgeConfig.source === "default" && error instanceof PythonBridgeUnreachableError;
+  return !bridgeConfig.configured && error instanceof PythonBridgeUnreachableError;
 }
 
 export function formatPythonFailure(response: PythonBridgeResponse, backend: string): string {

@@ -11,6 +11,7 @@ import {
   parseCell,
   parseRangeRef,
   qualifiedAddress,
+  type ExcelRunOptions,
 } from "../excel/helpers.js";
 import { buildWorkbookCellChangeSummary, type WorkbookCellChangeSummary } from "../audit/cell-diff.js";
 import { getWorkbookChangeAuditLog } from "../audit/workbook-change-audit.js";
@@ -148,6 +149,7 @@ export interface PythonTransformRangeToolDependencies {
     signal: AbortSignal | undefined,
   ) => Promise<PythonBridgeResponse>;
   probeBridge?: (url: string) => Promise<boolean>;
+  excelRunOptions?: ExcelRunOptions;
 }
 
 const MAX_OUTPUT_PREVIEW_CHARS = 2_000;
@@ -203,7 +205,7 @@ function topLeftCellFromAddress(address: string): string {
   return first ?? local;
 }
 
-async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapshot> {
+async function defaultReadInputRange(rangeRef: string, options: ExcelRunOptions): Promise<InputRangeSnapshot> {
   return excelRun<InputRangeSnapshot>(async (context) => {
     const { sheet, range } = getRange(context, rangeRef);
     sheet.load("name");
@@ -216,10 +218,10 @@ async function defaultReadInputRange(rangeRef: string): Promise<InputRangeSnapsh
       values: toCellGrid(range.values),
       text: range.text,
     };
-  });
+  }, options);
 }
 
-async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<WriteOutputResult> {
+async function defaultWriteOutputValues(request: WriteOutputRequest, options: ExcelRunOptions): Promise<WriteOutputResult> {
   const { padded, cols } = padRows(request.values);
   if (padded.length === 0 || cols === 0) {
     throw new Error("Transformed result is empty.");
@@ -378,7 +380,7 @@ async function defaultWriteOutputValues(request: WriteOutputRequest): Promise<Wr
         ...(verification.formulas ? { afterFormulas: verification.formulas } : {}),
         backupUnavailable: backup,
       };
-    });
+    }, options);
   } catch (error) {
     const writtenRows = progress.writtenRows;
     const inFlightRows = progress.inFlightRows;
@@ -674,8 +676,11 @@ export function createPythonTransformRangeTool(
 ): AgentTool<TSchema, PythonTransformRangeDetails> & StopReporting {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
-  const readInputRange = dependencies.readInputRange ?? defaultReadInputRange;
-  const writeOutputValues = dependencies.writeOutputValues ?? defaultWriteOutputValues;
+  const excelRunOptions = dependencies.excelRunOptions ?? {};
+  const readInputRange = dependencies.readInputRange
+    ?? ((rangeRef: string) => defaultReadInputRange(rangeRef, excelRunOptions));
+  const writeOutputValues = dependencies.writeOutputValues
+    ?? ((request: WriteOutputRequest) => defaultWriteOutputValues(request, excelRunOptions));
   const checkPyodide = dependencies.isPyodideAvailable;
   const pyodideCall = dependencies.callPyodide;
   const probeBridge = dependencies.probeBridge ?? probeBridgeHealth;
@@ -718,7 +723,7 @@ export function createPythonTransformRangeTool(
         let useBridge = bridgeConfig !== null;
 
         if (bridgeConfig && !fitsBridgeLimits(bridgeRequest)) {
-          const reachable = bridgeConfig.source !== "default" || await probeBridge(bridgeConfig.url);
+          const reachable = bridgeConfig.configured || await probeBridge(bridgeConfig.url);
           if (reachable) {
             const fitRows = rowsThatFitBridge(params.code, input, sourceAddress, params.timeout_ms);
             const message = formatInputTooLarge(bridgeRequest, input, sourceAddress, fitRows);

@@ -25,11 +25,9 @@ export type TmuxBridgeGateReason =
   | "invalid_bridge_url"
   | "bridge_unreachable";
 
-export interface TmuxBridgeGateResult {
-  allowed: boolean;
-  bridgeUrl?: string;
-  reason?: TmuxBridgeGateReason;
-}
+export type TmuxBridgeGateResult =
+  | { allowed: true; bridgeUrl: string }
+  | { allowed: false; reason: TmuxBridgeGateReason; bridgeUrl?: string };
 
 export interface TmuxBridgeGateDependencies {
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
@@ -42,11 +40,9 @@ export type PythonBridgeGateReason =
   | "invalid_bridge_url"
   | "bridge_unreachable";
 
-export interface PythonBridgeGateResult {
-  allowed: boolean;
-  bridgeUrl?: string;
-  reason?: PythonBridgeGateReason;
-}
+export type PythonBridgeGateResult =
+  | { allowed: true; bridgeUrl: string }
+  | { allowed: false; reason: PythonBridgeGateReason; bridgeUrl?: string };
 
 export interface PythonBridgeGateDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;

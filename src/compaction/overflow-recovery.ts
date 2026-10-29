@@ -1,4 +1,4 @@
-import type { Agent, AgentState } from "@earendil-works/pi-agent-core";
+import type { Agent, AgentMessage, AgentState } from "@earendil-works/pi-agent-core";
 import { isContextOverflow, type AssistantMessage } from "@earendil-works/pi-ai";
 
 import { t } from "../language/index.js";
@@ -20,14 +20,26 @@ export function findTrailingContextOverflowError(
   return isContextOverflow(last, model?.contextWindow || undefined) ? last : null;
 }
 
+function latestPrompt(messages: readonly AgentMessage[]): AgentMessage | null {
+  for (let index = messages.length - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message?.role === "user") return message;
+  }
+  return null;
+}
+
+const recoveredPrompts = new WeakMap<Agent, AgentMessage | null>();
+
 export async function recoverFromContextOverflow(args: {
   agent: Agent;
   runCompact: () => Promise<void>;
+  explicitRetry?: boolean;
 }): Promise<boolean> {
-  const { agent, runCompact } = args;
+  const { agent, runCompact, explicitRetry = false } = args;
 
   const failure = findTrailingContextOverflowError(agent.state);
   if (!failure) return false;
+  if (!explicitRetry && recoveredPrompts.get(agent) === latestPrompt(agent.state.messages)) return false;
 
   announce(t("announce.retrying"));
 
@@ -41,6 +53,7 @@ export async function recoverFromContextOverflow(args: {
   } catch (err) {
     console.warn("[pi] Overflow recovery compaction failed:", err);
   }
+  recoveredPrompts.set(agent, latestPrompt(agent.state.messages));
   if (!compacted) {
     agent.state.messages = [...agent.state.messages, failure];
     return false;

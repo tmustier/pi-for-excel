@@ -291,20 +291,17 @@ export function createActionQueue(opts: {
           await retryTransientFailure(signal);
           if (closed || signal.aborted) continue;
 
-          let overflowAfterRecovery = false;
-          if (autoCompactEnabled) {
-            const retried = await recoverFromContextOverflow({
-              agent,
-              runCompact: () => runCompactWithIndicator("", signal),
-            });
-            if (retried && !signal.aborted) {
-              await retryTransientFailure(signal);
-              overflowAfterRecovery = findTrailingContextOverflowError(agent.state) !== null;
-            }
-          }
+          const retried = autoCompactEnabled && await recoverFromContextOverflow({
+            agent,
+            runCompact: () => runCompactWithIndicator("", signal),
+            explicitRetry: retry,
+          });
+          if (retried && !signal.aborted) await retryTransientFailure(signal);
 
           returnLeftovers();
-          opts.onTurnSettled?.({ overflowAfterRecovery });
+          opts.onTurnSettled?.({
+            overflowAfterRecovery: retried && findTrailingContextOverflowError(agent.state) !== null,
+          });
         } finally {
           if (!closed) returnLeftovers();
         }

@@ -60,7 +60,7 @@ void test("python_transform_range falls back to Pyodide when default bridge URL 
     }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
-      source: "default",
+      configured: false,
     }),
     callBridge: () => {
       bridgeCalls += 1;
@@ -112,6 +112,7 @@ void test("python_transform_range reads source, runs python, and writes transfor
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
       token: "secret-token",
+      configured: true,
     }),
     callBridge: (request, config) => {
       assert.equal(request.input_json, '{"range":"Sheet1!A1:B2","values":[[1,2],[3,4]],"text":[["1","2"],["3","4"]]}');
@@ -147,7 +148,7 @@ void test("python_transform_range passes raw dates and numbers alongside their d
       sheetName: "Sheet1", address: "A1:B1",
       values: [[45292, 0.125]], text: [["2024-01-01", "12.50%"]],
     }),
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: true }),
     callBridge: (request) => {
       assert.equal(request.input_json, '{"range":"Sheet1!A1:B1","values":[[45292,0.125]],"text":[["2024-01-01","12.50%"]]}');
       return Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: '[["2024-01-01",0.125]]' });
@@ -168,6 +169,7 @@ void test("python_transform_range surfaces overwrite blocking from destination w
   const tool = createPythonTransformRangeTool({
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
+      configured: true,
     }),
     callBridge: () => Promise.resolve({
       ok: true,
@@ -200,6 +202,7 @@ void test("python_transform_range requires result_json from python execution", a
     }),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
+      configured: true,
     }),
     callBridge: () => Promise.resolve({
       ok: true,
@@ -230,7 +233,7 @@ void test("python_transform_range writes through the checked write path and show
   host.sheet("Py").merge("F1:G1");
   let result_json = "";
   const tool = createPythonTransformRangeTool({
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
     callBridge: () => Promise.resolve({
       ok: true,
       action: "run_python",
@@ -284,7 +287,7 @@ void test("python_transform_range refuses input too large for a running bridge a
   let pyodideCalls = 0;
   const makeTool = (reachable: boolean) => createPythonTransformRangeTool({
     readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A5000", values: rows, text: rows }),
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
     probeBridge: () => Promise.resolve(reachable),
     callBridge: () => {
       bridgeCalls += 1;
@@ -317,7 +320,7 @@ void test("python_transform_range refuses input too large for a running bridge a
 void test("python_transform_range explains the bridge output limit with a row estimate", async () => {
   const tool = createPythonTransformRangeTool({
     readInputRange: () => Promise.resolve({ sheetName: "Sheet1", address: "A1:A2", values: [[1], [2]], text: [["1"], ["2"]] }),
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
     callBridge: () => Promise.reject(new Error("Python bridge request failed (413): Process output exceeded 262144 bytes.")),
     isPyodideAvailable: () => true,
     callPyodide: () => Promise.reject(new Error("should not fall back")),
@@ -335,7 +338,7 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
   let controller = new AbortController();
   let abortDuringPython = false;
   const tool = createPythonTransformRangeTool({
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
     callBridge: () => {
       if (abortDuringPython) controller.abort();
       return Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json });
@@ -383,20 +386,12 @@ void test("python_transform_range: after an Excel.run timeout mid-write, the aba
   const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
   const tool = createPythonTransformRangeTool({
     readInputRange: () => Promise.resolve({ sheetName: "Big", address: "Z1", values: [[1]], text: [["1"]] }),
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", source: "default" }),
+    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
     callBridge: () => Promise.resolve({ ok: true, action: "run_python", exit_code: 0, result_json: JSON.stringify(rows) }),
+    excelRunOptions: { timeoutMs: 30 },
   });
 
   await withFakeExcel(host, async () => {
-    const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
-    Reflect.set(globalThis, "Excel", {
-      run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
-        fakeRun.run(callback),
-        new Promise((_, reject) => { setTimeout(() => {
-          reject(Object.assign(new Error("Excel did not answer within 60 s."), { code: "excel_timeout", outcomeUnknown: true }));
-        }, 30); }),
-      ]),
-    });
     host.delaySync = { at: 3, ms: 80 };
     const result = await tool.execute("tc-timeout", { range: "Big!Z1", code: "result = ...", output_start_cell: "Big!A1" });
     const reported = firstText(result);

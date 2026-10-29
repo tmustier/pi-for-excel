@@ -285,9 +285,8 @@ function wrapTmuxToolWithHardGate(
 
       const gate = await evaluateTmuxBridgeGate(dependencies);
       if (!gate.allowed) {
-        const reason = gate.reason ?? "bridge_unreachable";
         return buildTmuxGateErrorResult({
-          reason,
+          reason: gate.reason,
           ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
           params,
         });
@@ -381,29 +380,26 @@ function wrapPythonToolWithOptionalBridgeApproval(
 
       const gate = await evaluatePythonBridgeGate(dependencies);
       if (gate.allowed) {
-        const bridgeUrl = gate.bridgeUrl;
-        if (!bridgeUrl) {
-          throw new Error("Python bridge gate did not return a bridge URL.");
-        }
-
         throwIfAborted(signal);
-        await approveBridgeUsage(tool.name, bridgeUrl, params, signal);
+        await approveBridgeUsage(tool.name, gate.bridgeUrl, params, signal);
       } else {
-        const reason = gate.reason ?? "bridge_unreachable";
+        switch (gate.reason) {
+          case "missing_bridge_url":
+          case "invalid_bridge_url":
+            break;
+          case "bridge_unreachable":
+            if (tool.name === "python_transform_range") {
+              return buildPythonTransformRangeGateErrorResult({
+                reason: gate.reason,
+                ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
+              });
+            }
 
-        if (reason === "bridge_unreachable") {
-          if (tool.name === "python_transform_range") {
-            return buildPythonTransformRangeGateErrorResult({
-              reason,
+            return buildPythonGateErrorResult({
+              reason: gate.reason,
               ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
+              toolName: tool.name,
             });
-          }
-
-          return buildPythonGateErrorResult({
-            reason,
-            ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
-            toolName: tool.name,
-          });
         }
       }
 
@@ -426,20 +422,14 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
 
       const gate = await evaluatePythonBridgeGate(dependencies);
       if (!gate.allowed) {
-        const reason = gate.reason ?? "bridge_unreachable";
         return buildLibreOfficeGateErrorResult({
-          reason,
+          reason: gate.reason,
           ...(gate.bridgeUrl !== undefined ? { bridgeUrl: gate.bridgeUrl } : {}),
         });
       }
 
-      const bridgeUrl = gate.bridgeUrl;
-      if (!bridgeUrl) {
-        throw new Error("Python bridge gate did not return a bridge URL.");
-      }
-
       throwIfAborted(signal);
-      await approveBridgeUsage(tool.name, bridgeUrl, params, signal);
+      await approveBridgeUsage(tool.name, gate.bridgeUrl, params, signal);
 
       throwIfAborted(signal);
       return tool.execute(toolCallId, params, signal, onUpdate);
