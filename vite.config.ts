@@ -1,6 +1,6 @@
 import { defineConfig, type Plugin } from "vite";
 import { isPiAuthRequestAllowed } from "./src/dev-auth-policy.js";
-import { resolveDevOrigin } from "./scripts/generate-dev-manifest.mjs";
+import { DEV_SERVER_PORT, resolveDevOrigin } from "./scripts/generate-dev-manifest.mjs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import fs from "fs";
 import path from "path";
@@ -125,7 +125,7 @@ function resolveDevProxy(): DevProxyConfig | null {
 
 function parseDevServerPort(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? "", 10);
-  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : 3141;
+  return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : DEV_SERVER_PORT;
 }
 
 const keyPath = path.resolve(__dirname, "key.pem");
@@ -157,7 +157,7 @@ export default defineConfig({
           // Bind IPv6 too: Excel's webview may resolve localhost → ::1 and fail if we only listen on 127.0.0.1.
           host: "::",
           strictPort: true,
-          port: 3141,
+          port: DEV_SERVER_PORT,
           https: hasHttpsCerts
             ? { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) }
             : undefined,

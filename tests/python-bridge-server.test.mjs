@@ -5,7 +5,9 @@ import net from "node:net";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 
-const ORIGIN = "https://localhost:3141";
+import { DEV_BASE_URL } from "../scripts/generate-dev-manifest.mjs";
+
+const ORIGIN = DEV_BASE_URL;
 const BRIDGE_SCRIPT_PATH = new URL("../scripts/python-bridge-server.mjs", import.meta.url).pathname;
 
 async function getFreePort() {
@@ -316,4 +318,15 @@ test("python bridge rejects invalid libreoffice payloads", async (t) => {
   const payload = await response.json();
   assert.equal(payload.ok, false);
   assert.match(payload.error, /target_format must be one of/i);
+});
+
+test("default allowed origins include the dev server origin", async (t) => {
+  const bridge = await startBridge({ ALLOWED_ORIGINS: "" });
+  t.after(async () => {
+    await bridge.stop();
+  });
+
+  const response = await fetch(`http://127.0.0.1:${bridge.port}/health`, { headers: { Origin: DEV_BASE_URL } });
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("access-control-allow-origin"), DEV_BASE_URL);
 });

@@ -10,6 +10,8 @@ import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
 import { test } from "node:test";
 
+import { DEV_BASE_URL } from "../scripts/generate-dev-manifest.mjs";
+
 const TOKEN = "test-background-verify-token";
 const SCRIPT_PATH = "scripts/background-verify-bridge-server.mjs";
 const testCaByPort = new Map();
@@ -72,7 +74,7 @@ async function createTempCert() {
   };
 }
 
-function requestJson(port, requestPath, body, method = body === undefined ? "GET" : "POST") {
+function requestJson(port, requestPath, body, method = body === undefined ? "GET" : "POST", origin) {
   const payload = body === undefined ? undefined : JSON.stringify(body);
   const ca = testCaByPort.get(port);
   assert.ok(ca, `missing test CA for port ${port}`);
@@ -80,19 +82,22 @@ function requestJson(port, requestPath, body, method = body === undefined ? "GET
     const req = https.request(`https://localhost:${port}${requestPath}`, {
       method,
       agent: new https.Agent({ ca }),
-      headers: payload
-        ? {
-            "content-type": "application/json; charset=utf-8",
-            "content-length": Buffer.byteLength(payload),
-          }
-        : undefined,
+      headers: {
+        ...(origin ? { origin } : {}),
+        ...(payload
+          ? {
+              "content-type": "application/json; charset=utf-8",
+              "content-length": Buffer.byteLength(payload),
+            }
+          : {}),
+      },
     }, (res) => {
       let out = "";
       res.setEncoding("utf8");
       res.on("data", (chunk) => { out += chunk; });
       res.on("end", () => {
         try {
-          resolve({ statusCode: res.statusCode, body: JSON.parse(out || "{}") });
+          resolve({ statusCode: res.statusCode, headers: res.headers, body: JSON.parse(out || "{}") });
         } catch (error) {
           reject(error);
         }
@@ -325,4 +330,13 @@ test("background verify bridge refuses non-loopback bind hosts", async () => {
 
   assert.notEqual(code, 0);
   assert.match(output, /loopback only/u);
+});
+
+test("background verify bridge accepts the dev server origin", async (t) => {
+  const bridge = await startBridge();
+  t.after(bridge.stop);
+
+  const health = await requestJson(bridge.port, "/health", undefined, "GET", DEV_BASE_URL);
+  assert.equal(health.statusCode, 200);
+  assert.equal(health.headers["access-control-allow-origin"], DEV_BASE_URL);
 });

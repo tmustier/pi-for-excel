@@ -624,17 +624,15 @@ const handler = async (req, res) => {
     && configuredAllowedTargetHosts.size === 0
     && shouldBypassHostAllowlistForGitHubEnterprise(targetUrl);
 
-  const effectiveAllowedTargetHosts = bypassHostAllowlistForGitHubEnterprise
-    ? EMPTY_ALLOWED_TARGET_HOSTS
-    : allowedTargetHosts;
-
   const targetPolicy = evaluateTargetHostPolicy({
     hostname: targetHost,
     resolvedIps,
     allowLoopbackTargets,
     allowPrivateTargets,
-    allowedHosts: effectiveAllowedTargetHosts,
-    requireAllowlistForOverriddenTargets: configuredAllowedTargetHosts.size > 0,
+    allowedHosts: allowAllTargetHosts ? EMPTY_ALLOWED_TARGET_HOSTS : configuredAllowedTargetHosts,
+    defaultAllowedHosts: allowAllTargetHosts || bypassHostAllowlistForGitHubEnterprise
+      ? EMPTY_ALLOWED_TARGET_HOSTS
+      : DEFAULT_ALLOWED_TARGET_HOSTS,
   });
 
   if (!targetPolicy.allowed) {

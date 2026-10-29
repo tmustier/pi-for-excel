@@ -1,3 +1,4 @@
+export declare const DEV_SERVER_PORT: number;
 export declare const DEV_BASE_URL: string;
 export declare const DEFAULT_DEV_PROXY_HOST: string;
 

@@ -2,7 +2,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-export const DEV_BASE_URL = "https://localhost:3141";
+export const DEV_SERVER_PORT = 3141;
+export const DEV_BASE_URL = `https://localhost:${DEV_SERVER_PORT}`;
 export const DEFAULT_DEV_PROXY_HOST = "pi-excel.localhost";
 
 export function resolveDevOrigin({ arg, env = {} } = {}) {
