@@ -184,18 +184,21 @@ export class ModelRefreshOwner {
       }
       this.activeProviderRevision = this.modelRuntime.providerRevision;
 
-      if (allowNetwork) {
-        const cached = await this.modelRuntime.refresh({ allowNetwork: false });
-        await this.publish(Array.from(cached.errors.keys()).sort());
-      }
-      const result = await this.modelRuntime.refresh({
-        allowNetwork,
-        ...(allowNetwork ? { force: true } : {}),
-      });
-      await this.publish(Array.from(result.errors.keys()).sort());
+      await this.publishCachedCatalogues();
+      if (allowNetwork) await this.publishDiscoveredCatalogues();
 
       this.activeNetwork = false;
     } while (this.requestedSync || this.requestedNetwork || this.providersChangedDuringPass());
+  }
+
+  private async publishCachedCatalogues(): Promise<void> {
+    const cached = await this.modelRuntime.refresh({ allowNetwork: false });
+    await this.publish(Array.from(cached.errors.keys()).sort());
+  }
+
+  private async publishDiscoveredCatalogues(): Promise<void> {
+    const discovered = await this.modelRuntime.refresh({ allowNetwork: true, force: true });
+    await this.publish(Array.from(discovered.errors.keys()).sort());
   }
 
   private async publish(providerErrors: readonly string[]): Promise<void> {

@@ -101,7 +101,7 @@ function parseRegexInt(value: string | undefined): number | null {
   return parseInt(value, 10);
 }
 
-export function parseMajorMinor(id: string): number {
+export function parseLeadingMajorMinor(id: string): number {
   const pack = (major: number, minor: number | null): number => {
     if (minor === null) return major * 10;
     if (minor < 10) return major * 10 + minor;
@@ -210,7 +210,7 @@ function parseDateSuffixScore(id: string): number {
 }
 
 export function modelRecencyScore(id: string): number {
-  const majorMinor = parseMajorMinor(id);
+  const majorMinor = parseLeadingMajorMinor(id);
   const date = parseDateSuffixScore(id);
 
   return majorMinor * 100_000_000 + date;
@@ -230,7 +230,7 @@ export function compareOpenAiModelIds(aId: string, bId: string): number {
 }
 
 export function shouldPreferOpenAiGeneralModel(generalId: string, codexId: string): boolean {
-  return parseMajorMinor(generalId) >= parseMajorMinor(codexId);
+  return parseLeadingMajorMinor(generalId) >= parseLeadingMajorMinor(codexId);
 }
 
 export function compareModels(a: ModelRef, b: ModelRef): number {
