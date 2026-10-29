@@ -4,6 +4,7 @@ import { test } from "node:test";
 import { Agent, type AgentMessage } from "@earendil-works/pi-agent-core";
 import { createModels, fauxAssistantMessage, fauxProvider, type Context } from "@earendil-works/pi-ai";
 
+import { recoverFromContextOverflow } from "../src/compaction/overflow-recovery.ts";
 import { createActionQueue } from "../src/taskpane/action-queue.ts";
 import { createTabState } from "../src/taskpane/tab-state.ts";
 
@@ -62,6 +63,38 @@ void test("LiteLLM context overflow from the active model compacts and retries t
   assert.equal(runtime.requests.length, 2);
   assert.match(JSON.stringify(runtime.requests[1]?.messages), /compacted workbook history/u);
   assert.equal(runtime.agent.state.messages.at(-1)?.role, "assistant");
+  queue.shutdown();
+});
+
+void test("an overflow after compact-and-retry stays in the transcript until the next prompt", async () => {
+  const overflow = () => fauxAssistantMessage("", { stopReason: "error", errorMessage: LITELLM_OVERFLOW });
+  const runtime = createHarness([overflow(), overflow(), overflow(), fauxAssistantMessage("recovered")]);
+  let compactRuns = 0;
+  const runCompact = () => {
+    compactRuns += 1;
+    runtime.agent.state.messages = [user(`compacted history ${compactRuns}`, 10 + compactRuns)];
+    return Promise.resolve();
+  };
+  const queue = createQueue(runtime.agent, runCompact);
+
+  queue.enqueuePrompt("analyze workbook");
+  await waitForIdle(queue);
+
+  assert.equal(runtime.requests.length, 2);
+  assert.equal(compactRuns, 1);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /ContextWindowExceededError/u);
+
+  assert.equal(await recoverFromContextOverflow({ agent: runtime.agent, runCompact }), false);
+  assert.equal(runtime.requests.length, 2);
+  assert.equal(compactRuns, 1);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /ContextWindowExceededError/u);
+
+  queue.enqueuePrompt("try again");
+  await waitForIdle(queue);
+
+  assert.equal(runtime.requests.length, 4);
+  assert.equal(compactRuns, 2);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /recovered/u);
   queue.shutdown();
 });
 
