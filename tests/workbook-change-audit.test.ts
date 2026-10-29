@@ -223,7 +223,6 @@ void test("two taskpanes appending to one audit log keep each other's entries", 
   });
   const paneA = createLog();
   const paneB = createLog();
-  // Both panes have read the (empty) log before either writes.
   assert.equal((await paneA.list()).length, 0);
   assert.equal((await paneB.list()).length, 0);
 
@@ -588,7 +587,6 @@ void test("view_settings tool appends audit entries for mutate success and failu
   });
 
   assert.match(firstText(errorResult), /sheet is required for activate/u);
-  // Nothing changed, so the failure is an error result and says so, with no backup note.
   assert.equal(errorResult.isError, true);
   assert.match(firstText(errorResult), /the view was not changed/u);
   assert.doesNotMatch(firstText(errorResult), /Backup not created/u);

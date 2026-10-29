@@ -1,7 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   10. WELCOME / LOGIN OVERLAY
-   ═══════════════════════════════════════════════════════ */
-
 .pi-overlay {
   position: fixed;
   inset: 0;
@@ -45,8 +41,6 @@
 }
 
 
-/* Overlays focus their card when there is no field to focus first
-   (src/ui/overlay-dialog.ts); the card itself needs no ring. */
 .pi-overlay [tabindex="-1"]:focus {
   outline: none;
 }

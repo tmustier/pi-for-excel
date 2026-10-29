@@ -1,7 +1,3 @@
-/**
- * Integration-related UI/runtime refresh events.
- */
-
 export const PI_INTEGRATIONS_CHANGED_EVENT = "pi:integrations-changed";
 
 export interface IntegrationsChangedDetail {

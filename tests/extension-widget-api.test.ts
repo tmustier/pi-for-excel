@@ -1,4 +1,3 @@
-// Component-logic contracts only; this suite does not claim native browser behavior.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 

@@ -1,13 +1,3 @@
-/**
- * <attachment-tile> — compact tile for a message attachment.
- *
- * First-party replacement for pi-web-ui's AttachmentTile (docs/ui-ownership.md).
- * Pi for Excel cannot create attachments (document parsing is not bundled),
- * but restored/shared sessions may contain user-with-attachments messages;
- * this keeps them rendering. Preview click-through is intentionally not
- * supported (the upstream overlay was always stubbed out in this app).
- */
-
 import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { FileSpreadsheet, FileText } from "lucide";

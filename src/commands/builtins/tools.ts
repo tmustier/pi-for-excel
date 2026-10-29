@@ -1,7 +1,3 @@
-/**
- * Builtin command for Tools & MCP management UI.
- */
-
 import {
   INTEGRATIONS_MANAGER_LABEL_LOWER,
   TOOLS_COMMAND_NAME,

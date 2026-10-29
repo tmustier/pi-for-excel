@@ -1,13 +1,3 @@
-/**
- * Recovery state schemas.
- *
- * Each persisted recovery state is a TypeBox schema; the exported types are
- * `Static<>` of the schemas, so the code that captures a state and the codec
- * that reads it back share one shape. Cross-field invariants (grid dimensions
- * against declared counts) are refinements on the schema, so a persisted entry
- * that breaks them fails the same check as one with a wrong field type.
- */
-
 import { type Static, Type } from "typebox";
 
 import { StringEnum } from "../../tools/string-enum.js";
@@ -16,10 +6,6 @@ import {
   addressIsWithinRowBand,
   addressMatchesRangeShape,
 } from "./address.js";
-
-// ---------------------------------------------------------------------------
-// Conditional formats
-// ---------------------------------------------------------------------------
 
 export const RecoveryConditionalCellValueOperatorSchema = StringEnum([
   "Between",
@@ -177,7 +163,6 @@ export const RecoveryConditionalIconSetStateSchema = Type.Object({
   criteria: Type.Array(RecoveryConditionalIconCriterionSchema, { minItems: 1 }),
 });
 
-/** Formatting and placement shared by every rule type. */
 const conditionalFormatRuleBase = {
   stopIfTrue: Type.Optional(Type.Boolean()),
   fillColor: Type.Optional(Type.String()),
@@ -234,10 +219,6 @@ export const RecoveryConditionalFormatRuleTypeSchema = StringEnum([
   "icon_set",
 ]);
 
-// ---------------------------------------------------------------------------
-// Comments and charts
-// ---------------------------------------------------------------------------
-
 export const RecoveryCommentThreadStateSchema = Type.Object({
   exists: Type.Boolean(),
   content: Type.String(),
@@ -260,10 +241,6 @@ export const RecoveryChartAbsentStateSchema = Type.Object({
   kind: Type.Literal("chart_absent"),
   sheetName: Type.String(),
   name: Type.String(),
-  /**
-   * Stable Office.js chart id captured at creation. Restore prefers this over
-   * the mutable name so rename/name-reuse cannot delete an unrelated chart.
-   */
   chartId: Type.Optional(Type.String()),
 });
 
@@ -281,18 +258,8 @@ export const RecoveryChartPresentStateSchema = Type.Object({
 
 export const RecoveryChartStateSchema = Type.Union([RecoveryChartAbsentStateSchema, RecoveryChartPresentStateSchema]);
 
-// ---------------------------------------------------------------------------
-// Structure
-// ---------------------------------------------------------------------------
-
 export const RecoverySheetVisibilitySchema = StringEnum(["Visible", "Hidden", "VeryHidden"]);
 
-/**
- * Cell grids are checked with a row walk rather than a per-cell schema. The
- * cells are opaque host values, and the generic checker costs about 20 ms per
- * 20k cells, which the boot-time load of up to 120 snapshots cannot afford;
- * the row walk costs 0.03 ms.
- */
 function isGrid(value: unknown): value is unknown[][] {
   return Array.isArray(value) && value.every((row) => Array.isArray(row));
 }
@@ -302,7 +269,6 @@ function isStringGrid(value: unknown): value is string[][] {
     value.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === "string"));
 }
 
-/** Cell grid as Office.js returns it: rows of cell values, no typing per cell. */
 export const RecoveryGridSchema = Type.Refine(Type.Unsafe<unknown[][]>({}), isGrid, () => "cell grid must be rows");
 
 const StringGridSchema = Type.Refine(Type.Unsafe<string[][]>({}), isStringGrid, () => "grid must be rows of strings");
@@ -363,10 +329,6 @@ export const RecoveryModifyStructureStateSchema = Type.Union([
     () => "captured data range must be within the restored column run",
   ),
 ]);
-
-// ---------------------------------------------------------------------------
-// Cell formatting
-// ---------------------------------------------------------------------------
 
 export const RecoveryFormatSelectionSchema = Type.Object({
   numberFormat: Type.Optional(Type.Boolean()),
@@ -435,10 +397,6 @@ export const RecoveryFormatRangeStateSchema = Type.Object({
   areas: Type.Array(RecoveryFormatAreaStateSchema),
   cellCount: Type.Number(),
 });
-
-// ---------------------------------------------------------------------------
-// Static types
-// ---------------------------------------------------------------------------
 
 export type RecoveryConditionalCellValueOperator = Static<typeof RecoveryConditionalCellValueOperatorSchema>;
 export type RecoveryConditionalTextOperator = Static<typeof RecoveryConditionalTextOperatorSchema>;

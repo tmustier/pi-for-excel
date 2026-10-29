@@ -1,12 +1,7 @@
-/**
- * Session title helpers for tab labels and close/reopen toasts.
- */
-
 import { t } from "../language/index.js";
 
 export interface ResolveTabTitleArgs {
   sessionTitle: string;
-  /** Stable, one-based number assigned when the tab/runtime is created. */
   defaultTabNumber: number;
 }
 

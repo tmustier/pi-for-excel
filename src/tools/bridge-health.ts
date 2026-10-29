@@ -2,17 +2,6 @@ function isToolsBridgeHealthPayloadShape(value: unknown): value is Record<string
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Bridge health probing for system prompt Local Services section.
- *
- * Probes Python and tmux bridges once at session init, returning a compact
- * status snapshot that feeds into `buildSystemPrompt({ localServices })`.
- *
- * Reuses shared bridge URL/probe helpers used by the per-call gates in
- * `evaluation.ts`, but parses the full `/health` JSON payload for richer
- * status (python version, libreoffice availability, tmux sessions).
- */
-
 
 import {
   fetchBridgeHealthJson,
@@ -25,10 +14,6 @@ import {
   PYTHON_BRIDGE_URL_SETTING_KEY,
   TMUX_BRIDGE_URL_SETTING_KEY,
 } from "./experimental-tool-gates/types.js";
-
-// ---------------------------------------------------------------------------
-// Public types
-// ---------------------------------------------------------------------------
 
 export type LocalServiceStatus = "running" | "not_running" | "partial";
 
@@ -53,19 +38,11 @@ export interface TmuxServiceEntry {
 
 export type LocalServiceEntry = PythonServiceEntry | TmuxServiceEntry;
 
-// ---------------------------------------------------------------------------
-// Dependency injection for testability
-// ---------------------------------------------------------------------------
-
 export interface BridgeHealthDependencies {
   getPythonBridgeUrl?: () => Promise<string | undefined>;
   getTmuxBridgeUrl?: () => Promise<string | undefined>;
   fetchHealth?: (url: string) => Promise<unknown>;
 }
-
-// ---------------------------------------------------------------------------
-// Health payload parsing
-// ---------------------------------------------------------------------------
 
 function parseLibreofficeVersion(rawVersion: string | undefined): string | undefined {
   if (!rawVersion) {
@@ -92,20 +69,16 @@ function parsePythonHealth(payload: unknown): PythonServiceEntry {
   if (!isToolsBridgeHealthPayloadShape(payload)) return base;
   if (payload.ok !== true) return base;
 
-  // Extract python version
   const python = isToolsBridgeHealthPayloadShape(payload.python) ? payload.python : undefined;
   const pythonAvailable = python?.available === true;
   const pythonVersion = typeof python?.version === "string" ? python.version : undefined;
 
-  // Extract libreoffice availability/version
   const libreoffice = isToolsBridgeHealthPayloadShape(payload.libreoffice) ? payload.libreoffice : undefined;
   const libreofficeAvailable = libreoffice?.available === true;
   const libreofficeVersionRaw = typeof libreoffice?.version === "string" ? libreoffice.version : undefined;
   const libreofficeVersion = parseLibreofficeVersion(libreofficeVersionRaw);
 
   if (!pythonAvailable) {
-    // Bridge process is running but Python binary is missing — treat as not_running
-    // since python_run calls will fail with 501.
     return base;
   }
 
@@ -134,7 +107,6 @@ function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
   const tmuxVersion = typeof payload.tmuxVersion === "string" ? payload.tmuxVersion : undefined;
   const tmuxSessions = typeof payload.sessions === "number" ? payload.sessions : undefined;
 
-  // Stub mode: bridge is running but tmux is not installed
   if (payload.mode === "stub" || payload.backend === "stub") {
     return {
       ...base,
@@ -152,16 +124,6 @@ function parseTmuxHealth(payload: unknown): TmuxServiceEntry {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
-/**
- * Probe Python and tmux bridges in parallel. Returns a snapshot of local
- * service status suitable for `buildSystemPrompt({ localServices })`.
- *
- * Called once at session init. The result is stable for the session.
- */
 export async function probeLocalServices(
   deps: BridgeHealthDependencies = {},
 ): Promise<LocalServiceEntry[]> {

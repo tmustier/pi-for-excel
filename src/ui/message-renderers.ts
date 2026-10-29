@@ -1,10 +1,3 @@
-/**
- * Custom message renderers.
- *
- * We render compaction as a tool-style collapsible card instead of an assistant
- * text blob.
- */
-
 import { html } from "lit";
 import { createRef, ref } from "lit/directives/ref.js";
 import { registerMessageRenderer } from "./messages/message-renderer-registry.js";
@@ -17,7 +10,6 @@ import type { InterruptedResponse } from "../messages/interrupted-response.js";
 import type { TurnChangesMessage } from "../messages/turn-changes.js";
 import { renderTurnChangesReceipt } from "./messages/turn-changes-receipt.js";
 
-// Ensure <markdown-block> and <message-list> are registered.
 import "./messages/markdown-block.js";
 import "./messages/message-list.js";
 

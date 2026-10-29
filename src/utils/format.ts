@@ -1,16 +1,9 @@
-/**
- * Formatting utilities for LLM-facing output.
- * Converts Excel data into compact, token-efficient text.
- */
-
 import { Type } from "typebox";
 
 import { colToLetter, parseCell } from "../excel/helpers.js";
 
-/** A cell value as Office.js and WPS return it in `range.values`. */
 export type CellValue = string | number | boolean | null | undefined;
 
-/** Parse `range.values` / `range.formulas` with `Value.Parse`. */
 export const cellValueGridSchema = Type.Refine(
   Type.Unsafe<CellValue[][]>({}),
   (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) =>
@@ -18,26 +11,17 @@ export const cellValueGridSchema = Type.Refine(
   () => "cell values must be a grid of strings, numbers, booleans or nulls",
 );
 
-/** Parse `range.text` / `range.numberFormat` with `Value.Parse`. */
 export const textGridSchema = Type.Refine(
   Type.Unsafe<string[][]>({}),
   (raw) => Array.isArray(raw) && raw.every((row) => Array.isArray(row) && row.every((cell) => typeof cell === "string")),
   () => "cell text must be a grid of strings",
 );
 
-/**
- * Render a raw cell value as text. Numbers use the shortest exact form
- * (`String`), so 0 is "0" and no digits are lost.
- */
 export function formatCellValue(v: CellValue): string {
   if (v === null || v === undefined) return "";
   return typeof v === "string" ? v : String(v);
 }
 
-/**
- * Escape text for one markdown table cell: backslashes, pipes and line breaks
- * would otherwise split or merge grid cells. Line breaks become a literal `\n`.
- */
 export function escapeMarkdownCell(text: string): string {
   return text
     .replace(/\\/g, "\\\\")
@@ -45,7 +29,6 @@ export function escapeMarkdownCell(text: string): string {
     .replace(/\r\n|\r|\n/g, "\\n");
 }
 
-/** True when displayed text such as "£1,234.50", "12.5%" or "(3.00)" denotes exactly `value`. */
 function displayDenotesValue(text: string, value: number): boolean {
   let s = text.trim();
   let sign = 1;
@@ -62,15 +45,6 @@ function displayDenotesValue(text: string, value: number): boolean {
   return Math.abs(shown - value) <= 1e-9 * Math.max(1, Math.abs(value));
 }
 
-/**
- * Render a cell the way the user sees it, keeping the underlying value when the
- * display hides it: `01/01/2024 [45292]`, `£98,765.43 [98765.4321]`. Displays
- * that denote the value exactly (`12.5%`, `£1,234.50`) are shown alone. Cells
- * in General format, and "####" overflow displays, show the raw value.
- *
- * Returns `usedRaw` when a bracketed raw value was appended, so callers can
- * add a legend once.
- */
 export function formatDisplayedCell(
   value: CellValue,
   text: string | undefined,
@@ -86,11 +60,6 @@ export function formatDisplayedCell(
   return { text: `${shown} [${raw}]`, usedRaw: true };
 }
 
-/**
- * Format a 2D array as a markdown table.
- * Uses the first row as header. Cell text is escaped so pipes and line breaks
- * stay inside their cell.
- */
 export function formatAsMarkdownTable(values: unknown[][]): string {
   if (!values || values.length === 0) return "(empty)";
 
@@ -102,7 +71,6 @@ export function formatAsMarkdownTable(values: unknown[][]): string {
   }));
   const numCols = Math.max(...rows.map((r) => r.length));
 
-  // Pad rows to uniform width
   const padded = rows.map((r) => {
     while (r.length < numCols) r.push("");
     return r;
@@ -122,13 +90,6 @@ export function formatAsMarkdownTable(values: unknown[][]): string {
   return lines.join("\n");
 }
 
-/**
- * Extract formula cells from a 2D formulas array.
- * Returns a list of "CellAddr: =FORMULA" strings.
- *
- * @param formulas - 2D array from Range.formulas
- * @param startAddress - top-left cell of the range (e.g. "A1")
- */
 export function extractFormulas(formulas: unknown[][], startAddress: string): string[] {
   const result: string[] = [];
   const start = parseCell(startAddress);
@@ -147,10 +108,6 @@ export function extractFormulas(formulas: unknown[][], startAddress: string): st
   return result;
 }
 
-/**
- * Find error values in a 2D values array.
- * Returns cell addresses and error types.
- */
 export function findErrors(
   values: unknown[][],
   startAddress: string,
@@ -174,9 +131,6 @@ export function findErrors(
   return errors;
 }
 
-/**
- * Count non-empty cells in a 2D array.
- */
 export function countNonEmpty(values: unknown[][]): number {
   let count = 0;
   for (const row of values) {
@@ -193,15 +147,10 @@ const EXCEL_ERROR_VALUES = new Set([
   "#BUSY!", "#UNKNOWN!", "#EXTERNAL!", "#PYTHON!", "#TIMEOUT",
 ]);
 
-/** True for Excel error values (#REF!, #N/A, #DIV/0!, …); text such as "#1 priority" is not an error. */
 export function isExcelError(value: unknown): value is string {
   return typeof value === "string" && EXCEL_ERROR_VALUES.has(value);
 }
 
-/**
- * Truncate text to approximate token limit.
- * Rough heuristic: 1 token ≈ 4 characters.
- */
 export function truncateForTokens(text: string, maxTokens: number): string {
   const maxChars = maxTokens * 4;
   if (text.length <= maxChars) return text;

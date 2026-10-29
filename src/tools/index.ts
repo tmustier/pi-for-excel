@@ -1,10 +1,3 @@
-/**
- * Tool registry — creates all built-in tools for the agent.
- *
- * Canonical source of truth for core tools lives in `src/tools/registry.ts`.
- * Experimental/non-core tools are appended here.
- */
-
 import type { SpreadsheetHostKind } from "../host/index.js";
 import { createCoreTools, type AnyCoreTool } from "./registry.js";
 import { selectOfficeCoupledToolForHost } from "./host-selection.js";

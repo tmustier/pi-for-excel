@@ -1,7 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   5. EMPTY STATE
-   ═══════════════════════════════════════════════════════ */
-
 .pi-empty {
   position: absolute;
   inset: 0;
@@ -10,9 +6,6 @@
   pointer-events: auto;
 }
 
-/* A sheet of empty cells behind the welcome, at Excel's default 64×20
-   cell size, fading out towards the edges. The only place the grid motif
-   appears; the working transcript stays plain. */
 .pi-empty::before {
   content: "";
   position: absolute;
@@ -79,7 +72,6 @@
   font-weight: 600;
 }
 
-/* One line of preview keeps four hints within a typical pane height. */
 .pi-empty__hint-preview {
   font-size: var(--text-sm);
   color: var(--muted-foreground);
@@ -155,7 +147,6 @@
   }
 }
 
-/* Loading + startup errors */
 .pi-loading {
   display: flex;
   flex-direction: column;
@@ -196,8 +187,6 @@
   color: var(--muted-foreground);
 }
 
-/* Fatal startup error (before the sidebar and its notice area exist).
-   Same look as an error banner (components/banner.css). */
 .pi-error {
   margin: 8px 10px;
   padding: 8px 10px;

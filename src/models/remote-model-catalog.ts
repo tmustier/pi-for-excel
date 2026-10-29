@@ -15,14 +15,11 @@ const CATALOG_REQUEST_TIMEOUT_MS = 8_000;
 const MINIMUM_VERSION_HEADER = "x-pi-model-catalog-minimum-version";
 
 export interface RemoteCatalogOptions {
-  /** Same-origin relay for `https://pi.dev/api/models/providers/<id>?types=chat&pi-version=<pi-ai>`. */
   catalogUrl: (providerId: string) => string;
   fetchFn: typeof globalThis.fetch;
-  /** Generation time of the bundled pi-ai model data; older catalogues are ignored. */
   bundledGeneratedAt: number | undefined;
 }
 
-/** True when the installed pi-ai is at least `minimum` (major.minor.patch). */
 function supportsCatalogVersion(minimum: string): boolean {
   const [required, actual] = [minimum, PI_AI_VERSION]
     .map((version) => version.split(".").map((part) => Number.parseInt(part, 10) || 0));
@@ -43,14 +40,6 @@ function mergeModels<TModel extends AnyModel>(baseline: readonly TModel[], overl
   return [...merged.values()];
 }
 
-/**
- * Add pi.dev's model catalogue to a static built-in provider, as `pi update --models` does.
- *
- * The catalogue only describes models. Entries must use a transport (API and base URL) the
- * bundled provider already uses, and take its headers, so remote data cannot add a transport
- * this runtime cannot stream or send credentials anywhere new. Failures keep the last
- * published list, and a catalogue older than the bundled data is ignored.
- */
 export function withRemoteCatalog(provider: Provider, options: RemoteCatalogOptions): Provider {
   const routes = new Map<string, Model<Api>["headers"]>();
   for (const model of provider.getModels()) {
@@ -89,7 +78,6 @@ export function withRemoteCatalog(provider: Provider, options: RemoteCatalogOpti
       if (!(await context.publish({ update: () => { overlay = restored; } }))) return;
       if (!context.allowNetwork || context.signal.aborted) return;
 
-      // Revalidate only when a cached body backs the validator, so a 304 never empties the overlay.
       const validator = stored && stored.models.length > 0 ? stored.etag : undefined;
       const response = await options.fetchFn(options.catalogUrl(provider.id), {
         headers: {
@@ -105,7 +93,6 @@ export function withRemoteCatalog(provider: Provider, options: RemoteCatalogOpti
         await context.publish({ persist: { ...stored, checkedAt } });
         return;
       }
-      // No relay on this host (self-hosted without the rewrite): keep the bundled models.
       if (response.status === 404) return;
       if (!response.ok) {
         throw new Error(`Model catalogue request failed for ${provider.id}: HTTP ${response.status}`);

@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { readFileSync } from "node:fs";
 
 function readJson(path) {

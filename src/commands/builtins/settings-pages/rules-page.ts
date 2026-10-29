@@ -1,9 +1,3 @@
-/**
- * Rules page — user rules, workbook rules, and format conventions,
- * edited as drafts with an explicit Save/Cancel footer and an
- * unsaved-changes guard on navigation.
- */
-
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import {
@@ -302,7 +296,6 @@ function createPresetPreview(presetName: string, preset: StoredFormatPreset): { 
 
   const symbol = params.currencySymbol ?? (presetName === "currency" ? DEFAULT_CURRENCY_SYMBOL : "");
   const suffix = presetName === "percent" ? "%" : presetName === "ratio" ? "x" : "";
-  // Excel's % multiplies by 100, so preview a fraction (0.125 shows as 12.5%).
   const sample = formatter.format(presetName === "percent" ? 0.125 * 100 : 1234.5);
 
   const positiveCore = `${symbol}${sample}${suffix}`;
@@ -923,8 +916,6 @@ export function createRulesPage(): SettingsShellPage {
 
       ctx.body.append(segmented.root, workbookTag, hint, textarea, conventionsContainer);
 
-      // A never-saved workbook gets its identity when it is first saved, which
-      // can happen while this page is open. Re-read it and enable "This file".
       const refreshWorkbookIdentity = async (): Promise<void> => {
         if (workbookId) return;
         const nextContext = await getWorkbookContext().catch(() => null);
@@ -949,7 +940,6 @@ export function createRulesPage(): SettingsShellPage {
         document.removeEventListener("visibilitychange", onVisibilityChange);
       });
 
-      // ── Footer: counter + Cancel/Save ──
       const footer = document.createElement("div");
       footer.className = "pi-overlay-footer pi-rules-page__footer";
 
@@ -1001,7 +991,6 @@ export function createRulesPage(): SettingsShellPage {
 
         if (activeTab === "workbook") {
           textarea.value = workbookDraft;
-          // Without a workbook ID there is nowhere to save "This file" rules.
           textarea.disabled = !workbookId;
           textarea.placeholder = workbookId ? t("rules.placeholder.workbook") : "";
 
@@ -1042,7 +1031,6 @@ export function createRulesPage(): SettingsShellPage {
         );
       };
 
-      // Guard back/close/navigate while there are unsaved edits.
       ctx.setBeforeLeave(async () => {
         if (saved || !isDirty()) return true;
         return requestConfirmationDialog({
@@ -1060,8 +1048,6 @@ export function createRulesPage(): SettingsShellPage {
         refreshTabUi();
       });
 
-      // Save and Cancel finish the task and close the overlay; the back arrow
-      // and Escape still go back one level.
       cancelBtn.addEventListener("click", () => {
         ctx.close();
       });
@@ -1071,9 +1057,6 @@ export function createRulesPage(): SettingsShellPage {
           saveActiveDraft();
           await refreshWorkbookIdentity();
 
-          // Write only what the user changed, so a rule or convention Pi saved
-          // while this page was open survives. If Pi changed the same thing,
-          // ask before replacing it.
           const userChanged = userDraft !== initialUserDraft;
           const workbookChanged = workbookId !== null && workbookDraft !== initialWorkbookDraft;
           const conventionsChanged = serializeConventionsForDirtyCheck(conventionsDraft) !== initialConventionsJson;

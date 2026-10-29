@@ -1,10 +1,3 @@
-/**
- * System prompt builder — constructs the Excel-aware system prompt.
- *
- * Kept concise because every token is paid on every turn.
- * The workbook blueprint is injected separately via transformContext.
- */
-
 import type { ResolvedConventions } from "../conventions/types.js";
 import { diffFromDefaults } from "../conventions/store.js";
 import type { ExecutionMode } from "../execution/mode.js";
@@ -43,7 +36,6 @@ export interface SystemPromptOptions {
   localServices?: LocalServiceEntry[];
   availableSkills?: AvailableSkillPromptEntry[];
   executionMode?: ExecutionMode;
-  /** Resolved conventions (defaults merged with stored). Omit to skip convention diff section. */
   conventions?: ResolvedConventions | null;
 }
 
@@ -217,7 +209,6 @@ function formatPythonServiceLine(service: LocalServiceEntry & { name: "python" }
     );
   }
 
-  // "running" — fully healthy
   const loPart = service.libreofficeVersion
     ? `, libreoffice ${service.libreofficeVersion}`
     : service.libreofficeAvailable
@@ -246,7 +237,6 @@ function formatTmuxServiceLine(service: LocalServiceEntry & { name: "tmux" }): s
     );
   }
 
-  // "running" — fully healthy
   const versionPart = service.tmuxVersion ? `tmux ${service.tmuxVersion}` : "tmux available";
   const sessionsPart = typeof service.tmuxSessions === "number"
     ? `, ${service.tmuxSessions} active session${service.tmuxSessions === 1 ? "" : "s"}`
@@ -292,9 +282,6 @@ function buildAvailableSkillsSection(availableSkills: AvailableSkillPromptEntry[
   return lines.join("\n");
 }
 
-/**
- * Build the system prompt.
- */
 export function buildSystemPrompt(opts: SystemPromptOptions = {}): string {
   const sections: string[] = [];
 

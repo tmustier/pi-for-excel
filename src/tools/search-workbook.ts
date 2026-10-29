@@ -1,10 +1,3 @@
-/**
- * search_workbook — Search for text, values, or formulas across the workbook.
- *
- * Supports substring and formula search modes.
- * Returns matching cells with their sheet, address, value, and formula.
- */
-
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -62,9 +55,7 @@ type Params = Static<typeof schema>;
 type SearchCellValue = string | number | boolean | null;
 type LoadedSearchCell = SearchCellValue | undefined;
 
-/** Cells per load (values and formulas). Well inside the ~5 MB response limit for typical cells. */
 const SEARCH_CHUNK_CELLS = 100_000;
-/** Upper bound on one search, so a huge workbook answers in seconds rather than minutes. */
 const MAX_SEARCH_CELLS = 5_000_000;
 
 const searchCellMatrixSchema = Type.Refine(
@@ -83,7 +74,6 @@ interface SearchMatch {
 
 interface SearchRangeOptions {
   sheetName: string;
-  /** Rows of `values` to search; rows outside this window are loaded only as match context. */
   searchRowStart: number;
   searchRowEnd: number;
   values: SearchCellValue[][];
@@ -281,8 +271,6 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             await context.sync();
             if (used.isNullObject) continue;
 
-            // Load the sheet in row chunks: one used-range load of a big sheet
-            // exceeds the host's response size limit.
             let chunkRows = Math.max(1, Math.floor(SEARCH_CHUNK_CELLS / used.columnCount));
             let row = 0;
             while (row < used.rowCount) {
@@ -299,7 +287,6 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
                 loadEnd - loadStart,
                 used.columnCount,
               );
-              // Load only the searched grid; the other one is fetched for chunks with a match.
               chunk.load(searchFormulas ? "formulas" : "values");
               try {
                 await context.sync();

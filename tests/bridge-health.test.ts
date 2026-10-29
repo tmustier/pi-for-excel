@@ -24,10 +24,6 @@ function makeDeps(overrides: Partial<BridgeHealthDependencies> = {}): BridgeHeal
   };
 }
 
-// ---------------------------------------------------------------------------
-// Both unreachable
-// ---------------------------------------------------------------------------
-
 void test("returns not_running for both when bridges are unreachable", async () => {
   const entries = await probeLocalServices(makeDeps());
   const python = findPython(entries);
@@ -40,10 +36,6 @@ void test("returns not_running for both when bridges are unreachable", async () 
   assert.equal(python.skillName, "python-bridge");
   assert.equal(tmux.skillName, "tmux-bridge");
 });
-
-// ---------------------------------------------------------------------------
-// Python bridge healthy with libreoffice
-// ---------------------------------------------------------------------------
 
 void test("parses fully healthy python bridge", async () => {
   const entries = await probeLocalServices(makeDeps({
@@ -109,10 +101,6 @@ void test("ignores non-numeric libreoffice version strings", async () => {
   assert.equal(python.name === "python" && python.libreofficeVersion, undefined);
 });
 
-// ---------------------------------------------------------------------------
-// Python bridge up, libreoffice missing → partial
-// ---------------------------------------------------------------------------
-
 void test("reports partial when python available but libreoffice missing", async () => {
   const entries = await probeLocalServices(makeDeps({
     fetchHealth: (url) => {
@@ -135,10 +123,6 @@ void test("reports partial when python available but libreoffice missing", async
   assert.equal(python.name === "python" && python.libreofficeAvailable, false);
 });
 
-// ---------------------------------------------------------------------------
-// Python bridge up, but Python binary missing → not_running
-// ---------------------------------------------------------------------------
-
 void test("reports not_running when bridge is up but python binary missing", async () => {
   const entries = await probeLocalServices(makeDeps({
     fetchHealth: (url) => {
@@ -158,10 +142,6 @@ void test("reports not_running when bridge is up but python binary missing", asy
   assert.ok(python);
   assert.equal(python.status, "not_running");
 });
-
-// ---------------------------------------------------------------------------
-// Tmux bridge fully healthy
-// ---------------------------------------------------------------------------
 
 void test("parses fully healthy tmux bridge", async () => {
   const entries = await probeLocalServices(makeDeps({
@@ -186,10 +166,6 @@ void test("parses fully healthy tmux bridge", async () => {
   assert.equal(tmux.name === "tmux" && tmux.tmuxSessions, 2);
 });
 
-// ---------------------------------------------------------------------------
-// Tmux bridge in stub mode → partial
-// ---------------------------------------------------------------------------
-
 void test("reports partial for tmux bridge in stub mode", async () => {
   const entries = await probeLocalServices(makeDeps({
     fetchHealth: (url) => {
@@ -211,10 +187,6 @@ void test("reports partial for tmux bridge in stub mode", async () => {
   assert.equal(tmux.status, "partial");
 });
 
-// ---------------------------------------------------------------------------
-// Probes run in parallel
-// ---------------------------------------------------------------------------
-
 void test("probes python and tmux in parallel", async () => {
   const callOrder: string[] = [];
 
@@ -233,20 +205,14 @@ void test("probes python and tmux in parallel", async () => {
     },
   }));
 
-  // Both started before either ended → parallel execution
   assert.ok(callOrder.indexOf("python-start") < callOrder.indexOf("python-end"));
   assert.ok(callOrder.indexOf("tmux-start") < callOrder.indexOf("tmux-end"));
-  // Interleaved start order proves parallelism
   const startIndices = [callOrder.indexOf("python-start"), callOrder.indexOf("tmux-start")];
   const endIndices = [callOrder.indexOf("python-end"), callOrder.indexOf("tmux-end")];
   assert.ok(Math.max(...startIndices) < Math.min(...endIndices));
 
   assert.equal(entries.length, 2);
 });
-
-// ---------------------------------------------------------------------------
-// Malformed health payload → not_running
-// ---------------------------------------------------------------------------
 
 void test("handles malformed health payloads gracefully", async () => {
   const entries = await probeLocalServices(makeDeps({
@@ -265,10 +231,6 @@ void test("handles non-object health payloads", async () => {
   assert.equal(findPython(entries)?.status, "not_running");
   assert.equal(findTmux(entries)?.status, "not_running");
 });
-
-// ---------------------------------------------------------------------------
-// DisplayName and skillName are always correct
-// ---------------------------------------------------------------------------
 
 void test("entries always include correct displayName and skillName", async () => {
   const entries = await probeLocalServices(makeDeps());

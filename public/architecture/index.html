@@ -1656,7 +1656,6 @@
 
 <div class="page">
 
-  <!-- ── Nav (matches landing) ── -->
   <nav>
     <a href="/" class="nav-mark"><span class="nav-mark__logo">π</span> <span class="nav-mark__text">Pi for Excel</span> <span class="exp-badge">Experimental</span></a>
     <div class="nav-links">
@@ -1671,7 +1670,6 @@
   </nav>
 
 
-  <!-- ── Hero ── -->
   <div class="hero">
     <p class="hero-eyebrow">Pi for Excel</p>
     <h1>Architecture</h1>
@@ -1682,7 +1680,6 @@
   </div>
 
 
-  <!-- ── Content wrap with TOC ── -->
   <div class="content-wrap">
 
     <nav class="toc" id="toc">
@@ -1709,14 +1706,12 @@
     <div class="main">
 
 
-<!-- ═══════════════ S0: OVERVIEW ═══════════════ -->
 <div id="s0" class="sec-head reveal">Overview</div>
 
 <p class="card-desc reveal" style="margin-bottom:6px;font-size:15px;line-height:1.65">
   Pi for Excel is an AI agent that lives inside Excel's taskpane. It reads, writes, formats, and analyzes spreadsheets through natural conversation — backed by any major LLM provider. 24&nbsp;built-in tools, a sandboxed extension runtime, and bridges to Python, tmux, and MCP servers make it a general-purpose automation surface for spreadsheets.
 </p>
 
-<!-- System topology diagram -->
 <div class="sys-topo reveal">
   <div class="sys-topo__center">
     <div class="sys-topo__hub">
@@ -1761,7 +1756,6 @@
   </div>
 </div>
 
-<!-- 3 pillars -->
 <div class="pillars reveal">
   <div class="pillar" style="--pillar-clr:var(--green);--pillar-bg:var(--green-light)">
     <div class="pillar__icon">
@@ -1791,7 +1785,6 @@
 </p>
 
 
-<!-- ═══════════════ S1: CAPABILITIES ═══════════════ -->
 <div id="s1" class="sec-head reveal">Capabilities</div>
 
 <h3 id="s1-tools" class="reveal">Default Tools</h3>
@@ -1800,7 +1793,6 @@
 </p>
 <div class="tool-buckets reveal">
 
-  <!-- Read & Inspect -->
   <div class="tool-bucket">
     <div class="tool-bucket__head">
       <div class="tool-bucket__icon" style="background:oklch(0.94 0.04 160);color:var(--green)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg></div>
@@ -1816,7 +1808,6 @@
     </div>
   </div>
 
-  <!-- Write & Transform -->
   <div class="tool-bucket">
     <div class="tool-bucket__head">
       <div class="tool-bucket__icon" style="background:oklch(0.93 0.04 250);color:var(--blue)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></svg></div>
@@ -1830,7 +1821,6 @@
     </div>
   </div>
 
-  <!-- Format & Annotate -->
   <div class="tool-bucket">
     <div class="tool-bucket__head">
       <div class="tool-bucket__icon" style="background:oklch(0.94 0.04 80);color:var(--amber)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22C6.5 22 2 17.5 2 12S6.5 2 12 2s10 4.5 10 10-1.5 4-3 4h-1.6c-.5 0-.8.3-.8.8 0 .2.1.5.2.6.2.3.3.6.3 1 0 1.1-.9 1.6-2.1 1.6"/><circle cx="7.5" cy="11.5" r="1.5"/><circle cx="12" cy="7.5" r="1.5"/><circle cx="16.5" cy="11.5" r="1.5"/></svg></div>
@@ -1845,7 +1835,6 @@
     </div>
   </div>
 
-  <!-- Session & Config -->
   <div class="tool-bucket">
     <div class="tool-bucket__head">
       <div class="tool-bucket__icon" style="background:oklch(0.94 0 0);color:var(--muted)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg></div>
@@ -1860,7 +1849,6 @@
     </div>
   </div>
 
-  <!-- Bridges & Integrations -->
   <div class="tool-bucket">
     <div class="tool-bucket__head">
       <div class="tool-bucket__icon" style="background:oklch(0.93 0.04 300);color:var(--violet)"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg></div>
@@ -1925,7 +1913,6 @@
   Three extension surfaces — <strong>Connections</strong>, <strong>Plugins</strong>, and <strong>Skills</strong> — let users and the agent expand Pi's capabilities at runtime. Each has a dedicated tab in <code>/extensions</code>.
 </p>
 
-<!-- ── Skills ── -->
 <div class="ext-surface-block ext-surface-block--mb16 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--green)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
@@ -1957,7 +1944,6 @@
   </div>
 </div>
 
-<!-- ── Connections ── -->
 <div class="ext-surface-block ext-surface-block--mb16 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
@@ -1975,7 +1961,6 @@
   </div>
 </div>
 
-<!-- ── Plugins ── -->
 <div class="ext-surface-block ext-surface-block--mb14 reveal">
   <div class="ext-surface-block__head">
     <svg class="ext-surface-block__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22v-5"/><path d="M9 8V2"/><path d="M15 8V2"/><path d="M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8Z"/></svg>
@@ -1986,7 +1971,6 @@
     Runtime code modules that register tools, commands, sidebar widgets, overlays, and connections. Users install them from <code>/extensions</code>; the agent can also create and install them from chat.
   </p>
 
-  <!-- Self-authoring callout -->
   <div class="ext-callout ext-callout--mb12">
     <div class="ext-callout__icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.912 5.813a2 2 0 0 1-1.275 1.275L3 12l5.813 1.912a2 2 0 0 1 1.275 1.275L12 21l1.912-5.813a2 2 0 0 1 1.275-1.275L21 12l-5.813-1.912a2 2 0 0 1-1.275-1.275L12 3Z"/></svg></div>
     <div class="ext-callout__body">
@@ -2115,7 +2099,6 @@
 </div>
 
 
-<!-- ═══════════════ S2: INTERFACE ═══════════════ -->
 <div id="s2" class="sec-head reveal">Interface</div>
 
 <h3 id="s2-ui" class="reveal">User Interface</h3>
@@ -2238,7 +2221,6 @@
   </div>
 </div>
 
-<!-- ── S2-RULES: Rules & Conventions ── -->
 <h3 id="s2-rules" class="reveal" style="margin-top:22px">Rules &amp; Conventions</h3>
 <p class="reveal" style="color:var(--muted); font-size:13.5px; line-height:1.6; max-width:620px; margin-bottom:16px">
   Two persistence layers that shape the agent's behavior. <strong>Rules</strong> are free-text guidance
@@ -2248,7 +2230,6 @@
 
 <div class="reveal rc-grid">
 
-  <!-- ── Rules ── -->
   <div class="rc-panel" style="--rc-accent:var(--amber)">
     <div class="rc-head">
       <svg class="rc-head__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--amber)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 12h-5"/><path d="M15 8h-5"/><path d="M19 17V5a2 2 0 0 0-2-2H4"/><path d="M8 21h12a2 2 0 0 0 2-2v-1a1 1 0 0 0-1-1H11a1 1 0 0 0-1 1v1a2 2 0 1 1-4 0V5a2 2 0 1 0-4 0v2"/></svg>
@@ -2277,7 +2258,6 @@
     </div>
   </div>
 
-  <!-- ── Conventions ── -->
   <div class="rc-panel" style="--rc-accent:var(--violet)">
     <div class="rc-head">
       <svg class="rc-head__icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--violet)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="var(--violet)"/><circle cx="17.5" cy="10.5" r=".5" fill="var(--violet)"/><circle cx="8.5" cy="7.5" r=".5" fill="var(--violet)"/><circle cx="6.5" cy="12" r=".5" fill="var(--violet)"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/></svg>
@@ -2313,7 +2293,6 @@
 </div>
 
 
-<!-- ═══════════════ S3: MODEL LAYER ═══════════════ -->
 <div id="s3" class="sec-head reveal">Model Layer</div>
 
 <h3 id="s3-llm" class="reveal">LLM Pipeline</h3>
@@ -2393,9 +2372,7 @@
   LLM prompt caching is <strong>prefix-based</strong> — providers cache the longest matching token prefix and reuse it on subsequent calls. Pi keeps the prompt structured so the prefix stays stable and the cache extends as far as possible each turn.
 </p>
 
-<!-- Prompt anatomy: 3 zones showing caching behaviour -->
 <div class="prefix-anatomy reveal">
-  <!-- Zone 1: Prefix anchor -->
   <div class="prefix-zone prefix-zone--frozen">
     <div class="prefix-zone__bar">
       <span class="prefix-zone__label">Prefix anchor</span>
@@ -2409,7 +2386,6 @@
     <div class="prefix-zone__note">If any hash changes → entire cache invalidated (all history recomputed). <code>PrefixChangeReason</code> recorded &amp; counter incremented.</div>
   </div>
   <hr class="prefix-zone-divider">
-  <!-- Zone 2: Conversation history (incrementally cached) -->
   <div class="prefix-zone prefix-zone--history">
     <div class="prefix-zone__bar">
       <span class="prefix-zone__label">Previous turns</span>
@@ -2425,7 +2401,6 @@
     <div class="prefix-zone__note">If history is rewritten (e.g. compaction), cache breaks from the first changed token onward.</div>
   </div>
   <hr class="prefix-zone-divider">
-  <!-- Zone 3: Current turn (new content, cached after response for next turn) -->
   <div class="prefix-zone prefix-zone--fresh">
     <div class="prefix-zone__bar">
       <span class="prefix-zone__label">Current turn</span>
@@ -2534,7 +2509,6 @@
 </details>
 
 
-<!-- ═══════════════ S4: LIFECYCLE ═══════════════ -->
 <div id="s4" class="sec-head reveal">Lifecycle</div>
 
 <h3 id="s4-session" class="reveal">Session Runtime</h3>
@@ -2640,7 +2614,6 @@
 </div>
 
 
-<!-- ═══════════════ S5: SAFETY & RECOVERY ═══════════════ -->
 <div id="s5" class="sec-head reveal">Safety &amp; Recovery</div>
 
 <p class="card-desc reveal" style="margin-bottom:14px">6 defense boundaries — each enforced independently, no single-point-of-failure.</p>
@@ -2760,7 +2733,6 @@
 </p>
 
 
-<!-- ═══════════════ S6: TESTING ═══════════════ -->
 <div id="s6" class="sec-head reveal">Testing Strategy</div>
 
 <div class="stats reveal" style="padding-top:0;margin-bottom:14px">
@@ -2843,7 +2815,6 @@
 
 
 
-<!-- ═══════════════ CREDITS ═══════════════ -->
 <div class="credits reveal">
   <hr class="credits-rule">
   <h3 class="credits-heading">Credits</h3>
@@ -2863,11 +2834,10 @@
   </dl>
 </div>
 
-    </div><!-- /main -->
-  </div><!-- /content-wrap -->
+    </div>
+  </div>
 
 
-  <!-- ── Footer (matches landing) ── -->
   <footer>
     <span class="footer-pi">π</span>
     <p>
@@ -2885,7 +2855,6 @@
 
 <script>
 (() => {
-  // ── Scroll-reveal (same as landing) ──
   const revealObserver = new IntersectionObserver(
     (entries) => entries.forEach((entry) => {
       if (entry.isIntersecting) entry.target.classList.add('visible');
@@ -2894,12 +2863,10 @@
   );
   document.querySelectorAll('.reveal').forEach((el) => revealObserver.observe(el));
 
-  // ── TOC active tracking (scroll-position based) ──
   const toc = document.getElementById('toc');
   if (!toc) return;
   const links = [...toc.querySelectorAll('a')];
 
-  // Build ordered list of tracked headings (DOM order = scroll order)
   const sections = [];
   links.forEach((link) => {
     const id = link.getAttribute('href')?.slice(1);
@@ -2907,7 +2874,6 @@
     if (el) sections.push({ el, link, isSub: link.classList.contains('toc-sub') });
   });
 
-  // Map sub-links → parent (previous non-sub link)
   const parentOf = new Map();
   let currentParent = null;
   links.forEach((link) => {
@@ -2917,7 +2883,6 @@
 
   let lastActive = null;
   function updateTOC() {
-    // Find the last heading whose top is above the trigger line (15% from viewport top)
     const trigger = window.scrollY + window.innerHeight * 0.15;
     let active = null;
     for (const s of sections) {

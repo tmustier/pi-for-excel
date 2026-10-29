@@ -101,7 +101,6 @@ function createAgent(args: { contextWindow: number; messages: AgentMessage[] }):
   });
 }
 
-// 32k window → hard trigger at 16,384 tokens (65,536 chars).
 function createToolLoopMessages(toolResultChars: number): AgentMessage[] {
   return [
     createUserMessage("analyze this data", 1),
@@ -198,15 +197,9 @@ void test("mid-turn check returns undefined when compaction does not rewrite his
     agent,
     enabled: true,
     runCompact: () => {
-      // compaction failed / nothing to do
       return Promise.resolve();
     },
   });
 
   assert.equal(update, undefined);
 });
-
-
-
-
-

@@ -1,7 +1,3 @@
-/**
- * Experimental features page.
- */
-
 import { t } from "../../../language/index.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
 import {
@@ -14,7 +10,6 @@ export function createExperimentalPage(): SettingsShellPage {
     id: "experimental",
     parentId: "root",
     title: () => t("settings.section.experimental"),
-    // No subtitle: the page content renders its own section headings + hints.
     render: (ctx) => {
       ctx.body.appendChild(buildExperimentalFeatureContent());
       ctx.body.appendChild(buildExperimentalFeatureFooter());

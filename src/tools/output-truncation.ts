@@ -51,10 +51,6 @@ export interface ToolOutputTruncationStoreArgs {
 }
 
 export interface ToolOutputTruncationOptions {
-  /**
-   * Static limits, or a resolver called per tool execution (e.g. to scale
-   * limits with the active model's context window).
-   */
   limits?: Partial<ToolOutputTruncationLimits> | (() => Partial<ToolOutputTruncationLimits>);
   strategyForTool?: (toolName: string) => ToolOutputTruncationStrategy;
   saveTruncatedOutput?: (args: ToolOutputTruncationStoreArgs) => Promise<string | undefined>;
@@ -425,7 +421,6 @@ async function applyTruncationFinal(
         truncation.fullOutputWorkspacePath = path;
       }
     } catch {
-      // best effort only
     }
   }
 

@@ -97,7 +97,6 @@ void test("system prompt documents Python tools and Pyodide default (bridge awar
   assert.match(prompt, /\*\*python_transform_range\*\*/);
   assert.match(prompt, /Pyodide/);
   assert.match(prompt, /no setup required/i);
-  // Bridge-awareness content moved to dynamic ## Local Services section
   assert.ok(!prompt.includes("native Python bridge"), "TOOLS section should not contain bridge-awareness content");
 });
 
@@ -276,10 +275,6 @@ void test("system prompt keeps setup hints capability-linked for proactive conne
     assert.match(prompt, new RegExp(`Setup: ${expectation.setupHint}\\.`));
   }
 });
-
-// ---------------------------------------------------------------------------
-// ## Local Services section
-// ---------------------------------------------------------------------------
 
 void test("system prompt omits Local Services when no entries provided", () => {
   const prompt = buildSystemPrompt();

@@ -1,5 +1,3 @@
-// Static contract: locale key parity and source-level t() usage are dependency restrictions;
-// runtime behavior cannot exhaustively prove that every shipped string remains localized.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readFileSync, readdirSync, statSync } from "node:fs";
@@ -69,8 +67,6 @@ void test("en and zh-CN locales have identical key sets", () => {
 });
 
 void test("zh-CN placeholders are a subset of en placeholders per key", () => {
-  // zh may drop English plural-helper vars (e.g. {cue}), but must never
-  // reference a placeholder the caller does not provide.
   const violations: string[] = [];
   for (const [key, enValue] of Object.entries(en)) {
     const zhValue = zh[key];
@@ -84,8 +80,6 @@ void test("zh-CN placeholders are a subset of en placeholders per key", () => {
 });
 
 void test("zh-CN drops English-only plural helper placeholders", () => {
-  // Chinese does not inflect nouns for singular/plural, so keeping these
-  // English helper placeholders leaks strings like "file s" into zh-CN UI.
   const banned = new Set(["plural", "cue"]);
   const violations: string[] = [];
   for (const [key, value] of Object.entries(zh)) {

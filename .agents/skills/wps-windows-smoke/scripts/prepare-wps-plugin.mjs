@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { spawnSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -93,9 +92,6 @@ function patchMainJs(source, taskpaneUrl) {
     `const DEV_TASKPANE_URL = ${JSON.stringify(taskpaneUrl)};`,
   );
 
-  // Older repo skeletons assigned callbacks to globalScope inside an IIFE.
-  // The current skeleton uses top-level function declarations plus aliases, so
-  // this compatibility patch is best-effort for old checked-out branches only.
   if (!out.includes("function OnAddinLoad") && !out.includes("globalScope.OnAddinLoad")) {
     out = out.replace(
       /globalScope\.OnAddInLoad = function OnAddInLoad\(\) \{\n    storageGet\(TASKPANE_ID_STORAGE_KEY\);\n  \};/,
@@ -106,10 +102,6 @@ function patchMainJs(source, taskpaneUrl) {
 }
 
 function patchRibbonXml(source) {
-  // Make the copied ribbon start with <customUI because WPS's publish-page
-  // validator treats an XML declaration prefix as invalid. Preserve callback
-  // spelling from the source; wps/main.js exposes both OnAddInLoad and
-  // OnAddinLoad for compatibility.
   return source.replace(/^<\?xml[^>]*>\s*/u, "");
 }
 
@@ -226,7 +218,6 @@ function startServer(out, port) {
       return;
     }
   } catch {
-    // no live recorded server
   }
 
   const serverScript = path.join(os.tmpdir(), `pi-wps-smoke-plugin-${port}-server.py`);

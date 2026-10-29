@@ -6,15 +6,6 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 
-// ============================================================================
-// Plugins
-// ============================================================================
-
-/**
- * Serves pi's ~/.pi/agent/auth.json so the browser can reuse
- * existing OAuth/API key credentials without re-logging in.
- * Dev-only convenience — production uses its own auth flow.
- */
 function piAuthPlugin(): Plugin {
   const authPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
   const allowNonLocalHost = process.env.PI_AUTH_ALLOW_NONLOCAL_HOST === "1";
@@ -52,22 +43,6 @@ function piAuthPlugin(): Plugin {
   };
 }
 
-// NOTE: pi-ai 0.79-era stubBedrockProviderPlugin / stubPiAiOAuthIndexPlugin
-// were removed with the 0.80 bump: 0.80 lazy-loads the Node-only Bedrock
-// implementation behind a variable specifier (bundlers never see it — the
-// browser-safe unsupported stub is installed at runtime via
-// setBedrockProviderModule, see src/compat/bedrock-provider-stub.ts), and
-// neither dist/index.js nor dist/compat.js re-exports the OAuth index
-// anymore. Their resolved-id fallback branches had also become mis-fire
-// hazards: 0.80's providers/amazon-bedrock.js exports amazonBedrockProvider
-// and the public /oauth entrypoint resolves to dist/utils/oauth/index.js,
-// both incompatible with the old substitute modules.
-
-// ============================================================================
-// Proxy helper — strips browser headers so APIs don't treat requests as CORS
-// ============================================================================
-
-/** Common proxy config: strip Origin/Referer so the target sees a server request */
 type ProxyReqLike = {
   removeHeader(name: string): void;
   path?: string;
@@ -88,9 +63,6 @@ function stripBrowserHeaders(proxy: ProxyServerLike) {
     proxyReq.removeHeader("sec-ch-ua-platform");
     proxyReq.removeHeader("anthropic-dangerous-direct-browser-access");
 
-    // Cloud Code Assist endpoints use a colon in the path
-    // (e.g. /v1internal:streamGenerateContent). Some proxy stacks encode
-    // this as %3A, which Google treats as a different path and returns 404.
     if (typeof proxyReq.path === "string" && /%3a/i.test(proxyReq.path)) {
       proxyReq.path = proxyReq.path.replaceAll("%3A", ":").replaceAll("%3a", ":");
     }
@@ -121,42 +93,18 @@ function buildBrowserAliasMap(): Record<string, string> {
     // These code paths are never executed in the browser — all API calls use fetch().
     stream: resolveFromRoot("src/stubs/stream.ts"),
 
-    // Ajv v8 uses `new Function()` to compile JSON schema validators.
-    // The Office Add-in webview enforces a strict CSP without 'unsafe-eval',
-    // so Ajv.compile() always throws. Stubbing the import makes the
-    // constructor throw, which triggers pi-ai's existing fallback path
-    // (skip validation, trust the LLM output).
     ajv: resolveFromRoot("src/stubs/ajv.ts"),
     "ajv-formats": resolveFromRoot("src/stubs/ajv-formats.ts"),
 
   };
 }
 
-/**
- * Full browser alias list, in vite's find/replacement shape.
- */
 function buildBrowserAliases(): { find: string | RegExp; replacement: string }[] {
   return Object.entries(buildBrowserAliasMap()).map(([find, replacement]) => ({ find, replacement }));
 }
 
-// ============================================================================
-// Opt-in dev HTTPS proxy (portless) — see docs/portless.md
-// ============================================================================
-
-/**
- * When the dev server runs behind a local HTTPS reverse proxy such as
- * portless (https://portless.sh), TLS terminates at the proxy and Vite
- * serves plain HTTP on a loopback port the proxy forwards to.
- *
- * Opt-in only: set DEV_HOST=<hostname> explicitly, or run via
- * `npm run dev:portless` (portless injects PORTLESS_URL into the child
- * process). With neither set, the default https://localhost:3141 behavior
- * is unchanged.
- */
 interface DevProxyConfig {
-  /** Public hostname the browser uses (e.g. "pi-excel.localhost"). */
   host: string;
-  /** Public HTTPS port of the proxy (usually 443). */
   clientPort: number;
 }
 
@@ -165,10 +113,6 @@ function resolveDevProxy(): DevProxyConfig | null {
   const portlessUrl = process.env.PORTLESS_URL?.trim();
   if (!devHost && !portlessUrl) return null;
 
-  // Same strict validation as scripts/generate-dev-manifest.mjs (shared
-  // helper): https-only bare origin, no credentials/path/query/hash, and
-  // never the default https://localhost:3141. Invalid values fail loud
-  // instead of silently activating (or silently skipping) proxy mode.
   const resolved = resolveDevOrigin({
     env: { DEV_HOST: devHost, PORTLESS_URL: portlessUrl },
   });
@@ -179,17 +123,11 @@ function resolveDevProxy(): DevProxyConfig | null {
   };
 }
 
-/** Behind the proxy the port comes from PORT (portless-assigned); CLI --port wins over this either way. */
 function parseDevServerPort(raw: string | undefined): number {
   const parsed = Number.parseInt(raw ?? "", 10);
   return Number.isInteger(parsed) && parsed > 0 && parsed < 65536 ? parsed : 3141;
 }
 
-// ============================================================================
-// Vite config
-// ============================================================================
-
-// HTTPS certs — generate with: mkcert localhost
 const keyPath = path.resolve(__dirname, "key.pem");
 const certPath = path.resolve(__dirname, "cert.pem");
 
@@ -205,16 +143,10 @@ export default defineConfig({
   server: {
     ...(devProxy
       ? {
-          // Behind a local HTTPS proxy (portless): TLS terminates at the
-          // proxy, so Vite serves plain HTTP on loopback only. portless
-          // assigns the port via PORT / an injected --port flag.
           host: "localhost",
           strictPort: true,
           port: parseDevServerPort(process.env.PORT),
-          // *.localhost is allowed by default; this covers custom TLDs (e.g. --tld test).
           allowedHosts: [devProxy.host],
-          // Route the HMR websocket through the HTTPS proxy rather than
-          // straight at Vite's plain-HTTP port.
           hmr: {
             protocol: "wss",
             host: devProxy.host,
@@ -222,7 +154,6 @@ export default defineConfig({
           },
         }
       : {
-          // Must stay on :3141 because manifest hardcodes it.
           // Bind IPv6 too: Excel's webview may resolve localhost → ::1 and fail if we only listen on 127.0.0.1.
           host: "::",
           strictPort: true,
@@ -233,24 +164,20 @@ export default defineConfig({
         }),
 
     proxy: {
-      // OAuth token endpoints. Keep longer/more-specific prefixes before shorter ones.
       "/oauth-proxy/anthropic-platform": proxyEntry("https://platform.claude.com", "/oauth-proxy/anthropic-platform"),
       "/oauth-proxy/anthropic": proxyEntry("https://console.anthropic.com", "/oauth-proxy/anthropic"),
       "/oauth-proxy/github": proxyEntry("https://github.com", "/oauth-proxy/github"),
 
-      // API proxies (providers that block browser CORS)
       "/api-proxy/github": proxyEntry("https://api.github.com", "/api-proxy/github"),
       "/api-proxy/anthropic": proxyEntry("https://api.anthropic.com", "/api-proxy/anthropic"),
       "/api-proxy/openai-auth": proxyEntry("https://auth.openai.com", "/api-proxy/openai-auth"),
       "/api-proxy/openai": proxyEntry("https://api.openai.com", "/api-proxy/openai"),
       "/api-proxy/chatgpt": proxyEntry("https://chatgpt.com", "/api-proxy/chatgpt"),
       "/api-proxy/google-oauth": proxyEntry("https://oauth2.googleapis.com", "/api-proxy/google-oauth"),
-      // Keep more specific Google prefixes before /api-proxy/google to avoid prefix collisions.
       "/api-proxy/google-cloudcode-sandbox": proxyEntry("https://daily-cloudcode-pa.sandbox.googleapis.com", "/api-proxy/google-cloudcode-sandbox"),
       "/api-proxy/google-cloudcode": proxyEntry("https://cloudcode-pa.googleapis.com", "/api-proxy/google-cloudcode"),
       "/api-proxy/google": proxyEntry("https://generativelanguage.googleapis.com", "/api-proxy/google"),
 
-      // pi.dev model catalogue relay; production uses the matching vercel.json rewrite.
       "/model-catalog": {
         target: "https://pi.dev",
         changeOrigin: true,
@@ -262,8 +189,6 @@ export default defineConfig({
     },
   },
 
-  // Replace Node-style process.env reads in browser bundles.
-  // Some upstream provider code still references process.env directly.
   define: {
     "process.env": "{}",
   },
@@ -272,17 +197,12 @@ export default defineConfig({
 
   resolve: {
     alias: buildBrowserAliases(),
-    // Force a single `marked` instance so our safety patch
-    // (installMarkedSafetyPatch) intercepts every parse. All markdown
-    // rendering is first-party now, but keep the dedupe so a future dep
-    // bundling its own marked copy can't bypass the patch.
     dedupe: ["marked"],
   },
 
   build: {
     target: "esnext",
     commonjsOptions: {
-      // Ignore node built-in imports that can't be resolved
       ignoreDynamicRequires: true,
     },
     rollupOptions: {
@@ -290,9 +210,6 @@ export default defineConfig({
         taskpane: "src/taskpane.html",
         "ui-gallery": "src/ui-gallery.html",
       },
-      // Externalize node:* imports (Rollup can't bundle them for the browser).
-      // Note: do NOT externalize regular deps (e.g. @smithy/*). If they leak
-      // through as bare imports, the built add-in will fail to boot.
       external: [
         /^node:/,
       ],

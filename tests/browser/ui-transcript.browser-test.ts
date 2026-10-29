@@ -12,8 +12,6 @@ after(async () => { await env.close(); });
 
 const viewport = { width: 420, height: 900 };
 
-/* ── Live turn: real <pi-sidebar> + Agent, scripted stream (src/ui-gallery-transcript.ts) ── */
-
 interface RowFact { state: string | undefined; text: string }
 
 async function readTurn(page: Page): Promise<{ copies: number; groups: number; title: string; rows: RowFact[]; thinking: string[] }> {
@@ -54,7 +52,6 @@ void test("a streaming turn draws one turn group whose rows finish as each tool 
     assert.deepEqual(turn.rows.map((row) => row.text), ["Reading Sheet1!A1:B12", "Reading Sheet1!C1:D12", "Reading Sheet1!E1:F12"]);
     assert.match(turn.thinking[0] ?? "", /^Thought for \d+s$/, "reasoning ended before the tool calls");
 
-    // The slowest tool is still running: the two finished rows read in the past tense now.
     await page.evaluate(() => {
       window.piTranscriptHarness?.release("read-2");
       window.piTranscriptHarness?.release("read-1");
@@ -81,7 +78,6 @@ void test("a streaming turn draws one turn group whose rows finish as each tool 
     assert.match(turn.title, /^Worked for \d+s$/);
     assert.ok(turn.thinking.every((label) => /^Thought for \d+s$/.test(label)), turn.thinking.join(" | "));
 
-    // The answer started, so the group collapsed itself; its header opens it again.
     assert.deepEqual(turn.rows, [], "collapsed group hides its rows");
     const groupHeader = page.locator('[data-gallery="transcript"] .pi-turn__header');
     await groupHeader.click();
@@ -89,25 +85,21 @@ void test("a streaming turn draws one turn group whose rows finish as each tool 
     assert.equal(await groupHeader.getAttribute("aria-expanded"), "true");
     assert.deepEqual((await readTurn(page)).rows.map((row) => row.state), ["done", "done", "done"]);
 
-    // A row drills into the call's input and result (its reference is a link, so open it from the chevron).
     const firstRow = page.locator('[data-gallery="transcript"] .pi-turn-row__chevron').first();
     await firstRow.click();
     await page.locator('[data-gallery="transcript"] .pi-turn-row__detail').first().waitFor({ state: "visible" });
     assert.match(await page.locator('[data-gallery="transcript"] .pi-turn-row__detail').first().innerText(), /12 rows of monthly totals/);
 
-    // Thinking header is a keyboard control.
     const thinkingHeader = page.locator('[data-gallery="transcript"] thinking-block .thinking-header').first();
     await thinkingHeader.focus();
     await page.keyboard.press("Enter");
     assert.equal(await thinkingHeader.getAttribute("aria-expanded"), "true");
     await page.locator('[data-gallery="transcript"] thinking-block markdown-block').first().waitFor({ state: "visible" });
 
-    // Fence labels with symbols keep their code bar; single newlines stay line breaks.
     const languages = await page.locator('[data-gallery="transcript"] message-list .pi-code__lang').allTextContents();
     assert.deepEqual(languages, ["c++", "f#"]);
     assert.equal(await page.locator('[data-gallery="transcript"] user-message .pi-markdown').innerText(), "Summarise Sheet1.\nKeep it short.");
 
-    // No Excel here: a cell link fails visibly, without an unhandled rejection (finish() checks page errors).
     await page.locator('[data-gallery="transcript"] .pi-cell-ref:visible').first().click();
     const toast = page.locator("#pi-toast .pi-toast.visible").last();
     await toast.waitFor({ state: "visible" });
@@ -116,8 +108,6 @@ void test("a streaming turn draws one turn group whose rows finish as each tool 
     await opened.finish();
   }
 });
-
-/* ── Details mode (Ctrl/Cmd+O) in the real taskpane ── */
 
 async function seedRestoredTurn(page: Page): Promise<void> {
   await page.evaluate(() => {
@@ -157,16 +147,13 @@ void test("Ctrl+O switches details mode for every row, survives re-renders and r
   try {
     await seedRestoredTurn(page);
     await page.waitForTimeout(200);
-    // A restored turn with no answer keeps its group open; its rows start closed.
     assert.deepEqual(await readDetails(page), { openBodies: 0, groupExpanded: "true", thinkingExpanded: "false" });
 
-    // First press expands: details start collapsed, matching the rows.
     await page.keyboard.press("Control+o");
     await page.waitForTimeout(200);
     assert.deepEqual(await readDetails(page), { openBodies: 3, groupExpanded: "true", thinkingExpanded: "true" });
     assert.match(await page.locator("#pi-toast").innerText(), /Ctrl\+O|⌘O/);
 
-    // A re-render (tab switch, response moving into the list) keeps the mode.
     await page.evaluate(() => {
       const sidebar = document.querySelector("pi-sidebar");
       sidebar.agent.state.messages = sidebar.agent.state.messages.slice();
@@ -175,7 +162,6 @@ void test("Ctrl+O switches details mode for every row, survives re-renders and r
     await page.waitForTimeout(200);
     assert.equal((await readDetails(page)).openBodies, 3);
 
-    // A hand toggle overrides one row until the next Ctrl+O.
     await page.locator(".pi-turn-row__chevron").first().click();
     await page.waitForFunction(() => document.querySelectorAll(".pi-turn-row__detail").length === 2);
     assert.equal((await readDetails(page)).openBodies, 2);
@@ -248,8 +234,6 @@ void test("inline approvals stay visible when collapsed, and fall back unanswere
   }
 });
 
-/* ── Turn groups across tab switches ── */
-
 async function seedTab(page: Page, tag: string, turns: string[][]): Promise<void> {
   await page.evaluate(({ tag, turns }) => {
     const sidebar = document.querySelector("pi-sidebar");
@@ -300,13 +284,10 @@ void test("turn groups keep exactly their rows across tab switches", async () =>
   }
 });
 
-/* ── Stopped writes ── */
-
 void test("a stopped write says how far it got instead of claiming success", async () => {
   const opened = await openTaskpane(env, { viewport, clientId: "ui-transcript-stopped" });
   const { page } = opened;
   try {
-    // Details as write_cells / fill_formula (#791) and python_transform_range (#797) report a Stop.
     const cases = [
       { id: "s-1", name: "write_cells", args: { start_cell: "Stop!A1", values: [[1]] }, isError: true,
         text: "⏹ **Stopped before writing** — nothing changed in Stop!A1:B2.",
@@ -327,7 +308,6 @@ void test("a stopped write says how far it got instead of claiming success", asy
     await page.evaluate((cases) => {
       const sidebar = document.querySelector("pi-sidebar");
       const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
-      // One turn per call, so each row's sentence can be read on its own.
       for (const [index, item] of cases.entries()) {
         sidebar.agent.state.messages.push(
           { role: "user", content: `stop ${index}`, timestamp: 2000 + index * 10 },
@@ -426,7 +406,6 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     for (const receipt of await receipts.all()) {
       assert.match(await receipt.innerText(), /not covered by Undo this turn\. Use \/backup/);
     }
-    // No change events arrived for the code: the warning cannot name ranges.
     assert.match(await receipts.first().innerText(), /Ran Office\.js code; not covered/);
     assert.equal(await receipts.first().getByRole("button", { name: "Undo", exact: true }).count(), 0);
     assert.doesNotMatch(await receipts.first().innerText(), /Changed 0 cells/);

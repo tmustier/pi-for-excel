@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# Prepare an Amp orb: install npm dependencies so the dev server, checks,
-# tests, and build run. The dev server itself is declared in .amp/services.yaml.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -14,8 +12,6 @@ step() {
   echo "<== $label ($((SECONDS - start))s)"
 }
 
-# npm ci always wipes and reinstalls node_modules (~20s); skip it when a
-# restored snapshot was installed from the same lockfile and Node version.
 stamp=node_modules/.orb-setup-stamp
 want="$(node --version) $(sha256sum package-lock.json | cut -d' ' -f1)"
 if [[ -f $stamp && "$(cat "$stamp")" == "$want" ]]; then
@@ -25,12 +21,8 @@ else
   echo "$want" > "$stamp"
 fi
 
-# Browser tests (npm run test:browser) use Playwright's Chromium.
 step "playwright chromium" npx --no-install playwright install chromium
 
-# Trusted https://localhost for the dev server (:3141) and CORS proxy (:3003),
-# which Excel on the web needs (docs/orb-excel-web.md). Vite and the proxy
-# switch to HTTPS when key.pem/cert.pem exist (both gitignored).
 dev_certs() {
   local dir="$HOME/.office-addin-dev-certs" nssdb="$HOME/.pki/nssdb"
   [[ -f $dir/localhost.crt ]] || npx --no-install office-addin-dev-certs install --days 3650

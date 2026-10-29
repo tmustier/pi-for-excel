@@ -26,11 +26,6 @@ async function getFreePort(): Promise<number> {
   });
 }
 
-// Vite serves TLS when the repo root holds mkcert output; the policy under test is
-// transport-independent, so follow the same rule Vite applies and keep asserting.
-// Trust is pinned to that exact certificate (a partial chain: the leaf is the anchor)
-// and identity is checked against the name it was issued for (`mkcert localhost`), so a
-// different certificate on the port still fails verification.
 const repoCertPath = path.resolve("cert.pem");
 const repoServesTls = existsSync(path.resolve("key.pem")) && existsSync(repoCertPath);
 
@@ -85,7 +80,6 @@ void test("dev auth endpoint serves credentials only for approved local HTTP req
         break;
       }
     } catch {
-      // Vite may still be starting.
     }
     await delay(50);
   }
@@ -96,8 +90,6 @@ void test("dev auth endpoint serves credentials only for approved local HTTP req
     { host: `127.0.0.1:${port}`, status: 200, body: /"credential"/, cacheControl: "no-store" },
     { host: `[::1]:${port}`, status: 200, body: /"credential"/, cacheControl: "no-store" },
     { host: `10.0.2.2:${port}`, status: 403, body: /forbidden/, cacheControl: "no-store" },
-    // Vite's own host allowlist or the pi-auth policy may answer first depending on transport;
-    // the contract is the 403, not which layer wrote the body.
     { host: `example.com:${port}`, status: 403, body: /forbidden|not allowed/ },
   ];
 

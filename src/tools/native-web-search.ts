@@ -20,8 +20,6 @@ const payloadSchema = Type.Object({
   config: Type.Optional(Type.Object({ maxOutputTokens: Type.Optional(Type.Number()) }, { additionalProperties: true })),
 }, { additionalProperties: true });
 
-/** Uses the selected provider's credentials and transport, with a separate
- * session key so a search never invalidates the conversation's cached prefix. */
 export async function runNativeWebSearch(args: {
   model: Model<Api>;
   apiKey: string;

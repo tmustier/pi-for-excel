@@ -1,9 +1,3 @@
-/**
- * Workbook operation coordinator.
- *
- * Core invariant: parallel reasoning, serialized workbook mutation.
- */
-
 import { getErrorMessage } from "../utils/errors.js";
 
 export type WorkbookOperationType = "read" | "write";
@@ -51,18 +45,11 @@ export interface WorkbookQueueSnapshot {
   revision: number;
   queuedWrites: number;
   activeWrite: WorkbookOperationContext | null;
-  /** Writes waiting for the lock, in the order they will run. */
   queued: WorkbookOperationContext[];
 }
 
 export type SessionLockState = "idle" | "waiting_for_lock" | "holding_lock";
 
-/**
- * What one session's writes are doing: holding the lock, waiting behind
- * another session, or neither. A session's own queued writes never count as
- * waiting on itself. Pass `finishedOpId` from a `completed`/`failed` event:
- * the queue still reports that write as active until the next one starts.
- */
 export function getSessionLockState(
   snapshot: WorkbookQueueSnapshot,
   sessionId: string,
@@ -226,8 +213,6 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         },
       };
 
-      // Queue before announcing it: listeners read getSnapshot() to show
-      // which tab is waiting.
       const mustWait = state.running || state.queue.length > 0;
       state.queue.push(operation);
       if (mustWait) {

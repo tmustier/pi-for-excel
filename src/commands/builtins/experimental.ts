@@ -2,10 +2,6 @@ function isCommandsBuiltinsExperimentalPayloadShape(value: unknown): value is Re
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Builtin command for managing experimental feature flags.
- */
-
 import type { SlashCommand } from "../types.js";
 import {
   getExperimentalFeatureSlugs,

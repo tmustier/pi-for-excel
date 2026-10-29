@@ -1,5 +1,3 @@
-/** WPS JSAPI implementations for the Phase 2 workbook-tool vertical slice. */
-
 import type { AgentToolResult } from "@earendil-works/pi-agent-core";
 
 import { buildWorkbookCellChangeSummary } from "../../audit/cell-diff.js";
@@ -957,7 +955,6 @@ function formatWpsSuccessWrite(
   lines.push(notWritten > 0
     ? `⚠️ **Partly written** to **${fullAddress}** (${rows}×${cols}): ${notWritten} of ${rows * cols} cell(s) do not hold the value sent.`
     : `Written to **${fullAddress}** (${rows}×${cols})`);
-  // Formula errors are listed below with their formulas, as before.
   const problems = formatVerificationProblems(
     { ...verification, formulaErrors: [], formulaErrorCount: 0 },
     (address) => qualifiedAddress(result.sheetName, address),

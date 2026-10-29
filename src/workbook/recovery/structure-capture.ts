@@ -1,5 +1,3 @@
-/** Structure-state capture helpers for workbook recovery snapshots. */
-
 import { excelRun } from "../../excel/helpers.js";
 import { localAddressPart } from "./address.js";
 import { MAX_RECOVERY_CELLS } from "./constants.js";

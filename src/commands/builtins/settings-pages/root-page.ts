@@ -1,8 +1,3 @@
-/**
- * Settings root page — grouped navigation plus the handful of inline
- * behavior settings (execution mode, language).
- */
-
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 import { SUBSCRIPTION_WARNING_SETTING } from "../../../taskpane/subscription-warning.js";
 import { getUserRules, getWorkbookRules } from "../../../rules/store.js";
@@ -66,7 +61,6 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
 
   group.list.append(providersRow.root, gatewayRow.root, proxyRow.root);
 
-  // Best-effort async value previews; never block rendering.
   void (async () => {
     const storage = getAppStorage();
 
@@ -78,7 +72,6 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
           : t("settings.value.not_set_up"),
       );
     } catch {
-      // leave preview empty
     }
 
     try {
@@ -87,14 +80,12 @@ function buildProvidersGroup(ctx: SettingsPageContext): HTMLElement {
         gateways.length > 0 ? String(gateways.length) : t("settings.value.none"),
       );
     } catch {
-      // leave preview empty
     }
 
     try {
       const proxyEnabled = await storage.settings.get("proxy.enabled");
       proxyRow.setValue(proxyEnabled === true ? t("settings.value.on") : t("settings.value.off"));
     } catch {
-      // leave preview empty
     }
   })();
 
@@ -105,7 +96,6 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
   const deps = getSettingsPagesDependencies();
   const group = createSettingsGroup(t("settings.group.behavior"));
 
-  // ── Auto-apply (execution mode) ──
   const autoApply = createSettingToggleRow({
     label: t("settings.section.execution.auto_mode"),
     sublabel: t("settings.section.execution.auto_sublabel"),
@@ -155,18 +145,14 @@ function buildBehaviorGroup(ctx: SettingsPageContext): HTMLElement {
     });
   }
 
-  // ── Language ──
   const languageRow = createSettingSelectRow({
     label: t("settings.section.language.label"),
     options: [
       { value: "en", label: t("settings.section.language.en") },
-      // Disclose that the Chinese translation is AI-generated (issue #608).
       { value: "zh-CN", label: t("settings.section.language.zh") },
     ],
     value: getLanguage(),
     onChange: (newLang) => {
-      // The language applies only through the reload, so a refused switch or a
-      // failed save leaves the whole taskpane in the current language.
       void (async () => {
         if (deps.isAnyTabBusy?.()) {
           const proceed = await requestConfirmationDialog({
@@ -313,7 +299,6 @@ function buildExtensionsGroup(ctx: SettingsPageContext): HTMLElement {
         pluginsRow.setValue(t("settings.value.installed_count", { count: installed }));
       }
     } catch {
-      // leave preview empty
     }
   }
 

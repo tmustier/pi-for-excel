@@ -1,33 +1,3 @@
-/**
- * Change tracker — edits made in the workbook by someone other than Pi.
- *
- * One workbook-level listener per taskpane (`worksheets.onChanged`, so sheets
- * added after the taskpane started are covered) appends to a bounded log with
- * sequence numbers. Each chat runtime keeps its own cursor into the log, so
- * every tab hears about every edit once, independently of the others.
- *
- * Who made an edit. Every write Pi makes (any tab's tool call, or a backup
- * restore the user started) runs under the workbook lock and is recorded here
- * as a write window, so at most one is running at a time.
- * - `source: "Remote"` is a co-author (someone else editing the shared
- *   workbook); reported as theirs.
- * - `triggerSource: "ThisLocalAddin"` is Pi. It is matched to the write window
- *   it arrived in by time (and by range when several match): this runtime's own writes are left out (the agent
- *   knows about them); a restore is reported as "restored from a backup",
- *   another tab's write as "by Pi in another tab", and anything unmatched
- *   (an extension, say) as "by Pi outside this chat".
- * - Once a co-author has joined the workbook, Pi's writes arrive as
- *   `"Unknown"`, like the user's (and stay so after the co-author leaves). A
- *   local "Unknown" edit is matched the same way, but only when it also
- *   touches the range that write recorded (any cell when unknown); otherwise
- *   it is the user's. Matching runs when the edits are described, by which
- *   time the write is recorded.
- *
- * Structural events (sheet added, deleted, renamed, moved, shown/hidden, and
- * row/column inserts and deletes, local or remote) also call
- * `onStructureChange` so the workbook blueprint is rebuilt.
- */
-
 import { excelRun, letterToCol, parseRangeRef } from "../excel/helpers.js";
 import type { WorkbookWriteWindow } from "../tools/with-workbook-coordinator.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -38,25 +8,16 @@ interface LoggedChange {
   at: number;
   sheet: string;
   address: string;
-  /** Office.js `changeType` when it is not a plain cell edit. */
   structural: string | null;
   remote: boolean;
-  /** `triggerSource: "ThisLocalAddin"`: certainly made by Pi. */
   addin: boolean;
-  /** "before → after" for a single-cell edit when Excel reports it. */
   values: string | null;
 }
 
-/** Log entries kept in memory; older entries are summarised as dropped. */
 const MAX_LOG_ENTRIES = 500;
 const MAX_SHEETS_LISTED = 10;
 const MAX_ADDRESSES_PER_SHEET = 20;
 const MAX_VALUE_CHARS = 40;
-/**
- * Change events for Pi's write can arrive after the call returned. Edits
- * known to come from the add-in get a longer grace: no user edit can be
- * mistaken for them.
- */
 const PI_WRITE_EVENT_GRACE_MS = 3_000;
 const ADDIN_EVENT_GRACE_MS = 15_000;
 const MAX_WRITE_WINDOWS = 200;
@@ -70,7 +31,6 @@ const STRUCTURAL_CHANGE_LABELS: Readonly<Record<string, string>> = {
   CellDeleted: "cells deleted",
 };
 
-/** A cell value as Office.js reports it in change details. */
 type CellValue = string | number | boolean | null | undefined;
 
 function formatValue(value: CellValue): string {
@@ -81,7 +41,6 @@ function formatValue(value: CellValue): string {
 
 function describeValues(details: Excel.ChangedEventDetail | undefined): string | null {
   if (!details) return null;
-  // Office.js types these as `any`: keep only scalar cell values.
   const rawBefore: unknown = details.valueBefore;
   const rawAfter: unknown = details.valueAfter;
   const valueBefore: CellValue = typeof rawBefore === "string" || typeof rawBefore === "number" || typeof rawBefore === "boolean" ? rawBefore : undefined;
@@ -89,7 +48,6 @@ function describeValues(details: Excel.ChangedEventDetail | undefined): string |
   if (valueBefore === undefined && valueAfter === undefined) return null;
   const before = formatValue(valueBefore);
   const after = formatValue(valueAfter);
-  // Remote edits often report the new value as both.
   return before === after ? `now ${after}` : `${before} → ${after}`;
 }
 
@@ -101,7 +59,6 @@ interface Area {
 
 const UNBOUNDED: [number, number] = [0, Number.MAX_SAFE_INTEGER];
 
-/** "Sheet!A1:B2", "A:C", "3:5", comma-separated lists → areas; null if unparsable. */
 function parseAreas(address: string): Area[] | null {
   const areas: Area[] = [];
   for (const part of address.split(",")) {
@@ -133,10 +90,8 @@ function overlaps(change: LoggedChange, written: readonly string[]): boolean {
   return false;
 }
 
-/** Who made a write Pi did: a chat runtime (tab) or a backup restore by the user. */
 export type PiWriteOrigin = { kind: "runtime"; runtimeId: string } | { kind: "restore" };
 
-/** A write window, optionally with the range it wrote when known up front. */
 export type PiWriteWindow = Pick<WorkbookWriteWindow, "toolCallId" | "startedAt" | "settledAt"> & { address?: string };
 
 interface PiWrite {
@@ -155,18 +110,12 @@ const GROUP_HEADINGS: ReadonlyArray<[Author, string]> = [
 ];
 
 export interface ChangeSummary {
-  /** Agent-facing text, or null when nothing changed since the cursor. */
   text: string | null;
-  /** Cursor to pass next time. */
   cursor: number;
 }
 
 export interface ChangeTrackerOptions {
   onStructureChange?: () => void;
-  /**
-   * Ranges each of Pi's tool calls wrote, by tool call id (from the change
-   * audit). A call with no entry is treated as touching any cell.
-   */
   getPiWriteAddresses?: (toolCallIds: readonly string[]) => Promise<ReadonlyMap<string, readonly string[]>>;
 }
 
@@ -184,7 +133,6 @@ export class ChangeTracker {
     this.getPiWriteAddresses = options.getPiWriteAddresses ?? (() => Promise.resolve(new Map()));
   }
 
-  /** Start listening on the whole workbook. Safe to call more than once. */
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
@@ -207,7 +155,6 @@ export class ChangeTracker {
       return;
     }
 
-    // ExcelApi 1.17: renames, moves and visibility changes. Optional.
     try {
       await excelRun(async (context) => {
         const sheets = context.workbook.worksheets;
@@ -224,24 +171,15 @@ export class ChangeTracker {
     }
   }
 
-  /**
-   * Record a write Pi is making: a tool call in any tab, or a restore. The
-   * caller sets `settledAt` (and may set `address`) on the same object later.
-   */
   notePiWrite(window: PiWriteWindow, origin: PiWriteOrigin): void {
     this.writes.push({ window, origin });
     if (this.writes.length > MAX_WRITE_WINDOWS) this.writes.shift();
   }
 
-  /** Current end of the log. A new runtime starts here. */
   cursor(): number {
     return this.seq;
   }
 
-  /**
-   * Describe edits logged after `cursor` that `runtimeId` did not make itself,
-   * for that runtime's agent.
-   */
   async describeSince(cursor: number, runtimeId: string): Promise<ChangeSummary> {
     const end = this.seq;
     const pending = this.log.filter((entry) => entry.seq > cursor && entry.seq <= end);
@@ -249,7 +187,6 @@ export class ChangeTracker {
 
     const firstKept = this.log[0]?.seq ?? end + 1;
     const dropped = firstKept > cursor + 1;
-    // One line per cell: its latest change says who left it in its current state.
     const all = await this.attribute(pending, runtimeId);
     const key = ({ entry }: { entry: LoggedChange }) => `${entry.sheet}\u0000${entry.address}`;
     const latest = new Map(all.map((item, index) => [key(item), index]));
@@ -273,11 +210,6 @@ export class ChangeTracker {
     return { text: lines.join("\n"), cursor: end };
   }
 
-  /**
-   * Cells that edit events attribute to these tool calls of this runtime, as
-   * sheet-qualified addresses in the order they changed. Office.js reports
-   * what changed, not the earlier values, so these can be listed, not undone.
-   */
   async rangesChangedBy(toolCallIds: ReadonlySet<string>): Promise<string[]> {
     const matched = await this.matchWrites(this.log.filter((entry) => !entry.remote));
     return [...new Set(matched
@@ -285,7 +217,6 @@ export class ChangeTracker {
       .map(({ entry }) => qualifyAddressWithSheet(entry.sheet, entry.address)))];
   }
 
-  /** Who made each entry; entries `runtimeId` made itself are left out. */
   private async attribute(
     entries: readonly LoggedChange[],
     runtimeId: string,
@@ -306,12 +237,9 @@ export class ChangeTracker {
     return result;
   }
 
-  /** The write of Pi's that made each local entry, if any. Remote entries have none. */
   private async matchWrites(
     entries: readonly LoggedChange[],
   ): Promise<Array<{ entry: LoggedChange; write: PiWrite | undefined }>> {
-    // Writes are serialized and recorded in start order, so the latest one
-    // that covers the entry's time is the one that was running.
     const writesAt = (entry: LoggedChange): PiWrite[] => {
       const grace = entry.addin ? ADDIN_EVENT_GRACE_MS : PI_WRITE_EVENT_GRACE_MS;
       return this.writes
@@ -319,8 +247,6 @@ export class ChangeTracker {
         .reverse();
     };
 
-    // Ranges each candidate write touched: an "Unknown" local edit is Pi's
-    // only if it touches one; for an add-in edit they pick between writes.
     const unknownIds = [...new Set(entries
       .filter((entry) => !entry.remote)
       .flatMap((entry) => writesAt(entry).filter(({ window }) => window.address === undefined).map(({ window }) => window.toolCallId)))];
@@ -406,7 +332,6 @@ export class ChangeTracker {
     }
   }
 
-  /** Event handlers must return a promise. */
   private structureChanged(): Promise<void> {
     this.onStructureChange();
     return Promise.resolve();

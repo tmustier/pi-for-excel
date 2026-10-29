@@ -135,7 +135,6 @@ void test("queued prompt survives compact replaceMessages and runs after compact
 
       await compactGate.promise;
 
-      // Simulate compaction replacing message history while a prompt is queued.
       agent.state.messages = [
         createUserMessage("compaction summary", Date.now()),
       ];
@@ -264,7 +263,6 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
   };
 
   agent.onPrompt = (text) => {
-    // Simulate a run that ends in a provider context-overflow error.
     agent.state.messages = [
       createUserMessage(text, 1),
       toolResult,
@@ -301,7 +299,6 @@ void test("prompt ending in context overflow triggers compact-and-retry once", a
 
   assert.equal(compactRuns, 1);
   assert.deepEqual(agent.promptCalls, ["analyze this data"]);
-  // Failed assistant message was removed from the retry context.
   assert.equal(
     agent.state.messages.some((m) => m.role === "assistant"),
     false,

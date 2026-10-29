@@ -69,8 +69,6 @@ class RangeStoreRange {
       Array.from({ length: this.columnCount }, () => "General"));
   }
 
-  // The write path inspects these before writing; this store has no merges,
-  // spills, protection or validation.
   readonly hasSpill = false;
   readonly dataValidation = { valid: true, load: (_properties?: string): void => {} };
 
@@ -88,7 +86,6 @@ class RangeStoreRange {
     this.store.writeGrid(this.parsed, values);
   }
 
-  /** Like Excel: a formula where there is one, otherwise the cell's value. */
   get formulas(): unknown[][] {
     const values = this.store.readGrid(this.parsed, "value");
     return this.store.readGrid(this.parsed, "formula")
@@ -198,7 +195,6 @@ class RangeStore {
         const value = values[rowOffset]?.[colOffset] ?? null;
         const formula = typeof value === "string" && value.startsWith("=") ? value : "";
         this.cells.set(this.key(parsed.startRow + rowOffset, parsed.startCol + colOffset), {
-          // This narrow double does not calculate formulas; Excel/WPS acceptance must verify values.
           value: formula ? null : value,
           formula,
         });
@@ -240,7 +236,6 @@ class RecoveringAuditSettingsStore {
   }
 
   update<T, U>(key: string, parse: (raw: unknown) => T, change: (current: T) => U | undefined): Promise<void> {
-    // A read-modify-write reads first, so it fails the same seeded way.
     if (key === "workbook.change-audit.v1" && this.failAuditRead) {
       this.failAuditRead = false;
       return Promise.reject(new Error("seeded audit read failure"));
@@ -415,7 +410,6 @@ void test("committed write reports recovery unavailable instead of replacing unr
     getWorkbookContext: workbookContext,
   });
   const persistedIds = (await reloaded.list()).map((snapshot) => snapshot.id);
-  // The existing checkpoint survives, and only the write whose backup was saved has one.
   assert.equal(persistedIds.includes("existing-checkpoint"), true);
   assert.equal(persistedIds.length, 2);
 });
@@ -464,7 +458,6 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
     assert.equal(initialWrite.details.address, "Sheet1!A1:B2");
     assert.equal(initialWrite.details.changes?.changedCount, 4);
     assert.equal(initialWrite.details.recovery?.status, "checkpoint_created");
-    // The model sees the backup id, so it can restore this exact change later.
     const backupId = initialWrite.details.recovery?.snapshotId;
     assert.ok(backupId);
     assert.ok(firstText(initialWrite).includes(`Backup saved: \`${backupId}\``));
@@ -525,7 +518,6 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
     const formulaRestored = await read.execute("read-formula-restored", { range: "Sheet1!C1" });
     assert.match(firstText(formulaRestored), /C1: =A2\+B2/u);
 
-    // A restore never silently overwrites edits made after Pi's change.
     const laterWrite = await write.execute("write-later", { start_cell: "Sheet1!D1", values: [[5]] });
     const laterSnapshotId = laterWrite.details.recovery?.snapshotId;
     assert.ok(laterSnapshotId);
@@ -560,9 +552,6 @@ void test("user can write, inspect, reject overwrite, and restore through workbo
   assert.equal(auditEntries.some((entry) => entry.toolCallId === "write-blocked" && entry.blocked), true);
 });
 
-// The agent loop converts a thrown tool error into an `isError` tool result, so the
-// public contract for an unsupported host capability is a typed rejection with a
-// stable code, not a success-shaped result carrying error text.
 void test("unsupported workbook capability fails with a typed error the agent loop reports as an error result", async () => {
   const tools = composeCoreToolsForHost((name: CoreToolName) => {
     if (name === "workbook_history") return createWorkbookHistoryTool();

@@ -1,9 +1,6 @@
 // Print the accessibility tree of an app's first window, one element per line,
 // descending into WebKit web areas. System Events stops at the web area, so
 // this is how to read rendered taskpane content when computer_use is unavailable.
-//
-//   swiftc -O -o /tmp/axdump axdump.swift && /tmp/axdump "Microsoft Excel" > ax.txt
-//
 // Needs Accessibility permission for the terminal running it. Read-only.
 import Cocoa
 import ApplicationServices

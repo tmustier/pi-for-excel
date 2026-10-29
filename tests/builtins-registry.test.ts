@@ -83,7 +83,6 @@ async function executeRegisteredCommand(name: string, args = ""): Promise<void> 
   await command.execute(args);
 }
 
-/** Text of the newest toast (toasts stack, newest last). */
 function getToastText(document: Document): string {
   const region = document.getElementById("pi-toast");
   const newest = region?.children[region.children.length - 1];
@@ -329,8 +328,6 @@ void test("command-layer contract: recovery commands expose completion, errors, 
     await executeRegisteredCommand("history");
     assert.equal(recoveryOpenCount, 1);
 
-    // Backup commands run while Pi is busy; restores and captures wait for
-    // the workbook lock instead of being refused.
     const busyRevert = executeSlashCommand({
       name: "revert",
       args: "",

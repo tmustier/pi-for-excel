@@ -1,10 +1,3 @@
-/**
- * Recovery type surface.
- *
- * PR1 scaffolding: central place for shared recovery types while
- * `recovery-states.ts` remains the compatibility entrypoint.
- */
-
 export type {
   CaptureFormatCellsStateOptions,
   RecoveryChartAbsentState,

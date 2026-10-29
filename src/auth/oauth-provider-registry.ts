@@ -1,12 +1,3 @@
-/**
- * Minimal OAuth provider registry for the Excel taskpane.
- *
- * Pi AI 0.80.8 replaced the legacy OAuthProviderInterface with provider-owned
- * AuthInteraction flows. The taskpane still curates browser-safe providers, so
- * this module adapts the upstream GitHub flow while keeping our Office-safe
- * Google, OpenAI and Anthropic implementations.
- */
-
 import type {
   OAuthCredential,
   OAuthCredentials,

@@ -10,7 +10,6 @@ if ([...args].some(arg => !["--help", "--last", "--force"].includes(arg))) {
   console.error("Unknown option. Use --help.");
   process.exit(2);
 }
-// agent-default (not a user rule): 2026-10-27 — allow 10 minutes for the full gate.
 if (args.has("--help")) {
   console.log(`Usage: npm run verify -- [--force | --last | --help]
 Runs every npm run check sub-step, the full npm test suite, test:browser and build.
@@ -43,7 +42,6 @@ if (args.has("--last")) {
 }
 
 const { scripts } = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-// agent-default (not a user rule): 2026-10-27 — include Chromium on every full run.
 const steps = scripts.check.split(" && ").map(command => {
   const match = /^npm run ([\w:-]+)$/.exec(command);
   if (!match) throw new Error(`Unsupported check sub-step: ${command}`);
@@ -74,7 +72,6 @@ function fingerprint() {
 }
 
 mkdirSync(state, { recursive: true });
-// Each run claims a file named after its process ID; claims left by killed runs are removed.
 const owners = join(state, "owners");
 mkdirSync(owners, { recursive: true });
 const lock = join(owners, `${process.pid}.${randomUUID()}`);
@@ -123,7 +120,6 @@ try {
     }
     const failed = results.filter(result => result.status !== 0);
     const lines = results.map(result => `${result.status === 0 ? "ok  " : "FAIL"}  ${result.step}  ${result.seconds}s`);
-    // agent-default (not a user rule): 2026-10-27
     const excerptLines = 16;
     for (const result of failed) {
       const logLines = readFileSync(result.log, "utf8").split("\n");

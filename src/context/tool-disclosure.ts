@@ -23,21 +23,11 @@ export interface ToolDisclosureResult {
   bundleId: ToolBundleId;
 }
 
-/**
- * Select a deterministic tool bundle for the current call.
- *
- * Cache-first policy:
- * - If tools are present, always expose the full tool list.
- * - We keep core-only and mixed toolsets aligned to the same stable tool schema
- *   so prompt caches are not partitioned by intent-routed bundles.
- */
 export function selectToolBundle(context: Context): ToolDisclosureResult {
   if (!context.tools || context.tools.length === 0) {
     return { tools: context.tools, bundleId: "none" };
   }
 
-  // Keep the lightweight core-tool check to make intent explicit and to preserve
-  // future room for opt-in routing without reintroducing local tool-name lists.
   if (!hasOnlyCoreTools(context.tools)) {
     return { tools: context.tools, bundleId: "full" };
   }

@@ -1,15 +1,3 @@
-/**
- * Dev-only background verification bridge.
- *
- * Enabled only when the Vite dev build provides both:
- * - VITE_PI_BACKGROUND_VERIFY_URL (for example https://localhost:3157)
- * - VITE_PI_BACKGROUND_VERIFY_TOKEN
- *
- * The taskpane initiates all network traffic to a tokened loopback server.
- * This lets agents verify the real Excel host and real taskpane while Excel
- * remains in the background; no raw GUI input is required.
- */
-
 import { Type } from "typebox";
 import { Value } from "typebox/value";
 import { INTEGRATION_IDS } from "../integrations/catalog.js";
@@ -440,10 +428,6 @@ async function submitInput(payload: unknown, options: BridgeOptions): Promise<Js
   };
 }
 
-/**
- * Raw host identity sources side by side, so a Save As / reopen can be checked
- * against what the host reports. Dev-only: the values are local paths.
- */
 async function runDocumentIdentityProbe(options: BridgeOptions): Promise<JsonRecord> {
   if (typeof Office === "undefined") {
     throw new Error("Office global is unavailable; the taskpane is not running inside an Office host.");

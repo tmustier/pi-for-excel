@@ -20,7 +20,6 @@ function normalizeConnectionId(rawValue: string): string {
 }
 
 function parseToolConnectionMetadata(tool: AgentTool): ToolConnectionMetadata {
-  // AgentTool is extensible at the extension boundary; this parser validates its optional metadata.
   const boundary = tool as AgentTool & ToolConnectionMetadataBoundary;
   const rawValue = boundary.requiresConnection;
 

@@ -41,7 +41,6 @@ class MemoryStorageBackend implements StorageBackend {
 
   get<T = unknown>(storeName: string, key: string): Promise<T | null> {
     const value = this.store(storeName).get(key);
-    // This boundary mirrors IndexedDB: callers own the requested persisted type.
     return Promise.resolve(value === undefined ? null : structuredClone(value) as T);
   }
 
@@ -74,7 +73,6 @@ class MemoryStorageBackend implements StorageBackend {
         ? rightModified.localeCompare(leftModified)
         : leftModified.localeCompare(rightModified);
     });
-    // This boundary mirrors IndexedDB: callers own the requested persisted type.
     return Promise.resolve(values as T[]);
   }
 

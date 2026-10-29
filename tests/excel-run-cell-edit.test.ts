@@ -12,10 +12,6 @@ import {
 
 const CELL_EDIT = { code: "InvalidOperationInCellEditMode", message: "Excel is in cell-editing mode." };
 
-/**
- * Excel.run double: each run gets a context whose sync() fails while the user
- * is "editing", as Excel on the web does.
- */
 function installHost(isEditing: (run: number, sync: number) => boolean): { runs: () => number; restore: () => void } {
   let runs = 0;
   const previous: unknown = Reflect.get(globalThis, "Excel");
@@ -76,7 +72,6 @@ void test("when the user never leaves edit mode, the agent gets a precise error"
 });
 
 void test("a batch is not re-run once an earlier sync reached Excel", async () => {
-  // First sync succeeds (e.g. a write), the second hits edit mode.
   const host = installHost((_run, sync) => sync >= 2);
   try {
     await assert.rejects(

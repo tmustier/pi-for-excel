@@ -1,14 +1,3 @@
-/**
- * Persisted files-workspace records.
- *
- * `FilesWorkspace` is the only writer of these two settings keys, so the
- * schema is the contract: an entry that fails it was not written by this
- * module (or was corrupted) and is dropped, not repaired. Paths are stored
- * normalized (`normalizeWorkspacePath`), which the schema states as a
- * refinement so a persisted path that is not in canonical form fails the same
- * check as one with a wrong type.
- */
-
 import { type Static, Type } from "typebox";
 
 import { normalizeWorkspacePath } from "./path.js";
@@ -47,7 +36,6 @@ function isNormalizedWorkspacePath(value: string): boolean {
   }
 }
 
-/** A workspace-relative path as `normalizeWorkspacePath` writes it. */
 export const NormalizedWorkspacePathSchema = Type.Refine(
   Type.String(),
   isNormalizedWorkspacePath,
@@ -75,13 +63,11 @@ export const FilesWorkspaceAuditEntrySchema = Type.Object({
   workbookLabel: Type.Optional(NonEmptyStringSchema),
 });
 
-/** Envelope for `files.workspace.metadata.v1`; entries are checked one by one. */
 export const PersistedWorkspaceMetadataSchema = Type.Object({
   version: Type.Literal(1),
   byPath: Type.Record(Type.String(), Type.Unknown()),
 });
 
-/** Envelope for `files.workspace.audit.v1`; entries are checked one by one. */
 export const PersistedAuditTrailSchema = Type.Object({
   version: Type.Literal(1),
   entries: Type.Array(Type.Unknown()),

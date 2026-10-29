@@ -1,5 +1,3 @@
-/** WPS Spreadsheets host implementation. */
-
 import {
   getWpsActiveWorkbook,
   getWpsEtApplication,
@@ -70,8 +68,6 @@ export class WpsHost implements SpreadsheetHost {
   }
 
   resolveThemeDark(): boolean | null {
-    // TODO(NEXSELL-370): map WPS theme APIs if available. Unknown keeps the
-    // existing media-query fallback in the taskpane UI.
     return null;
   }
 }

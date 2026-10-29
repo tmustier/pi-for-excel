@@ -1,6 +1,3 @@
-/* ── Tool cards — compact, collapsed by default ──────────── */
-
-/* Card base — used for inprogress + error; complete overrides below */
 .pi-tool-card {
   border-radius: var(--pill-radius);
   border: var(--pill-border);
@@ -13,7 +10,6 @@
 .pi-tool-card:hover {
   border-color: var(--pill-hover-border);
 }
-/* Error state — red tint */
 .pi-tool-card[data-state="error"] {
   border: var(--pill-red-border);
   background: var(--pill-red-bg);
@@ -22,7 +18,6 @@
   border-color: var(--pill-red-hover-border);
 }
 
-/* Complete standalone — green tint */
 .pi-tool-card[data-state="complete"] {
   border: var(--pill-green-border);
   background: var(--pill-green-bg);
@@ -32,7 +27,6 @@
   border-color: var(--pill-green-hover-border);
 }
 
-/* Header — local tool-card toggle markup */
 .pi-tool-card__toggle {
   width: 100%;
   display: flex;
@@ -71,7 +65,6 @@
   animation: pi-think-spin 0.7s linear infinite;
 }
 
-/* Title — match thinking block: same font, muted → foreground on hover */
 .pi-tool-card__title {
   font-family: var(--font-sans);
   font-size: var(--text-base);
@@ -101,10 +94,6 @@
   color: var(--destructive);
 }
 
-/* Body — revealed on expand.
-   Collapse state is first-party: templates render the body with
-   .pi-tool-card__body--collapsed and JS toggles that class
-   (tool-card-header.ts click toggle, keyboard-shortcuts.ts expand-all). */
 .pi-tool-card__body {
   max-height: 2000px;
   overflow-x: hidden;
@@ -116,7 +105,6 @@
 .pi-tool-card__body--collapsed {
   max-height: 0;
 }
-/* Inner pill — white content area nested inside green/white outer pill */
 .pi-tool-card__inner {
   padding: 10px 14px 14px;
   margin: 0 8px 8px;
@@ -125,7 +113,6 @@
   background: var(--pi-inner-bg);
 }
 
-/* Tool identifier — subtle mono label */
 .pi-tool-card__detail {
   padding: 8px 0 2px;
 }
@@ -137,7 +124,6 @@
   letter-spacing: 0.02em;
 }
 
-/* Sections (Input / Output) */
 .pi-tool-card__section {
   margin-top: 10px;
 }
@@ -150,8 +136,6 @@
   letter-spacing: 0.05em;
   margin-bottom: 6px;
 }
-
-/* ── Humanized param list ─────────────────────────────────── */
 
 .pi-params {
   display: grid;
@@ -193,7 +177,6 @@
   border-radius: var(--radius-xs);
 }
 
-/* Color chip — small inline circle swatch */
 .pi-color-chip {
   display: inline-block;
   width: 10px;
@@ -209,9 +192,6 @@
   vertical-align: middle;
 }
 
-/* Clickable cell references — navigate to the range in Excel.
-   Quiet at rest; the data green under the pointer says "this is a place in
-   the workbook". */
 .pi-cell-ref {
   cursor: pointer;
   color: inherit;
@@ -232,7 +212,6 @@
   box-shadow: 0 0 0 2px var(--accent-data-soft);
 }
 
-/* Data preview — mini table for write_cells values */
 .pi-data-preview {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -255,8 +234,6 @@
   font-size: var(--text-xs);
 }
 
-
-/* ── Tool result images (charts, screenshots) ── */
 
 .pi-tool-images {
   margin-top: 8px;

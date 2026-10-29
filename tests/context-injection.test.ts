@@ -17,10 +17,6 @@ import { readSelectionContext } from "../src/context/selection.ts";
 import { createConvertToLlm } from "../src/messages/convert-to-llm.ts";
 import { createAutoContext } from "../src/taskpane/context-injection.ts";
 
-// ---------------------------------------------------------------------------
-// Host boundary: a workbook that emits Office.js worksheet events.
-// ---------------------------------------------------------------------------
-
 type Handler = (event: never) => Promise<void>;
 
 class FakeWorkbook {
@@ -44,7 +40,6 @@ class FakeWorkbook {
     };
     const previous: unknown = Reflect.get(globalThis, "Excel");
     Reflect.set(globalThis, "Excel", {
-      // A fresh context per run, as Office.js does.
       run: <T>(callback: (ctx: unknown) => Promise<T>): Promise<T> =>
         callback({ workbook: { worksheets }, sync: () => Promise.resolve() }),
     });
@@ -91,10 +86,6 @@ function autoContextTexts(request: TranscriptContext): string[] {
   return request.messages.map(textOf).filter((text) => text.startsWith("[Auto-context]"));
 }
 
-// ---------------------------------------------------------------------------
-// Auto-context through a real agent loop
-// ---------------------------------------------------------------------------
-
 void test("auto-context stores workbook and edit notes once, keeps them for later calls, and re-reads only the selection", async () => {
   const workbook = new FakeWorkbook();
   const uninstall = workbook.install();
@@ -121,7 +112,6 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
       description: "write a cell",
       parameters: schema,
       execute: async () => {
-        // Pi's own write, then the user adds a sheet and edits it while Pi works.
         tracker.notePiWrite({ toolCallId: "w", startedAt: Date.now(), settledAt: Date.now() + 5, address: "Data!C1" }, { kind: "runtime", runtimeId: "tab-a" });
         await workbook.edit("sheet-1", "C1", "ThisLocalAddin");
         if (!workbook.sheets.has("sheet-2")) {
@@ -163,43 +153,34 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
     assert.equal(requests.length, 4);
     const [first, second, third, fourth] = requests.map(autoContextTexts);
 
-    // First call: the workbook note, then the selection, both ahead of nothing stale.
     assert.equal(first?.length, 2);
     assert.match(first?.[0] ?? "", /Workbook structure \(initial\)/u);
     assert.doesNotMatch(first?.[0] ?? "", /Added/u);
 
-    // Second call (after the user added a sheet and edited it): a structure
-    // note listing the new sheet and an edit note that names the user's edit
-    // on it but not Pi's own write.
     const editNote = second?.find((text) => text.includes("Edits made in Excel"));
     assert.ok(editNote, "edit note sent mid-turn");
     assert.match(editNote, /- Added: B2/u);
     assert.doesNotMatch(editNote, /C1/u);
     assert.ok(second?.some((text) => /Workbook structure \(structure changed\)[\s\S]*Added/u.test(text)));
 
-    // Third call, same turn: notes from earlier calls are still there, once each.
     assert.equal(third?.filter((text) => text.includes("- Added: B2")).length, 1);
     assert.equal(third?.filter((text) => text.includes("Workbook structure")).length, 2);
 
-    // Next turn: the user's later edit is reported; nothing is re-sent.
     assert.equal(fourth?.filter((text) => text.includes("Workbook structure")).length, 2);
     assert.equal(fourth?.filter((text) => /- Data: D4/u.test(text)).length, 1);
 
-    // Cache shape: everything except the trailing selection is a prefix of the next request.
     for (let i = 0; i + 1 < requests.length; i += 1) {
       const current = requests[i]?.messages ?? [];
       const next = requests[i + 1]?.messages ?? [];
       const stored = current.slice(0, -1);
       assert.deepEqual(next.slice(0, stored.length), stored, `request ${i + 1} is a prefix of request ${i + 2}`);
     }
-    // The trailing note says it is background; mid-turn it says it is not a new
-    // request, and it never restates the request (that looped a mutation).
     for (const [index, request] of requests.entries()) {
       const last = request.messages.at(-1);
       assert.ok(last);
       assert.match(textOf(last), /^\[Auto-context\] Current selection: read/u);
       assert.doesNotMatch(textOf(last), /write C1|again/u, `request ${index + 1} restates the request`);
-      const midTurn = index === 1 || index === 2; // calls 2 and 3 follow tool results
+      const midTurn = index === 1 || index === 2;
       assert.ok(
         textOf(last).endsWith(midTurn
           ? "not a new request. Continue from the tool results above; do not repeat steps that already succeeded.)"
@@ -209,7 +190,6 @@ void test("auto-context stores workbook and edit notes once, keeps them for late
     }
     assert.equal(selectionReads, 4);
 
-    // Notes are stored in the transcript (sessions persist them); the selection is not.
     const stored = agent.state.messages.filter((message: AgentMessage) => message.role === "autoContext");
     assert.deepEqual(stored.map((message) => message.role === "autoContext" ? message.kind : ""), ["workbook", "workbook", "changes", "changes"]);
   } finally {
@@ -242,7 +222,6 @@ void test("every chat tab hears about the same user edit", async () => {
       assert.equal(notes.length, 1);
       assert.match(notes[0]?.role === "autoContext" ? notes[0].text : "", /- Data: A1/u);
     }
-    // Reported once per tab, not again.
     assert.equal(await tabA.prepareRequest(request), undefined);
   } finally {
     uninstall();
@@ -309,10 +288,6 @@ void test("the Files summary is sent again whenever it changes, and to every new
   assert.match(other[0]?.role === "autoContext" ? other[0].text : "", /Files workspace \(initial\)[\s\S]*sig-3/u);
 });
 
-// ---------------------------------------------------------------------------
-// Selection context
-// ---------------------------------------------------------------------------
-
 function installSelection(options: {
   address: string;
   rowIndex: number;
@@ -327,7 +302,6 @@ function installSelection(options: {
     name: "Data",
     getUsedRangeOrNullObject: () => ({ ...options.used, isNullObject: options.used === null, load: () => {} }),
     getRangeByIndexes: (row: number, col: number, rows: number, cols: number) => {
-      // Long text in every cell: the sample must stay bounded regardless.
       const values = Array.from({ length: rows }, (_, r) =>
         Array.from({ length: cols }, (_, c) => options.values?.[row + r]?.[col + c]
           ?? `Row ${row + r + 1} col ${col + c} ${"x".repeat(200)}`));
@@ -452,11 +426,10 @@ void test("with a co-author present, Pi's own writes are left out and the co-aut
       getFilesSummary: () => Promise.resolve(null),
     });
 
-    // Once a co-author has joined, Pi's writes arrive as "Unknown", like the user's.
     const window = { toolCallId: "call-1", toolName: "write_cells", startedAt: Date.now(), settledAt: Number.POSITIVE_INFINITY };
     tracker.notePiWrite(window, { kind: "runtime", runtimeId: "tab-a" });
     await workbook.edit("sheet-1", "A6:B6", "Unknown");
-    await workbook.edit("sheet-1", "D9", "Unknown"); // the user, while Pi wrote
+    await workbook.edit("sheet-1", "D9", "Unknown");
     await workbook.edit("sheet-1", "3:3", "Unknown", { source: "Remote", changeType: "RowInserted" });
     await workbook.edit("sheet-1", "C2", "Unknown", { source: "Remote" });
     window.settledAt = Date.now();
@@ -493,9 +466,8 @@ void test("a backup restore, another tab's write and an extension's write are re
     const tabA = tab("tab-a");
     const tabB = tab("tab-b");
 
-    // Writes are serialized by the workbook lock: one window at a time.
     const write = async (origin: PiWriteOrigin, address: string, eventAddress = address) => {
-      await new Promise((resolve) => setTimeout(resolve, 2)); // writes take time
+      await new Promise((resolve) => setTimeout(resolve, 2));
       const window: PiWriteWindow = { toolCallId: crypto.randomUUID(), startedAt: Date.now(), settledAt: Number.POSITIVE_INFINITY, address: address.includes("!") ? address : `Data!${address}` };
       tracker.notePiWrite(window, origin);
       await workbook.edit("sheet-1", eventAddress, "ThisLocalAddin");
@@ -503,14 +475,11 @@ void test("a backup restore, another tab's write and an extension's write are re
     };
     await write({ kind: "runtime", runtimeId: "tab-a" }, "F3");
     await write({ kind: "restore" }, "B2:D4");
-    // Tab A's write whose event names other cells than the recorded range (a row insert, say).
     await write({ kind: "runtime", runtimeId: "tab-a" }, "Data!J1", "9:9");
-    // The user restores tab A's G7 write: listed once, as the restore.
     await write({ kind: "runtime", runtimeId: "tab-a" }, "G7");
     await write({ kind: "restore" }, "G7");
     await new Promise((resolve) => setTimeout(resolve, 5));
     tracker.notePiWrite({ toolCallId: "far", startedAt: 0, settledAt: 1 }, { kind: "runtime", runtimeId: "tab-a" });
-    // An add-in write no window covers (an extension). Moves the clock past the grace window.
     const realNow = Date.now;
     Date.now = () => realNow() + 60_000;
     try {
@@ -555,12 +524,10 @@ void test("Office.js calls are credited with exactly the cells their edit events
       window.settledAt = Date.now();
       await new Promise((resolve) => setTimeout(resolve, 2));
     };
-    // A structured write before, between and after the code runs.
     await run("write-1", [["sheet-1", "A1"]], "Data!A1");
     await run("js-1", [["sheet-1", "X12"], ["sheet-2", "B2:C3"], ["sheet-1", "X12"]]);
     await run("write-2", [["sheet-1", "A2"]], "Data!A2");
     await run("js-2", [["sheet-1", "4:4"]]);
-    // The user's own edit long after both calls is not the code's.
     const realNow = Date.now;
     Date.now = () => realNow() + 60_000;
     try {
@@ -603,7 +570,6 @@ void test("Pi's own structure change is not sent back as a new workbook note mid
     assert.equal(first.length, 1);
     const history: AgentMessage[] = [prompt, ...first];
 
-    // Pi's insert succeeds and changes the structure.
     blueprint = "1. **Data** (11 rows)";
     autoContext.noteOwnStructureChange();
     history.push(
@@ -612,7 +578,6 @@ void test("Pi's own structure change is not sent back as a new workbook note mid
     );
     assert.deepEqual(await notesFor(history), [], "no fresh structure note after Pi's own insert");
 
-    // The next user prompt gets the new structure.
     history.push(fauxAssistantMessage("Done."), { role: "user", content: "Thanks", timestamp: 3 });
     const next = await notesFor(history);
     assert.equal(next.length, 1);

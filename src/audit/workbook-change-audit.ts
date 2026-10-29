@@ -2,10 +2,6 @@ function isAuditWorkbookChangeAuditPayloadShape(value: unknown): value is Record
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Workbook mutation audit log (local, persisted in SettingsStore when available).
- */
-
 import { formatWorkbookLabel, type WorkbookContext, getWorkbookContext } from "../workbook/context.js";
 import {
   EXECUTION_MODE_SETTING_KEY,
@@ -202,7 +198,6 @@ function clampLimit(limit: number): number {
 
 export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
-  /** Entries whose write failed; retried with the next append. */
   private pendingEntries: WorkbookChangeAuditEntry[] = [];
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
@@ -219,11 +214,6 @@ export class WorkbookChangeAuditLog {
     };
   }
 
-  /**
-   * Every taskpane on this computer appends to the same stored log, so each
-   * write is an atomic update of what is stored now rather than a write-back
-   * of a copy loaded earlier.
-   */
   private async persistPending(): Promise<void> {
     const settings = await this.dependencies.getSettingsStore();
     if (!settings || this.pendingEntries.length === 0) return;
@@ -251,7 +241,6 @@ export class WorkbookChangeAuditLog {
         workbookLabel = formatWorkbookLabel(workbookContext);
       }
     } catch {
-      // ignore workbook context failures
     }
 
     let executionMode: ExecutionMode | undefined = args.executionMode;
@@ -263,7 +252,6 @@ export class WorkbookChangeAuditLog {
           executionMode = normalizeExecutionMode(stored);
         }
       } catch {
-        // ignore execution-mode lookup failures
       }
     }
 

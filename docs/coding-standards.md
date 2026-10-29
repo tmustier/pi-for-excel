@@ -100,6 +100,25 @@ Use [Behavior tests and acceptance gates](./testing.md) for contract selection, 
 - Preserve markdown/HTML safety protections (`installMarkedSafetyPatch`, `src/utils/html.ts`).
 - Diagnostics should report safe summaries and recovery hints, not arbitrary serialized payloads.
 
+## Comments
+
+The code says it; comments do not. Write code clean as you go rather than narrating it, and expect any comment you add to be deleted by review.
+
+A comment survives only when it is one of these:
+
+- A license or attribution header.
+- Non-obvious behavior forced by an external platform, vendor, dependency, or protocol we cannot reshape (an Office.js or WKWebView quirk, a pi-ai contract, an upstream bug with its issue link). Name the external thing.
+- A doc comment that defines a public contract: the extension API in `src/commands/extension-api-types.ts`.
+- A functional directive: `@ts-expect-error`, `oxlint-disable`, `@vite-ignore`, `/// <reference`.
+
+Everything else goes: narration of what the next lines do, phase markers in tests and scripts (`// Step 2: …`; the assertion message or log string documents the step), commented-out code, `IMPORTANT`/`do not remove` warnings, and explanations of our own design. When unsure, delete.
+
+A surprise in our own code is not a reason to keep a comment; it is a refactor target. Delete the comment and make the behavior obvious: rename the symbol, extract or inline, narrow the type so the bad state cannot be written, or add the test that would fail. If a comment claims a constraint (`must stay in sync with X`, `callers must not Y`), encode the claim as a type, test, or check script instead.
+
+Ratchet: `npm run check:comment-burndown` counts whole-line comment prose per file under `src`, `tests`, `scripts` and `vite.config.ts` and fails when a file exceeds its entry in `scripts/comment-burndown-baseline.json` (new files start at 0). Lower entries with `node scripts/check-comment-burndown.mjs --write`. Raise one only for a comment that meets the list above, and say why in the PR.
+
+Review comments with fresh eyes: the author defends its own comments, so the end-of-PR review (below) judges them, not the agent that wrote the diff.
+
 ## Structural standards for agents
 
 - Keep modules cohesive and named for their owned responsibility; avoid new dumping grounds named `utils`, `helpers`, `common`, or `misc`.
@@ -145,6 +164,10 @@ One independent review per PR, at the end, once the checks pass and acceptance i
 > Improve code style:
 > - Make code clearer rather than adding comments
 > - Reduce nesting by merging and inverting conditionals
+>
+> Comments:
+> - Delete every comment in the diff unless it is a license header, a public API doc comment, a functional directive, or names a behavior forced by an external platform, vendor, or dependency we cannot change. When unsure, delete.
+> - A comment that explains a surprise in our own code is a refactor flag: delete it and make the code obvious (rename, extract, narrow the type, add the failing test). A comment that claims a constraint becomes a type, test, or check.
 >
 > Tests:
 > - Test through the public interface, not the implementation

@@ -1,11 +1,3 @@
-/**
- * Inline setup card for web search failures.
- *
- * Rendered inside the chat stream after a failed `web_search` tool card.
- * Detects the failure mode and shows contextual setup steps with inline
- * actions (proxy retry + API key save/validate).
- */
-
 import { getAppStorage } from "../storage/local/app-storage.js";
 
 import {
@@ -283,12 +275,6 @@ function buildCardContent(
   }
 }
 
-/**
- * Mount the inline search setup card into a container element.
- *
- * Called from the tool renderer via a `ref` callback when a `web_search`
- * tool result has `ok: false`.
- */
 export function mountSearchSetupCard(container: HTMLElement, details: WebSearchDetails): void {
   if (container.dataset.mounted === "true") {
     return;
@@ -356,10 +342,6 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
   })();
 }
 
-/**
- * Returns true when the details indicate a web search failure that should
- * show the inline setup card.
- */
 export function shouldShowSearchSetupCard(details: ExcelToolDetails): details is WebSearchDetails {
   return details.kind === "web_search" && details.ok === false;
 }

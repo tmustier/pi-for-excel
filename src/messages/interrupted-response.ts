@@ -1,6 +1,5 @@
 import type { AssistantMessage, Message } from "@earendil-works/pi-ai";
 
-/** A partial answer kept in the transcript, with a tail-only continuation cue. */
 export interface InterruptedResponse {
   role: "interruptedResponse";
   message: AssistantMessage;

@@ -1,12 +1,3 @@
-/**
- * Binds UI-independent runtime lifecycle snapshots to the visible sidebar.
- *
- * The sidebar has one composer, one working indicator and one error banner;
- * they always show the active tab's draft, activity and error. Switching tabs
- * swaps all three together with the transcript, and edits in the composer
- * are written back to the active tab's draft.
- */
-
 import type { PiSidebar } from "../ui/pi-sidebar.js";
 import type { SessionRuntimeManager, SessionRuntime } from "./session-runtime-manager.js";
 import { Type } from "typebox";
@@ -17,7 +8,6 @@ const removeAttachmentSchema = Type.Object({ path: Type.String() });
 export function bindRuntimeSidebar(opts: {
   runtimeManager: SessionRuntimeManager;
   sidebar: PiSidebar;
-  /** Shows the active tab's error banner, or clears it. */
   renderError: (message: string | null) => void;
 }): void {
   const { runtimeManager, sidebar, renderError } = opts;
@@ -36,7 +26,6 @@ export function bindRuntimeSidebar(opts: {
     renderError(runtime.tab.error);
   };
 
-  // The composer writes every edit to the tab it belongs to.
   sidebar.addEventListener("pi-attachment-remove", (event) => {
     if (!(event instanceof CustomEvent)) return;
     if (!Value.Check(removeAttachmentSchema, event.detail)) return;
@@ -74,7 +63,6 @@ export function bindRuntimeSidebar(opts: {
     if (activeRuntime) {
       sidebar.agent = activeRuntime.agent;
       sidebar.syncFromAgent();
-      // A fresh textarea per tab switch, so undo never crosses tabs.
       sidebar.getInput()?.loadDraft(activeRuntime.tab.draft);
       showTabState(activeRuntime);
       unsubscribeTab = activeRuntime.tab.subscribe(() => showTabState(activeRuntime));
@@ -90,7 +78,6 @@ export function bindRuntimeSidebar(opts: {
       const activeNow = runtimeManager.getActiveRuntime();
       if (!activeNow || activeNow.runtimeId !== activeRuntimeId) return;
       activeNow.queueDisplay.attach(sidebar);
-      // The composer may not have rendered yet on the first switch.
       showTabState(activeNow);
     });
   });

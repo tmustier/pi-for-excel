@@ -2,13 +2,6 @@ function isToolsExecuteWpsJsPayloadShape(value: unknown): value is Record<string
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * execute_wps_js — run direct WPS ET JSAPI code with explicit user intent.
- *
- * WPS exposes a synchronous VBA-like object model. The user-provided function
- * body receives `Application` (the active WPS ET Application) and `wps` in scope.
- */
-
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 

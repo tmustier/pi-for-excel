@@ -1,11 +1,3 @@
-/**
- * Extensions pages — Connections, Plugins, and Skills.
- *
- * Thin page adapters over the existing tab renderers
- * (`extensions-hub-connections/plugins/skills`), with per-page busy
- * handling and live-refresh subscriptions scoped to the page lifecycle.
- */
-
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import { dispatchIntegrationsChanged } from "../../../integrations/events.js";
@@ -110,8 +102,6 @@ export function createConnectionsPage(): SettingsShellPage {
         refresh,
       });
 
-      // Live refresh on background state changes, deferred while a
-      // connection secret input has focus so edits are not wiped.
       const hasActiveSecretInput = (): boolean => {
         const active = document.activeElement;
         return active instanceof HTMLInputElement && container.contains(active);
@@ -172,8 +162,6 @@ export function createPluginsPage(): SettingsShellPage {
       container.className = "pi-hub-stack pi-hub-stack--lg";
       ctx.body.appendChild(container);
 
-      // One plugin action at a time: an install, toggle or uninstall (and its
-      // confirmation dialog) blocks other actions until it settles.
       let busy = false;
       const runExclusive = async (action: () => Promise<void>): Promise<boolean> => {
         if (busy || lifecycle.isDisposed()) return false;

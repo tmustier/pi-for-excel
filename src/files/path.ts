@@ -1,9 +1,3 @@
-/**
- * Safe path helpers for workspace file operations.
- *
- * Paths are always relative to the workspace root.
- */
-
 export function normalizeWorkspacePath(rawPath: string): string {
   const trimmed = rawPath.trim();
   if (trimmed.length === 0) {

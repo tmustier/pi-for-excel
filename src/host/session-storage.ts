@@ -1,5 +1,3 @@
-/** SettingsStore-backed session/workbook association adapter shared by hosts. */
-
 import type { SpreadsheetHostSessionStorage } from "./types.js";
 import {
   getLatestSessionForWorkbook,

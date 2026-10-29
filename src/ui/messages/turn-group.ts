@@ -1,20 +1,3 @@
-/**
- * <turn-group> — the record of what the agent did in one turn.
- *
- * One card per turn (docs/proposals/sidebar-redesign.md §5). The header
- * carries the turn's state: "Working" with the elapsed time while it runs,
- * "Waiting for approval" while a row asks, "Worked for 8s" once done, with
- * the count of failed steps. Each tool call is a row: a past-tense sentence
- * with the reference in mono, one meta fact, and a chevron that drills into
- * the call's input and result. A failed row turns red and shows the error
- * the model received; there is no Retry, the model's recovery is the next
- * row. A row waiting for approval asks in place. The footer is the
- * workbook-change receipt with Undo and Review.
- *
- * The group collapses itself when the answer starts; the footer stays. Open
- * state follows transcript-state (details mode, hand toggles).
- */
-
 import { html, LitElement, nothing, type TemplateResult } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { AlertTriangle, Check, ChevronDown, ChevronUp, Circle, Loader, type IconNode } from "lucide";
@@ -64,7 +47,6 @@ export class TurnGroup extends LitElement {
   }
 
   override updated(): void {
-    // The elapsed time ticks once a second while the turn runs.
     if (this.model?.endedAt !== null) this._stopTicking();
     else this._ticker ??= window.setInterval(() => this.requestUpdate(), 1000);
   }

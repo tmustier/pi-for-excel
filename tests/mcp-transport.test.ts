@@ -60,7 +60,6 @@ for (const newline of ["\n", "\r\n", "\r"]) {
     const stream = new ReadableStream<Uint8Array>({
       pull(controller) {
         if (offset < bytes.length) controller.enqueue(bytes.slice(offset, ++offset));
-        // Intentionally never close: completing must not require EOF.
       },
       cancel() { cancelled = true; },
     });

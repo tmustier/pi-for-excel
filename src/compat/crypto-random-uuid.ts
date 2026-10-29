@@ -8,7 +8,6 @@ function createRandomUuid(getRandomValues: Crypto["getRandomValues"]): ReturnTyp
   const bytes = new Uint8Array(UUID_BYTE_LENGTH);
   getRandomValues.call(globalThis.crypto, bytes);
 
-  // RFC 4122 version 4 UUID: set version and variant bits.
   const versionByte = bytes[6];
   const variantByte = bytes[8];
   if (versionByte === undefined || variantByte === undefined) {

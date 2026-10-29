@@ -1,8 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   9. MENUS — slash command + utilities
-   ═══════════════════════════════════════════════════════ */
-
-/* Shared menu surfaces */
 :is(.pi-cmd-menu, .pi-utilities-menu) {
   border-radius: var(--radius-md);
   border: var(--glass-border);
@@ -11,7 +6,6 @@
   padding: 4px;
 }
 
-/* Shared menu items */
 :is(.pi-cmd-item, .pi-utilities-menu__item) {
   display: flex;
   align-items: center;
@@ -38,7 +32,6 @@
   cursor: pointer;
 }
 
-/* One focus treatment for every menu and popover item (src/ui/menu-keyboard.ts). */
 :is(.pi-cmd-item, .pi-utilities-menu__item, .pi-session-tab-context-menu__item, .pi-status-popover__item, .pi-status-popover__command):focus {
   outline: none;
 }
@@ -60,7 +53,6 @@
   );
 }
 
-/* Slash command menu */
 .pi-cmd-menu {
   position: fixed;
   z-index: var(--z-popover);
@@ -122,7 +114,6 @@
   margin-left: auto;
 }
 
-/* Utilities menu */
 .pi-utilities-menu {
   position: absolute;
   top: 100%;

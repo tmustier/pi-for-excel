@@ -164,7 +164,6 @@ interface ExtensionToolDefinitionBoundary {
 }
 
 function assertValidToolDefinition(name: string, tool: ExtensionToolDefinition): void {
-  // Runtime extension JavaScript is untyped even though the public authoring API is typed.
   const boundary = tool as ExtensionToolDefinition & ExtensionToolDefinitionBoundary;
   if (typeof boundary.execute === "function") {
     return;
@@ -230,13 +229,11 @@ function resolveWidgetApiV2Enabled(options: CreateExtensionAPIOptions): boolean 
   return isExperimentalFeatureEnabled("extension_widget_v2");
 }
 
-/** Extension whose legacy `widget.show` content is in the shared slot. */
 let legacyWidgetOwnerId: string | null = null;
 
 function showLegacyWidget(ownerId: string, el: HTMLElement): void {
   let slot = document.getElementById("pi-widget-slot");
   if (!slot) {
-    // Fallback: insert before .pi-input-area inside the sidebar
     const inputArea = document.querySelector(".pi-input-area");
     if (inputArea) {
       slot = document.createElement("div");
@@ -268,11 +265,6 @@ function dismissLegacyWidget(): void {
   }
 }
 
-/**
- * Remove an extension's legacy (`widget.show` without Widget API v2) widget
- * when it is disabled, reloaded or uninstalled. Another extension's widget
- * in the shared slot is left alone.
- */
 export function dismissLegacyWidgetOwnedBy(ownerId: string): void {
   if (legacyWidgetOwnerId === ownerId) {
     dismissLegacyWidget();
@@ -288,7 +280,6 @@ function normalizeWidgetId(id: string): string {
   return normalized;
 }
 
-/** Create the extension API for a given host context. */
 export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExtensionAPI {
   const registerCommand = options.registerCommand ?? defaultRegisterCommand;
   const registerTool = options.registerTool;
@@ -812,13 +803,6 @@ export function createExtensionAPI(options: CreateExtensionAPIOptions): ExcelExt
   };
 }
 
-/**
- * Load and activate an extension from an inline function or module specifier.
- *
- * Security default: remote http(s) module URLs are blocked unless the user
- * explicitly opts in by setting localStorage key
- * `pi.allowRemoteExtensionUrls` to `1` or `true`.
- */
 export async function loadExtension(
   api: ExcelExtensionAPI,
   source: string | ExtensionActivator<ExcelExtensionAPI>,

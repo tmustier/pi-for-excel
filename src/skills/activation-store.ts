@@ -2,12 +2,6 @@ function isSkillsActivationStorePayloadShape(value: unknown): value is Record<st
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Agent Skill activation persistence.
- *
- * Stores disabled skill names so users can opt out of prompt injection per skill.
- */
-
 import type { AgentSkillDefinition } from "./types.js";
 
 export const SKILL_ACTIVATION_STORAGE_KEY = "skills.activation.v1";

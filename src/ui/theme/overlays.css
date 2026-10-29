@@ -1,9 +1,3 @@
-/*
- * Overlay styles entrypoint.
- *
- * Keep this file as imports-only so overlay styling stays modular.
- */
-
 @import "./overlays/primitives.css";
 @import "./overlays/settings-shell.css";
 @import "./overlays/provider-resume-shortcuts.css";

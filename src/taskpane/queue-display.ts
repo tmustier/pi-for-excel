@@ -1,15 +1,3 @@
-/**
- * The queue strip above the composer: steers and follow-ups waiting for the
- * agent, prompts and commands waiting in the action queue, and messages a
- * stopped or failed turn never delivered ("Not sent", kept in the tab state).
- *
- * Each row shows its full text (on hover and focus) and has its own Edit and
- * Remove; the action queue decides what those do (see `action-queue.ts`).
- * Stores queue state per runtime, and can attach/detach to the visible sidebar.
- *
- * Security note: avoid `innerHTML` so queued text can't inject markup.
- */
-
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { PiSidebar } from "../ui/pi-sidebar.js";
@@ -21,12 +9,10 @@ export type QueuedActionType = "prompt" | "command";
 export type QueuedMessageItem = {
   type: QueuedMessageType;
   text: string;
-  /** The message handed to the agent; its delivery removes exactly this row. */
   message: AgentMessage;
 };
 type QueuedActionItem = { type: QueuedActionType; label: string; text: string };
 
-/** One row of the strip, in display order: held, then messages, then actions. */
 export type QueueRow =
   | { kind: "held"; index: number }
   | { kind: "message"; item: QueuedMessageItem }
@@ -46,11 +32,9 @@ export type QueueDisplay = {
   add: (type: QueuedMessageType, text: string, message: AgentMessage) => void;
   clear: () => void;
   drainQueuedMessages: () => QueuedMessageItem[];
-  /** Removes one waiting steer/follow-up from the strip and from the agent's queue. */
   removeQueuedMessage: (item: QueuedMessageItem) => void;
   setActionQueue: (items: QueuedActionItem[]) => void;
   setRowHandlers: (handlers: QueueRowHandlers) => void;
-  /** The row Alt+Up edits: the newest row that holds the user's text (not a command). */
   lastEditableRow: () => QueueRow | null;
   attach: (sidebar: PiSidebar) => void;
   detach: () => void;
@@ -58,7 +42,6 @@ export type QueueDisplay = {
 
 export function createQueueDisplay(opts: {
   agent: Agent;
-  /** Where "Not sent" rows live (the tab state). */
   held: HeldSource;
 }): QueueDisplay {
   const { agent } = opts;
@@ -72,7 +55,6 @@ export function createQueueDisplay(opts: {
     attachedSidebar?.querySelector("#pi-queue-display")?.remove();
   }
 
-  /** Polite screen-reader announcements; kept outside the strip so it survives the strip emptying. */
   function announce(text: string): void {
     if (!attachedSidebar) return;
     let announcer = attachedSidebar.querySelector<HTMLElement>("#pi-queue-announcer");
@@ -103,8 +85,6 @@ export function createQueueDisplay(opts: {
     labelEl.className = `pi-queue__label ${labelClass}`;
     labelEl.textContent = label;
 
-    // The full text is in the row; CSS shortens it to one line until the
-    // row is hovered or focused.
     const textEl = document.createElement("span");
     textEl.className = "pi-queue__text";
     textEl.textContent = text;
@@ -165,7 +145,6 @@ export function createQueueDisplay(opts: {
       }
     }
 
-    // Keep keyboard focus on the same row position across a re-render.
     const focused = document.activeElement;
     const focusedButton = focused && container.contains(focused)
       ? { index: [...container.querySelectorAll("button")].findIndex((button) => button === focused) }
@@ -192,7 +171,6 @@ export function createQueueDisplay(opts: {
       fragment.appendChild(renderRow({ kind: "action", index }, action.label, "pi-queue__label--action", action.text, action.type === "prompt"));
     });
 
-    // Alt+Up edits the last row holding the user's text; commands stay queued.
     if (lastEditableRow()) {
       const hintEl = document.createElement("div");
       hintEl.className = "pi-queue__hint";
@@ -241,8 +219,6 @@ export function createQueueDisplay(opts: {
     const idx = queued.indexOf(item);
     if (idx === -1) return;
     queued.splice(idx, 1);
-    // The agent's queues can only be cleared as a whole; put back the rest
-    // of this kind in order (synchronously, so nothing is delivered between).
     if (item.type === "steer") {
       agent.clearSteeringQueue();
       for (const rest of queued) if (rest.type === "steer") agent.steer(rest.message);
@@ -281,9 +257,6 @@ export function createQueueDisplay(opts: {
     updateQueueDisplay();
   });
 
-  // A row leaves the strip when its own message is delivered. Rows still
-  // waiting when a turn ends are settled by the action queue (delivered,
-  // or kept as "Not sent" rows), never silently dropped here.
   agent.subscribe((ev) => {
     if (queued.length === 0) return;
     if (ev.type !== "message_start" || ev.message.role !== "user") return;

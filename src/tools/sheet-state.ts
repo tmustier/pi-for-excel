@@ -1,14 +1,3 @@
-/**
- * Sheet state the read tools surface to the agent: protection, merges,
- * hidden rows/columns, filters, tables, data validation, spills and the
- * calculation mode. Each is invisible in `range.values`, and without them the
- * agent falls back to execute_office_js to find out why an edit failed or
- * why a filtered table "loses" rows.
- *
- * Collection is bounded by the block it is given (one read_range page); every
- * list is capped so the notes stay a few lines.
- */
-
 import {
   blockAddress,
   intersectBlocks,
@@ -40,22 +29,17 @@ export interface SpillState {
 
 export interface RangeState {
   protected: boolean;
-  /** Locked state of the block's cells: true, false, or null when mixed. Matters only when protected. */
   locked: boolean | null;
   calculationMode: string;
-  /** 1-based row numbers inside the block that are hidden (filtered or hidden). */
   hiddenRows: number[];
-  /** 0-based column indexes inside the block that are hidden. */
   hiddenColumns: number[];
   merged: string[];
   mergedMore: number;
   tables: TableState[];
-  /** Sheet AutoFilter range when one is applied (tables have their own). */
   autoFilter?: { address: string; filtered: boolean };
   validation: ValidationState[];
   validationMore: number;
   spills: SpillState[];
-  /** Set when part of the state could not be read; the rest is still reported. */
   unavailable?: string;
 }
 
@@ -63,7 +47,6 @@ function stripSheet(address: string): string {
   return parseRangeRef(address).address;
 }
 
-/** Parse "A1:C2" / "C5" (no sheet) into a block. */
 export function parseBlock(address: string): CellBlock | null {
   const [rawStart, rawEnd] = stripSheet(address).replace(/\$/gu, "").split(":");
   if (!rawStart) return null;
@@ -81,7 +64,6 @@ export function parseBlock(address: string): CellBlock | null {
   }
 }
 
-/** Split a RangeAreas address ("S!A1:C2,S!A6:C6") into blocks. */
 function parseAreas(address: string): CellBlock[] {
   return address
     .split(",")
@@ -89,7 +71,6 @@ function parseAreas(address: string): CellBlock[] {
     .filter((block): block is CellBlock => block !== null);
 }
 
-/** "3-5, 9, 12-14" from sorted numbers, listing at most `maxRuns` runs. */
 export function formatNumberRuns(
   numbers: readonly number[],
   label: (n: number) => string = String,
@@ -128,7 +109,6 @@ function describeBasicRule(kind: string, rule: BasicRule): string {
   return `${kind} ${operatorText} ${bounds}`.trim();
 }
 
-/** Compact text for an Office.js data validation rule. */
 export function describeValidationRule(type: string, rule: Excel.DataValidationRule | null | undefined): string {
   if (rule?.list) return `list: ${ruleOperand(rule.list.source)}`;
   if (rule?.custom) return `custom: ${ruleOperand(rule.custom.formula)}`;
@@ -145,7 +125,6 @@ export function describeValidationRule(type: string, rule: Excel.DataValidationR
   return type.replace(/([a-z])([A-Z])/gu, "$1 $2").toLowerCase();
 }
 
-/** Visible cells → hidden rows/columns of the block. */
 function hiddenFromVisible(block: CellBlock, visibleAddress: string | null): { rows: number[]; columns: number[] } {
   const visible = visibleAddress === null ? [] : parseAreas(visibleAddress);
   const rowVisible = new Set<number>();
@@ -162,15 +141,9 @@ function hiddenFromVisible(block: CellBlock, visibleAddress: string | null): { r
   for (let c = block.columnIndex; c < block.columnIndex + block.columnCount; c += 1) {
     if (!columnVisible.has(c)) columns.push(c);
   }
-  // A fully hidden block reports its rows, not every column as well.
   return rows.length === block.rowCount ? { rows, columns: [] } : { rows, columns };
 }
 
-/**
- * Read the state of one bounded block. `spillCandidates` are formula cells
- * (A1, no sheet) to check for a spill range; at most 100 are checked.
- * Failures degrade to `unavailable` instead of failing the read.
- */
 export async function collectRangeState(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -309,12 +282,10 @@ export async function collectRangeState(
   return state;
 }
 
-/** Formulas that can return arrays: any function call, range or spill reference. */
 export function canSpill(formula: string): boolean {
   return /[(:#]/u.test(formula);
 }
 
-/** Note lines for the agent; empty when nothing is notable. */
 export function renderRangeState(state: RangeState, columnLabel: (index: number) => string): string[] {
   const lines: string[] = [];
   if (state.calculationMode !== "Automatic") {

@@ -1,11 +1,3 @@
-/**
- * Clone helpers for recovery state snapshots.
- *
- * A snapshot must not alias the object a caller handed in, and it must carry
- * only the properties its schema declares (host objects and older persisted
- * payloads can bring extras). One schema-driven clone does both.
- */
-
 import { type Static, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 
@@ -27,8 +19,6 @@ import type {
 } from "./types.js";
 
 export function cloneRecoveryState<S extends TSchema>(schema: S, value: Static<S>): Static<S> {
-  // Clean only removes properties the schema does not declare, so a value that
-  // is valid going in is valid coming out.
   return Value.Clean(schema, Value.Clone(value)) as Static<S>;
 }
 

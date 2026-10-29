@@ -1,17 +1,3 @@
-/**
- * Approval dialogs: the user's consent before Pi acts.
- *
- * Approvals are queued, not replaced. Parallel tool calls in one response,
- * or several tabs, can each ask at once; every request gets its own answer
- * and is shown one at a time in arrival order, with a count of the ones
- * waiting behind it. Nothing is declined unless the user declines it or
- * the turn that asked is stopped (its `signal` aborts), which withdraws the
- * request.
- *
- * Built on `createOverlayDialog` (the overlay primitive the `ux-system`
- * work standardizes); the queue only decides which request is on screen.
- */
-
 import { render, type TemplateResult } from "lit";
 
 import {
@@ -25,35 +11,18 @@ import { announce } from "./announcer.js";
 
 export interface ApprovalRequest {
   title: string;
-  /**
-   * The tool call that asks. When the transcript shows that call's turn
-   * group, the question is asked in its row instead of a dialog.
-   */
   toolCallId?: string;
-  /** One line naming what will happen and where, e.g. "Write Sheet1!B2:C4". */
   headline?: string;
-  /** Structured details (the tool card's humanized input). */
   details?: TemplateResult;
-  /** Plain-text body; used when there are no structured details. */
   message?: string;
-  /** What the change replaces, e.g. "Replaces 2 non-empty cells: …". Shown prominently. */
   overwrites?: string;
-  /** Short note under the details, e.g. why this asks. */
   note?: string;
-  /** Which tab asked, when it may not be the one on screen. */
   source?: string;
   confirmLabel: string;
   confirmTone?: "primary" | "danger";
   signal?: AbortSignal;
-  /** Reversible Confirm-mode changes only; scoped to this run's signal. */
   allowForTurn?: boolean;
-  /** An additional explicit grant, e.g. trusting one MCP tool. */
   secondaryApproval?: { label: string; onApprove: () => void | Promise<void> };
-  /**
-   * Stops the turn that asked. With it, the dialog offers "Stop Pi": the
-   * taskpane (and its Stop button) is inert behind the dialog, so this is
-   * how the user stops Pi while it waits for an answer.
-   */
   onStop?: () => void;
 }
 
@@ -67,29 +36,21 @@ const queue: QueuedApproval[] = [];
 const allowedTurns = new WeakSet<AbortSignal>();
 let current: { entry: QueuedApproval; answer: (approved: boolean) => void; setWaiting: (count: number) => void } | null = null;
 
-/* ── Inline approvals (turn group rows) ─────────────────── */
-
-/** A question asked in the transcript, in the row of the tool call that asks. */
 export interface InlineApproval {
   toolCallId: string;
   request: ApprovalRequest;
   answer(approved: boolean): void;
-  /** Allow this and every eligible change for the rest of the run; only when `request.allowForTurn`. */
   allowForTurn(): void;
-  /** Run `request.secondaryApproval` (a full backup first), then allow. Rejects if the preparation fails. */
   prepareAndApprove(): Promise<void>;
   preparing: boolean;
 }
 
 export interface InlineApprovalHost {
-  /** The host shows this call's turn group, so it can ask in the row. */
   claims(toolCallId: string): boolean;
-  /** The set of inline questions changed. */
   onChange(): void;
 }
 
 const inlineHosts = new Set<InlineApprovalHost>();
-/** Each question owns its transition back to the dialog queue. */
 const inline = new Map<InlineApproval, () => void>();
 
 export function getInlineApprovals(): readonly InlineApproval[] {
@@ -107,11 +68,6 @@ function claimedInline(toolCallId: string): boolean {
   return false;
 }
 
-/**
- * Registers a transcript as a place to ask about tool calls it shows.
- * Unregistering moves any unanswered question no other host shows back to
- * a dialog, so a tab switch never hides a question.
- */
 export function registerInlineApprovalHost(host: InlineApprovalHost): { refresh(): void; unregister(): void } {
   const refresh = (): void => {
     for (const [approval, release] of inline) {
@@ -136,7 +92,6 @@ function settle(entry: QueuedApproval, approved: boolean): void {
   entry.resolve(approved);
 }
 
-/** Consent also covers eligible questions already waiting in other rows. */
 function allowTurn(signal: AbortSignal): void {
   allowedTurns.add(signal);
   for (const approval of inline.keys()) {
@@ -144,7 +99,6 @@ function allowTurn(signal: AbortSignal): void {
   }
 }
 
-/** Declines every request, shown or queued, and stops each turn that asked. */
 function stopAll(): void {
   const entries = queue.splice(0);
   const stops = new Set<() => void>();
@@ -297,7 +251,6 @@ function showNext(): void {
 
   dialog.card.append(header, body, actions);
   dialog.addCleanup(() => {
-    // Escape, backdrop and the header × all decline.
     if (!answered) {
       answered = true;
       settle(entry, false);
@@ -315,12 +268,7 @@ function showNext(): void {
     },
   };
   updateWaitingCount();
-  // The question must be answered before anything else in the taskpane is
-  // used (APPROVE-11): everything behind it, including the composer, is inert
-  // until it closes, so Tab cannot leave it and typing cannot reach the chat.
-  // The ux-system overlay primitive is taking this over for every dialog.
   const behind = Array.from(document.body.children).filter(
-    // Live regions stay live so announcements still reach screen readers.
     (element): element is HTMLElement =>
       element instanceof HTMLElement && !element.inert && element.getAttribute("aria-live") === null,
   );
@@ -329,18 +277,12 @@ function showNext(): void {
     for (const element of behind) element.inert = false;
   });
   dialog.mount();
-  // Focus the dialog itself, not "Allow": an Enter typed for the composer as
-  // the dialog opens must not approve a change the user has not read.
   dialog.card.tabIndex = -1;
   dialog.card.dataset.autofocus = "";
   dialog.card.focus();
   dialog.addCleanup(announce(t("announce.approval", { title: request.title })));
 }
 
-/**
- * Asks the user and resolves `true` (allowed) or `false` (declined or
- * withdrawn). Rejects only when no UI can be shown.
- */
 export function requestApproval(request: ApprovalRequest): Promise<boolean> {
   if (typeof document === "undefined" || !(document.body instanceof HTMLElement)) {
     return Promise.reject(new Error(t("confirm.unavailable")));
@@ -401,7 +343,6 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
   });
 }
 
-/** Queues a question for the dialog, withdrawing it if its turn is stopped first. */
 function enqueue(entry: QueuedApproval): void {
   const { request } = entry;
   if (request.signal) {

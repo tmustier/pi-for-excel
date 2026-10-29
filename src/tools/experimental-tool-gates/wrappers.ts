@@ -199,7 +199,6 @@ export function buildPythonBridgeApprovalMessage(
 function defaultRequestPythonBridgeApproval(
   _request: PythonBridgeApprovalRequest,
 ): Promise<boolean> {
-  // Fails open when no UI approval handler is injected.
   return Promise.resolve(true);
 }
 
@@ -317,11 +316,6 @@ function wrapDirectWorkbookJsToolWithHardGate(
       const request = getDirectJsExecuteApprovalRequest(toolCallId, params, apiName);
       const risk = assessOfficeJsCodeRisk(request.code);
 
-      // Auto mode trusts pure host JSAPI code — skip the approval prompt.
-      // Code referencing ambient browser authority (network, storage, global
-      // handles, dynamic evaluation) requires approval in every mode: direct
-      // workbook JS runs in the taskpane page realm, and workbook content is
-      // untrusted input.
       const mode = await (dependencies.getExecutionMode?.() ?? Promise.resolve("safe" as const));
       if (mode !== "yolo" || risk.flagged || risk.destructive) {
         const approved = await requestApproval({
@@ -374,16 +368,6 @@ function createPythonBridgeApprover(
   };
 }
 
-/**
- * Python tools with a built-in fallback (`python_run`, `python_transform_range`).
- *
- * Behavior:
- * - If bridge is configured + reachable, request approval once per bridge URL.
- * - If bridge URL is missing/invalid, allow tool execution so it can fall back
- *   to in-browser Pyodide.
- * - If bridge is configured but unreachable, keep blocking with an explicit
- *   reachability error.
- */
 function wrapPythonToolWithOptionalBridgeApproval(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
@@ -407,7 +391,6 @@ function wrapPythonToolWithOptionalBridgeApproval(
       } else {
         const reason = gate.reason ?? "bridge_unreachable";
 
-        // Missing/invalid URL means the tool can still run via Pyodide fallback.
         if (reason === "bridge_unreachable") {
           if (tool.name === "python_transform_range") {
             return buildPythonTransformRangeGateErrorResult({
@@ -430,9 +413,6 @@ function wrapPythonToolWithOptionalBridgeApproval(
   };
 }
 
-/**
- * Python tools that strictly require the native bridge (`libreoffice_convert`).
- */
 function wrapPythonBridgeOnlyToolWithApprovalGate(
   tool: AgentTool,
   dependencies: ExperimentalToolGateDependencies,
@@ -467,24 +447,6 @@ function wrapPythonBridgeOnlyToolWithApprovalGate(
   };
 }
 
-/**
- * Apply execution gates to tool calls.
- *
- * Current rules:
- * - `tmux` requires a healthy bridge URL (custom override or default localhost URL).
- * - `python_run` and `python_transform_range` can run with Pyodide fallback
- *   when bridge URL is missing/invalid; bridge approval is required when a
- *   reachable bridge is present.
- * - `libreoffice_convert` strictly requires a configured + reachable bridge and
- *   approval (no Pyodide fallback).
- * - `execute_office_js` and `execute_wps_js` prompt for confirmation on every
- *   call in Confirm mode. In Auto mode, pure host JSAPI code runs without a
- *   prompt, but code referencing ambient browser authority (network, storage,
- *   globals, dynamic evaluation) still requires per-call approval.
- * - `files` asks in both modes before deleting/overwriting a file Pi did not
- *   create in this chat. Extensions ask for every Confirm change; Auto asks
- *   before install/enable/uninstall (`local-change-gates.ts`).
- */
 export function applyExperimentalToolGates(
   tools: AgentTool[],
   dependencies: ExperimentalToolGateDependencies = {},

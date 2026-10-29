@@ -1,8 +1,3 @@
-/**
- * Snake game extension for Pi for Excel.
- * Renders as an inline widget above the input — messages stay visible above.
- */
-
 import type { ExcelExtensionAPI } from "../commands/extension-api.js";
 import { setSafeInnerHTML } from "../utils/html.js";
 
@@ -68,18 +63,15 @@ export function activate(api: ExcelExtensionAPI): void {
         ctx2d.fillStyle = "#f8f8f6";
         ctx2d.fillRect(0, 0, logicalW, logicalH);
 
-        // Grid (subtle)
         ctx2d.strokeStyle = "rgba(0,0,0,0.03)";
         for (let x = 0; x <= COLS; x++) { ctx2d.beginPath(); ctx2d.moveTo(x * CELL, 0); ctx2d.lineTo(x * CELL, ROWS * CELL); ctx2d.stroke(); }
         for (let y = 0; y <= ROWS; y++) { ctx2d.beginPath(); ctx2d.moveTo(0, y * CELL); ctx2d.lineTo(COLS * CELL, y * CELL); ctx2d.stroke(); }
 
-        // Food
         ctx2d.fillStyle = "#d44";
         ctx2d.beginPath();
         ctx2d.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
         ctx2d.fill();
 
-        // Snake
         snake.forEach((p, i) => {
           const r = i === 0 ? 3 : 2;
           ctx2d.fillStyle = i === 0 ? "oklch(0.40 0.12 160)" : "oklch(0.50 0.10 160)";

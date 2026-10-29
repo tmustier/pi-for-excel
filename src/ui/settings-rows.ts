@@ -1,11 +1,3 @@
-/**
- * Row primitives for the settings shell.
- *
- * A settings page is composed of groups (labelled cards) containing rows:
- * navigation rows (label + value preview + chevron), toggle rows, and
- * select rows. All classes live in `theme/overlays/settings-shell.css`.
- */
-
 import { setSafeInnerHTML } from "../utils/html.js";
 import { createToggle } from "./extensions-hub-components.js";
 
@@ -16,9 +8,6 @@ export interface SettingsGroupResult {
   list: HTMLDivElement;
 }
 
-/**
- * A labelled group card. Rows appended to `list` are separated by hairlines.
- */
 export function createSettingsGroup(label?: string): SettingsGroupResult {
   const root = document.createElement("section");
   root.className = "pi-set-group";
@@ -50,10 +39,6 @@ export interface NavRowResult {
   setValue: (value: string) => void;
 }
 
-/**
- * Full-width navigation row: optional icon, label (+sublabel), right-aligned
- * value preview and chevron. Activating navigates to a nested page.
- */
 export function createNavRow(opts: NavRowOptions): NavRowResult {
   const row = document.createElement("button");
   row.type = "button";
@@ -118,9 +103,6 @@ export interface SettingToggleRowResult {
   input: HTMLInputElement;
 }
 
-/**
- * Inline toggle row styled to sit inside a settings group.
- */
 export function createSettingToggleRow(opts: SettingToggleRowOptions): SettingToggleRowResult {
   const row = document.createElement("div");
   row.className = "pi-set-row pi-set-row--control";
@@ -164,9 +146,6 @@ export interface SettingSelectRowResult {
   select: HTMLSelectElement;
 }
 
-/**
- * Inline select row styled to sit inside a settings group.
- */
 export function createSettingSelectRow(opts: SettingSelectRowOptions): SettingSelectRowResult {
   const row = document.createElement("div");
   row.className = "pi-set-row pi-set-row--control";
@@ -218,10 +197,6 @@ export interface SegmentedControlResult {
   setActive: (id: string) => void;
 }
 
-/**
- * Shared segmented control for peer views inside one page (e.g. the Rules
- * editor's three edit surfaces). Replaces the per-overlay tab systems.
- */
 export function createSegmentedControl(opts: SegmentedControlOptions): SegmentedControlResult {
   const root = document.createElement("div");
   root.className = "pi-set-segmented";

@@ -85,7 +85,6 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
       url.searchParams.get("state"),
     );
   } catch {
-    // not a URL
   }
 
   if (value.includes("#")) {
@@ -237,17 +236,6 @@ export function isOpenAICodexCredentialRefreshRequired(error: unknown): boolean 
 
 const REQUIRED_SCOPES = SCOPE.split(" ");
 
-/**
- * Check whether the access token JWT itself proves the required scopes were
- * granted (`scp` array or space-delimited `scope`/`scp` string claim).
- *
- * Credentials imported from pi's `auth.json` (via the dev-only `/__pi-auth`
- * endpoint) or restored from older storage never carry the
- * `codexOAuthVersion`/`scopes` marker fields — those are only written by this
- * module's own login/refresh flows. Without this check, every externally
- * sourced Codex credential would be rejected as stale even when the
- * underlying grant already includes the connector scopes.
- */
 function accessTokenHasRequiredScopes(accessToken: unknown): boolean {
   if (typeof accessToken !== "string") {
     return false;

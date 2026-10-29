@@ -5,7 +5,6 @@ import { test } from "node:test";
 import forge from "node-forge";
 
 const require = createRequire(import.meta.url);
-// Exercise the certificate generator actually resolved by Office's dev tooling.
 const requireFromDevCerts = createRequire(require.resolve("office-addin-dev-certs"));
 const { createCA, createCert } = requireFromDevCerts("mkcert");
 
@@ -42,7 +41,6 @@ void test("RSA verification accepts valid signatures and rejects changed message
 });
 
 void test("Office certificate generator creates a valid localhost certificate chain", async () => {
-  // In-memory fixtures only. No trust-store installation or user certificate changes.
   const ca = await createCA({
     organization: "Pi security test CA",
     countryCode: "GB",

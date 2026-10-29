@@ -43,9 +43,6 @@ const defaultProbeBridge = probeBridgeHealth;
 export async function evaluateTmuxBridgeGate(
   dependencies: TmuxBridgeGateDependencies = {},
 ): Promise<TmuxBridgeGateResult> {
-  // No experiment flag gate — tmux is available when bridge health passes.
-  // If no URL override is configured, the default localhost bridge URL is probed.
-
   const getBridgeUrl = dependencies.getTmuxBridgeUrl ?? defaultGetTmuxBridgeUrl;
   const configuredBridgeUrl = await getBridgeUrl();
 
@@ -78,13 +75,6 @@ export async function evaluateTmuxBridgeGate(
   };
 }
 
-/**
- * Evaluate whether the Python/LibreOffice bridge is reachable.
- *
- * No experiment flag required. If no URL override is configured, the default
- * localhost bridge URL is probed automatically. The user approval dialog
- * (in wrappers.ts) serves as the security boundary.
- */
 export async function evaluatePythonBridgeGate(
   dependencies: PythonBridgeGateDependencies = {},
 ): Promise<PythonBridgeGateResult> {

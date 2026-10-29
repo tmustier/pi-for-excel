@@ -1,19 +1,3 @@
-/**
- * Shared write path for tools that put values or formulas into a range
- * (`write_cells`, `fill_formula`).
- *
- * Excel accepts many writes without doing what was asked: a value sent to a
- * merged cell other than its top-left is dropped, a value sent into a spilled
- * range turns the spill's anchor into #SPILL!, text such as "00123" or "1/2" is
- * converted to a number or date, data validation is not enforced, and under
- * manual calculation a new formula reads back 0. Large ranges also exceed the
- * per-call payload limit when read back.
- *
- * `inspectWriteTarget` reads what decides whether the write can land, before
- * anything is written. `verifyWrittenRange` compares what Excel now holds with
- * what was sent, with reads bounded so large writes can still be verified.
- */
-
 import { isExcelError } from "../../utils/format.js";
 import {
   cellAddress,
@@ -25,22 +9,16 @@ import { buildWorkbookCellChangeSummary, type WorkbookCellChangeSummary } from "
 import { MAX_RECOVERY_CELLS } from "../../workbook/recovery/constants.js";
 import { CHECKPOINT_SKIPPED_REASON, tooLargeToBackUpReason } from "../recovery-metadata.js";
 
-/** Writes up to this many cells read their before-state (for backups) and verify every cell. */
 export const FULL_VERIFY_CELL_LIMIT = MAX_RECOVERY_CELLS;
 
-/** Above FULL_VERIFY_CELL_LIMIT, this many cells are read back from each end of the range. */
 const SAMPLE_CELLS_PER_END = 1_000;
 
-/** Per-cell probes (spill parents, validation) stop after this many cells. */
 const PER_CELL_PROBE_LIMIT = 500;
 
-/** Cells listed by address in a result line; the rest are counted. */
 const LISTED_CELL_LIMIT = 8;
 
-/** A cell value as Office.js reads or writes it. */
 export type CellScalar = string | number | boolean | null | undefined;
 
-/** Parse a grid read from Office.js (`range.values`/`formulas`) into cell scalars. */
 export function toCellGrid(grid: readonly (readonly unknown[])[]): CellScalar[][] {
   return grid.map((row) => row.map((value) => {
     if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return value;
@@ -50,7 +28,6 @@ export function toCellGrid(grid: readonly (readonly unknown[])[]): CellScalar[][
 }
 
 
-/** The block of cells a tool writes: 1-based row, 0-based column, as in `parseCell`. */
 export interface WriteBlock {
   startRow: number;
   startCol: number;
@@ -110,25 +87,19 @@ export function classifySentValue(value: CellScalar): SentCell {
   return { kind: "text", text: value, literal: false };
 }
 
-/** What the tool sends, cell by cell (row and column offsets within the block). */
 export type SentGrid = (row: number, col: number) => SentCell;
 
 function sendsContent(cell: SentCell): boolean {
   return cell.kind !== "skip" && cell.kind !== "empty";
 }
 
-// ── Before the write ────────────────────────────────────────────────────
-
 export interface MergeConflict {
-  /** Merged area, e.g. "A1:D1". */
   mergedArea: string;
-  /** Cells inside it (not its top-left) that would receive content. */
   cells: string[];
 }
 
 export interface SpillConflict {
   cell: string;
-  /** Anchor of the spilled range the cell belongs to, e.g. "A1". */
   anchor: string;
   anchorFormula: string;
 }
@@ -137,18 +108,13 @@ export interface WriteTargetInspection {
   sheetName: string;
   calculationMode: string | null;
   sheetProtected: boolean;
-  /** True when every target cell is unlocked; protection blocks the write otherwise. */
   targetUnlocked: boolean;
-  /** Present when the target is small enough to back up (≤ FULL_VERIFY_CELL_LIMIT cells). */
   before: { values: CellScalar[][]; formulas: CellScalar[][] } | null;
-  /** Address of the target's non-empty part when `before` is not loaded; null when it is empty. */
   occupiedAddress: string | null;
   occupiedCount: number;
   mergeConflicts: MergeConflict[];
   spillConflicts: SpillConflict[];
-  /** Tables overlapping the target before the write; null when the host cannot list them. */
   tableNames: string[] | null;
-  /** Set when a check could not run on this host or was capped. */
   checkNotes: string[];
 }
 
@@ -176,10 +142,6 @@ export function countOccupiedCells(values: unknown[][], formulas: unknown[][]): 
   return count;
 }
 
-/**
- * Read the state that decides whether a write can land, in two syncs at most.
- * Nothing is written.
- */
 export async function inspectWriteTarget(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -200,9 +162,6 @@ export async function inspectWriteTarget(
   const used = small ? null : target.getUsedRangeOrNullObject(true);
   used?.load("address,cellCount");
 
-  // A merged area is reported only when its top-left cell is inside the queried
-  // range (Excel on the web returns nothing for a cell in the middle of a merge),
-  // so query from A1 to the target's bottom-right corner.
   const canReadMerges = excelApiSupported("1.13");
   const merges = canReadMerges
     ? sheet.getRange(`A1:${colToLetter(block.startCol + block.columnCount - 1)}${block.startRow + block.rowCount - 1}`)
@@ -211,8 +170,6 @@ export async function inspectWriteTarget(
   merges?.load("areas/items/address,areas/items/rowCount,areas/items/columnCount");
   if (!canReadMerges) checkNotes.push("merged cells were not checked (needs ExcelApi 1.13)");
 
-  // Excel extends a table when a write lands next to it; listing the tables
-  // before and after lets the result say so.
   const tables = excelApiSupported("1.9") ? target.getTables(false) : null;
   tables?.load("items/name");
 
@@ -244,9 +201,6 @@ export async function inspectWriteTarget(
     }
   }
 
-  // hasSpill is true or null when some target cell is inside a spilled range.
-  // getSpillParentOrNullObject only answers for one cell, so probe the cells
-  // that would receive content, up to a cap.
   const spillConflicts: SpillConflict[] = [];
   if (canReadSpills && target.hasSpill !== false) {
     const probes: Array<{ cell: string; parent: Excel.Range }> = [];
@@ -303,10 +257,6 @@ export function listCells(cells: readonly string[], limit = LISTED_CELL_LIMIT): 
   return cells.length > limit ? `${shown} and ${cells.length - limit} more` : shown;
 }
 
-/**
- * Why the write cannot land as sent, or null. Checked before writing, in the
- * order the agent should fix them.
- */
 export function describeWriteObstacle(
   inspection: WriteTargetInspection,
   qualify: (address: string) => string,
@@ -341,13 +291,10 @@ export function describeWriteObstacle(
   return null;
 }
 
-// ── After the write ─────────────────────────────────────────────────────
-
 export interface CellIssue {
   address: string;
   sent: string;
   got: string;
-  /** Displayed text, loaded for converted cells. */
   shown?: string;
 }
 
@@ -358,39 +305,25 @@ export interface FormulaErrorCell {
 }
 
 export interface WriteVerification {
-  /** `full`: every cell was read back. `sampled`: ends read back, whole range scanned. `failed`: no read-back. */
   mode: "full" | "sampled" | "failed";
-  /** Full read-back, present in `full` mode. */
   values: CellScalar[][] | null;
   formulas: CellScalar[][] | null;
-  /** Cells sent content that are empty now (or still hold content when sent ""). */
   notWritten: CellIssue[];
-  /** At least this many cells did not take their value (counts beyond the read-back sample). */
   notWrittenCount: number;
-  /** Text Excel converted to a number, date, or boolean. */
   converted: CellIssue[];
-  /** Values that landed as something else (e.g. a duplicate table header renamed "Qty2"). */
   altered: CellIssue[];
   formulaErrors: FormulaErrorCell[];
   formulaErrorCount: number;
-  /** Cells whose value violates the cell's data validation rule. */
   invalidCells: string[];
-  /** Validation status of the whole target when per-cell detail is unavailable. */
   invalidSummary: string | null;
-  /** The rule the invalid cells break, e.g. "list: Yes,No". */
   invalidRule: string | null;
-  /** Tables Excel extended to take in the written cells, with the headers it made up. */
   tableExtensions: Array<{ name: string; address: string; newHeaders: string[] }>;
-  /** Calculation mode when it is not Automatic. */
   manualCalculation: string | null;
-  /** Written formulas were calculated before the read-back (manual calculation only). */
   calculatedWritten: boolean;
-  /** What was checked when not every cell was read back, or why verification failed. */
   scopeNote: string | null;
   sampleRows: Array<{ rowOffset: number; values: CellScalar[][]; formulas: CellScalar[][] }>;
 }
 
-/** A completed write is either verified, unreadable, or stopped before read-back. */
 export type WriteReadBack =
   | { stopped: true; verification: null; verifyError: null }
   | { stopped: false; verification: WriteVerification; verifyError: null }
@@ -423,7 +356,6 @@ function numbersMatch(a: number, b: number): boolean {
   return Math.abs(a - b) <= scale * 1e-14;
 }
 
-/** A numeric string Excel stores as the same number (e.g. "42", "3.5") is not a conversion worth reporting. */
 function roundTripsAsNumber(text: string, value: number): boolean {
   const trimmed = text.trim();
   return trimmed !== "" && String(value) === trimmed;
@@ -495,10 +427,6 @@ function diffRows(
   }
 }
 
-/**
- * Compare a full read-back with what was sent, for hosts that read the whole
- * range synchronously (WPS). No validation or calculation checks.
- */
 export function diffWrittenGrid(
   block: WriteBlock,
   sent: SentGrid,
@@ -530,24 +458,14 @@ export function diffWrittenGrid(
 
 export interface VerifyOptions {
   calculationMode: string | null;
-  /** Whether any formula was sent (written formulas are calculated under manual calculation). */
   sentFormulas: boolean;
-  /** Number of cells sent "" (they are expected to be blank). */
   sentEmptyCount: number;
-  /** Tables overlapping the target before the write (`WriteTargetInspection.tableNames`). */
   tablesBefore: string[] | null;
-  /** Approximate serialized size of what was sent; long text makes a full read-back exceed Excel's response limit. */
   sentChars: number;
 }
 
-/** Above this many sent characters a full read-back (values and formulas) risks Excel's response payload limit. */
 const FULL_VERIFY_CHAR_LIMIT = 1_500_000;
 
-/**
- * Read back what Excel now holds and compare it with what was sent.
- * Reads stay bounded: up to FULL_VERIFY_CELL_LIMIT cells are read in full;
- * larger ranges read both ends and scan the whole range for errors and blanks.
- */
 export async function verifyWrittenRange(
   context: Excel.RequestContext,
   sheet: Excel.Worksheet,
@@ -556,8 +474,6 @@ export async function verifyWrittenRange(
   options: VerifyOptions,
 ): Promise<WriteVerification> {
   const target = sheet.getRange(blockAddress(block));
-  // Under manual calculation every write leaves dependents stale; written
-  // formulas are calculated so their own read-back is current.
   const manual = options.calculationMode !== null && options.calculationMode !== "Automatic"
     ? options.calculationMode
     : null;
@@ -747,8 +663,6 @@ function describeValidationRule(type: string, rule: Excel.DataValidationRule): s
   return type;
 }
 
-// ── Reporting ───────────────────────────────────────────────────────────
-
 function looksLikeHeaderRename(issue: CellIssue): boolean {
   const sent = issue.sent.startsWith("\"") ? issue.sent.slice(1, -1) : issue.sent;
   const got = issue.got.startsWith("\"") ? issue.got.slice(1, -1) : issue.got;
@@ -761,7 +675,6 @@ function issueLines(issues: CellIssue[], describe: (issue: CellIssue) => string)
   return lines;
 }
 
-/** Problem sections for a result, most serious first. Empty when the write landed as sent. */
 export function formatVerificationProblems(
   verification: WriteVerification,
   qualify: (address: string) => string,
@@ -825,7 +738,6 @@ export function formatVerificationProblems(
   return lines;
 }
 
-/** Notes that qualify the verification itself (calculation mode, scope). */
 export function formatVerificationNotes(verification: WriteVerification): string[] {
   const lines: string[] = [];
   if (verification.manualCalculation) {
@@ -856,7 +768,6 @@ export function hasVerificationProblems(verification: WriteVerification): boolea
     verification.invalidSummary !== null;
 }
 
-/** Cells that held a formula before the write and hold a constant now (a cleared cell is not a constant). */
 export function replacedFormulas(
   block: WriteBlock,
   beforeFormulas: CellScalar[][],
@@ -873,7 +784,6 @@ export function replacedFormulas(
   return replaced;
 }
 
-/** Warning when a write hard-coded cells that held formulas, with a few of the lost formulas. */
 export function formatReplacedFormulas(
   sheetName: string,
   replaced: ReadonlyArray<{ address: string; formula: string }>,
@@ -885,9 +795,6 @@ export function formatReplacedFormulas(
     "These cells no longer update when their inputs change; if the user did not ask to hard-code them, write formulas instead.";
 }
 
-// ── Stop and interrupted writes ─────────────────────────────────────────
-
-/** Why a chunked write ended early: Stop between chunks, or an Excel failure (with its reason). */
 export type WriteInterruption = { kind: "stopped" } | { kind: "failed"; reason: string };
 
 function rowSpan(block: WriteBlock, offset: number, count: number): string {
@@ -895,13 +802,6 @@ function rowSpan(block: WriteBlock, offset: number, count: number): string {
   return count === 1 ? `row ${first}` : `rows ${first}–${first + count - 1}`;
 }
 
-/**
- * Result text for a write that ended before every chunk landed, saying exactly
- * what is in the workbook: rows Excel confirmed stand, rows of a chunk Excel
- * never answered may or may not have been written, the rest were not written.
- * `fullAddr` is the sheet-qualified target; `sheetName` is null when the target
- * was never inspected (nothing can have been written).
- */
 export function formatInterruptedWrite(args: {
   cause: WriteInterruption;
   block: WriteBlock;
@@ -950,13 +850,11 @@ export function formatInterruptedWrite(args: {
   return lines.join("\n");
 }
 
-/** Result text when Stop came after every chunk landed but before the read-back. */
 export function formatStoppedAfterWrite(fullAddr: string, block: WriteBlock): string {
   return `⏹ **Stopped after writing ${fullAddr}** (${block.rowCount}×${block.columnCount}) — the change stands. ` +
     "It was not verified because Stop was pressed; read the range before relying on it.";
 }
 
-/** Split a grid into row chunks whose serialized size stays under Excel's request payload limit. */
 export function chunkRowsForWrite(rows: CellScalar[][], maxChars = 2_000_000): Array<{ rowOffset: number; rows: CellScalar[][] }> {
   const chunks: Array<{ rowOffset: number; rows: CellScalar[][] }> = [];
   let current: CellScalar[][] = [];
@@ -977,7 +875,6 @@ export function chunkRowsForWrite(rows: CellScalar[][], maxChars = 2_000_000): A
   return chunks;
 }
 
-/** Reason and note when a backup is not created. Large writes into empty cells cannot be backed up but can be undone by clearing. */
 export function backupUnavailable(
   beforeCaptured: boolean,
   block: WriteBlock,
@@ -993,14 +890,12 @@ export function backupUnavailable(
   };
 }
 
-/** Change summary for a sampled (large) write: counts from what was sent, sample from the rows read back. */
 export function sampledChanges(
   sheetName: string,
   block: WriteBlock,
   verification: WriteVerification,
   sentCells: number,
 ): WorkbookCellChangeSummary {
-  // Large writes are only accepted into empty targets, so "before" is empty.
   const head = verification.sampleRows[0];
   const changedCount = Math.max(0, sentCells - verification.notWrittenCount);
   if (!head) return { changedCount, truncated: changedCount > 0, sample: [] };

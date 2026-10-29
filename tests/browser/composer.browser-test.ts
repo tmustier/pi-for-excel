@@ -28,7 +28,6 @@ async function withTaskpane(run: (page: Page) => Promise<void>, viewportHeight =
   }
 }
 
-/** The external model boundary; submissions still enter through the real composer. */
 async function stubProvider(page: Page, mode: "hold" | "fail"): Promise<void> {
   await connectFixtureProvider(page);
   await page.evaluate(async (responseMode) => {
@@ -36,7 +35,6 @@ async function stubProvider(page: Page, mode: "hold" | "fail"): Promise<void> {
     const { fauxAssistantMessage } = await import("/node_modules/@earendil-works/pi-ai/dist/providers/faux.js") as typeof import("@earendil-works/pi-ai/providers/faux");
     const sidebar = document.querySelector("pi-sidebar");
     if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
-    // PiSidebar's public agent is the active runtime's Agent.
     const agent = sidebar.agent as Agent;
     agent.getApiKey = () => Promise.resolve("fixture-key");
     let calls = 0;
@@ -108,20 +106,13 @@ void test("a failed turn appears once inline with Details, a fix action and work
   });
 });
 
-/**
- * Gives the active tab enough history to compact and a model stream that never
- * answers, so `/compact` keeps the tab busy until it is stopped.
- */
 async function holdCompaction(page: Page): Promise<void> {
   await connectFixtureProvider(page);
-  // Let startup finish with the saved provider before narrowing the model's
-  // context window; provider reconciliation otherwise restores registry limits.
   await page.reload();
   await page.locator("pi-input textarea").waitFor({ state: "visible", timeout: 20_000 });
   await page.evaluate(() => {
     const sidebar = document.querySelector("pi-sidebar");
     if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
-    // The sidebar's agent is the active tab's Agent; the test drives it directly.
     const agent = sidebar.agent as {
       state: { model: { contextWindow: number }; messages: Array<{ role: string; content: string; timestamp: number }> };
       getApiKey: () => Promise<string>;
@@ -132,7 +123,6 @@ async function holdCompaction(page: Page): Promise<void> {
       content: `${text} `.repeat(100),
       timestamp: index + 1,
     }));
-    // A tiny window leaves older messages to summarize.
     agent.state.model = { ...agent.state.model, contextWindow: 300 };
     agent.getApiKey = () => Promise.resolve("test-key");
     agent.streamFunction = () => new Promise<never>(() => {});
@@ -270,7 +260,6 @@ void test("each tab keeps its own draft, and a starter hint adds to it", async (
 void test("undo in a tab's composer never replays typing from another tab", async () => {
   await withTaskpane(async (page) => {
     const input = page.locator("pi-input textarea");
-    // The browser's own undo command, which Ctrl/Cmd+Z runs in the composer.
     const undo = () => page.evaluate(() => { document.execCommand("undo"); });
     await input.click();
     await page.keyboard.type("my draft");
@@ -291,7 +280,6 @@ void test("undo in a tab's composer never replays typing from another tab", asyn
     await undo();
     assert.equal(await input.inputValue(), "");
 
-    // Undo still works for this tab's own typing.
     await page.keyboard.type("tab two");
     await undo();
     assert.equal(await input.inputValue(), "");
@@ -303,7 +291,6 @@ void test("the composer trims a prompt and does not submit whitespace", async ()
     const input = page.locator("pi-input textarea");
     await page.locator("pi-input").evaluate((composer) => {
       composer.addEventListener("pi-send", (event) => {
-        // The component owns this event contract; the assertion only exposes its browser payload for observation.
         const sendEvent = event as CustomEvent<{ text?: string }>;
         if (typeof sendEvent.detail?.text === "string") {
           document.body.dataset.lastComposerSend = sendEvent.detail.text;
@@ -358,7 +345,6 @@ void test("a growing composer keeps the transcript following its newest message"
     await page.evaluate(() => {
       const sidebar = document.querySelector("pi-sidebar");
       if (!sidebar || !("agent" in sidebar) || !("requestUpdate" in sidebar)) throw new Error("sidebar missing");
-      // The sidebar's agent is the active tab's Agent; the test seeds its transcript.
       const agent = sidebar.agent as { state: { messages: Array<{ role: string; content: string; timestamp: number }> } };
       for (let index = 0; index < 40; index += 1) {
         agent.state.messages.push({ role: "user", content: `message ${index}`, timestamp: index + 1 });
@@ -383,7 +369,6 @@ void test("a growing composer keeps the transcript following its newest message"
     await page.waitForTimeout(200);
     assert.ok((await distanceFromBottom()) < 20, `transcript ${await distanceFromBottom()}px from the bottom`);
 
-    // Still following: a new message scrolls into view.
     await page.evaluate(() => {
       const sidebar = document.querySelector("pi-sidebar");
       if (!sidebar || !("agent" in sidebar) || !("requestUpdate" in sidebar)) throw new Error("sidebar missing");

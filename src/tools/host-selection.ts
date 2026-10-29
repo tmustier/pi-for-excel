@@ -1,5 +1,3 @@
-/** Host-specific core tool implementation selection. */
-
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
@@ -51,12 +49,6 @@ export function selectCoreToolForHost(
   return tool;
 }
 
-/**
- * Compose the core tool list for a host: `CORE_TOOL_NAMES` drives ordering,
- * `selectCoreToolForHost` swaps in fail-fast handlers where a host has no
- * implementation. Kept free of tool-implementation imports so the composition
- * behavior is directly unit-testable.
- */
 export function composeCoreToolsForHost(
   createTool: (name: CoreToolName) => AnyHostSelectableTool,
   hostKind: SpreadsheetHostKind,
@@ -64,11 +56,6 @@ export function composeCoreToolsForHost(
   return CORE_TOOL_NAMES.map((name) => selectCoreToolForHost(name, createTool(name), hostKind));
 }
 
-/**
- * Non-core tools that drive Office.js/Excel directly (e.g. `execute_office_js`,
- * `python_transform_range`) must also fail fast on hosts without an Office.js
- * runtime instead of reaching Office/Excel helper paths.
- */
 export function selectOfficeCoupledToolForHost(
   tool: AnyHostSelectableTool,
   hostKind: SpreadsheetHostKind,

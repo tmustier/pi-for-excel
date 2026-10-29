@@ -2,10 +2,6 @@ function isCommandsBuiltinsExportPayloadShape(value: unknown): value is Record<s
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Builtin export/compaction commands.
- */
-
 import {
   getCurrentSystemMessage,
   normalizeContext,
@@ -86,7 +82,6 @@ function countChatMessages(messages: AgentMessage[]): number {
 
 type ExportDestination = "clipboard" | "download";
 
-/** The destination the user named, or null for the command's default. */
 function parseExportDestination(raw: string): ExportDestination | null {
   const normalized = raw.trim().toLowerCase();
   if (normalized === "clipboard") return "clipboard";
@@ -101,8 +96,6 @@ function triggerJsonDownload(fileName: string, content: string): void {
 async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
   const destination = parseExportDestination(rawArgs) ?? "download";
 
-  // Only this workbook's changes: the log holds addresses and values from every workbook.
-  // With no workbook identity, only entries that were recorded without one are included.
   const { workbookId } = await getWorkbookContext();
   const entries = (await getWorkbookChangeAuditLog().list(500))
     .filter((entry) => (entry.workbookId ?? null) === workbookId);
@@ -128,13 +121,6 @@ async function exportWorkbookAuditLog(rawArgs: string): Promise<void> {
   showToast(t("export.toast.audit_downloaded", { count: String(entries.length) }));
 }
 
-// =============================================================================
-// Compaction helpers
-// =============================================================================
-
-// Mirrors pi-coding-agent defaults (see docs/compaction.md in pi-coding-agent).
-
-/** One toast slot per compaction run: each step replaces the previous one. */
 const COMPACT_TOAST_ID = "compact";
 
 const SUMMARIZATION_SYSTEM_PROMPT =
@@ -174,7 +160,6 @@ Use this EXACT format:
 
 Keep each section concise. Preserve exact identifiers (sheet names, cell addresses, tool names, error messages).`;
 
-/** Appended to both prompts: requests are labelled with whether they were answered. */
 const ANSWERED_REQUESTS_RULE = `Each user request is labelled "answered" or "not answered yet". An answered request is finished: put it under Done with its outcome, and never under In Progress or Next Steps; do not suggest repeating its tool calls. A reply given after the summarized messages is shown right after them. Only requests not answered yet can be In Progress.`;
 
 const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
@@ -235,12 +220,10 @@ function truncateMiddle(text: string, maxChars: number): string {
 }
 
 function estimateTokens(message: AgentMessage): number {
-  // Conservative heuristic from pi-coding-agent: tokens ≈ chars / 4
   const charsPerToken = 4;
   let chars = 0;
 
   if (message.role === "artifact") {
-    // UI-only, not part of LLM context (defaultConvertToLlm filters it out).
     return 0;
   }
 
@@ -259,7 +242,7 @@ function estimateTokens(message: AgentMessage): number {
     } else if (Array.isArray(content)) {
       for (const block of content) {
         if (block.type === "text") chars += block.text.length;
-        if (block.type === "image") chars += 4800; // ~1200 tokens
+        if (block.type === "image") chars += 4800;
       }
     }
     return Math.ceil(chars / charsPerToken);
@@ -274,7 +257,6 @@ function estimateTokens(message: AgentMessage): number {
         try {
           chars += JSON.stringify(block.arguments).length;
         } catch {
-          // ignore
         }
       }
     }
@@ -289,7 +271,6 @@ function estimateTokens(message: AgentMessage): number {
     return Math.ceil(chars / charsPerToken);
   }
 
-  // Unknown custom message types: ignore.
   return 0;
 }
 
@@ -320,7 +301,6 @@ function findCutIndex(
     accumulated += estimate(message);
     if (accumulated >= keepRecentTokens) {
       let cut = i;
-      // Never start kept context with a tool result.
       while (cut > boundaryStart && messages[cut]?.role === "toolResult") {
         cut -= 1;
       }
@@ -331,7 +311,6 @@ function findCutIndex(
   return boundaryStart;
 }
 
-/** Kept results above this size are compacted to a preview when their request was answered. */
 const KEPT_TOOL_RESULT_MAX_CHARS = 8_000;
 
 function serializeConversation(
@@ -345,7 +324,6 @@ function serializeConversation(
     if (msg.role === "artifact") continue;
 
     if (msg.role === "autoContext") {
-      // Workbook and Files notes are re-sent after compaction; user edits are not.
       if (msg.kind === "changes") parts.push(`[Workbook edits by the user]: ${truncateMiddle(msg.text, limits.maxUserChars)}`);
       continue;
     }
@@ -406,8 +384,6 @@ function serializeConversation(
       }
       continue;
     }
-
-    // Ignore other message types.
   }
 
   return parts.join("\n\n");
@@ -499,7 +475,6 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
           thinkingLevel: agent.state.thinkingLevel,
           messageCount: countChatMessages(msgs),
           transcript,
-          // Also include raw messages for full fidelity debugging
           raw: msgs,
         };
 
@@ -508,9 +483,6 @@ export function createExportCommands(getActiveAgent: ActiveAgentProvider): Slash
 
         if (destination !== "download") {
           try {
-            // A bare /export downloads where the clipboard refuses the copy
-            // (Excel on the web without user activation) instead of filling the
-            // manual-copy dialog with the whole JSON transcript.
             const outcome = await copyText(json, { manualFallback: destination === "clipboard" });
             if (outcome === "manual") return;
             if (outcome === "copied") {
@@ -560,13 +532,6 @@ function untilStopped<T>(work: Promise<T>, signal: AbortSignal | undefined): Pro
   });
 }
 
-/**
- * Run compaction for a specific agent.
- *
- * Used by the `/compact` slash command (with the active agent) and by
- * auto-compaction / overflow recovery (with the agent that owns the run, which
- * may not be the active tab).
- */
 export async function runCompactCommand(agent: Agent, args: string, signal?: AbortSignal): Promise<void> {
   const allMessages = agent.state.messages;
   const currentSystemMessage = getCurrentSystemMessage(allMessages);
@@ -590,11 +555,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     return;
   }
 
-  // IMPORTANT: use the agent's configured stream function + API key resolver.
-  // Calling pi-ai's completeSimple() directly bypasses:
-  // - our CORS proxy logic (streamFunction)
-  // - our API key/OAuth resolution (agent.getApiKey)
-  // and can crash in browser WebViews due to env key fallbacks using `process`.
   const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
   if (!apiKey) {
     showToast(t("export.toast.compact.no_api_key", { provider: model.provider }), { id: COMPACT_TOAST_ID });
@@ -603,7 +563,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
 
   const contextWindow = model.contextWindow || 200000;
 
-  // Pi uses reserveTokens to ensure we don't run out of room for the model's response.
   const reserveTokens = effectiveReserveTokens(contextWindow);
   const keepRecentTokens = effectiveKeepRecentTokens(contextWindow, reserveTokens);
 
@@ -650,13 +609,9 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     summarizedTokens: number;
   }> => {
     const keepRecent = keepRecentOverride ?? keepRecentTokens;
-    // Large results of answered requests are kept as previews, so they no
-    // longer fill the kept tail on their own.
     const estimateKept = (message: AgentMessage) => estimateTokens(
       message.role === "toolResult" && compactable.has(message.toolCallId) ? compactToolResult(message) : message,
     );
-    // When the previews leave nothing to summarize, cut as before: compacting
-    // the kept results still frees their space.
     const shrunkCut = findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent, estimateKept);
     const cutIndex = shrunkCut > boundaryStart ? shrunkCut : findCutIndex(messagesWithoutArchived, boundaryStart, keepRecent);
     const messagesToSummarize = messagesWithoutArchived.slice(boundaryStart, cutIndex);
@@ -665,8 +620,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
       message.role === "toolResult" && compactable.has(message.toolCallId) ? [message.toolCallId] : []
     ));
 
-    // Tell the summarizer which requests were answered, including by a reply
-    // that is kept after the summary.
     const answered = new Map<AgentMessage, boolean>();
     const laterReplies: string[] = [];
     for (const turn of turns) {
@@ -722,16 +675,12 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
           ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
           maxTokens,
           ...(signal ? { signal } : {}),
-          // Match pi-coding-agent: don't force temperature when using reasoning,
-          // since Anthropic requires temperature=1 when thinking is enabled.
           reasoning: "high",
         },
       );
 
       return stream.result();
     };
-    // Stop ends compaction at once, even if the provider stream does not
-    // honor the signal.
     const result = await untilStopped(request(), signal);
 
     if (result.stopReason === "aborted" || signal?.aborted) {
@@ -784,7 +733,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     } catch (e) {
       if (e instanceof CompactionStoppedError || !isPromptTooLongError(e)) throw e;
 
-      // Retry once with more aggressive truncation + keeping a larger recent tail.
       showToast(t("export.toast.compact.retrying"), { id: COMPACT_TOAST_ID, duration: 60_000 });
 
       const keepMoreRecent = Math.min(contextWindow, keepRecentTokens * 2);

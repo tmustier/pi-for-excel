@@ -1,5 +1,3 @@
-/** Shared helpers for workbook recovery value/formula grids. */
-
 export interface RecoveryGridStats {
   rows: number;
   cols: number;

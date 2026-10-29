@@ -1,9 +1,3 @@
-/**
- * Keyboard shortcuts + key-driven UX.
- *
- * Extracted from taskpane.ts to keep the entrypoint thin.
- */
-
 import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { getThinkingLevelsForModel } from "../models/thinking-levels.js";
@@ -53,7 +47,6 @@ interface KeydownContext {
   textarea: HTMLTextAreaElement | undefined;
   keyTarget: Node | null;
   isInEditor: boolean;
-  /** The active tab is busy: responding, compacting or waiting to retry. */
   isBusy: boolean;
 }
 
@@ -67,10 +60,6 @@ function isInsideSessionTabs(target: EventTarget | null | undefined): boolean {
   return target.closest(".pi-session-tabs") !== null;
 }
 
-/**
- * Menus and status popovers own plain arrow keys (see `menu-keyboard.ts`);
- * explicit tab chords such as Ctrl+PageUp still switch tabs from them.
- */
 function isPlainArrowInsideMenu(event: KeyboardEvent, target: EventTarget | null | undefined): boolean {
   const plain = !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
   return plain
@@ -119,8 +108,6 @@ export function cycleThinkingLevel(agent: Agent): ThinkingLevel {
   const next = levels[(idx >= 0 ? idx + 1 : 0) % levels.length] ?? "off";
 
   agent.state.thinkingLevel = next;
-  // Full re-render with the real mode and lock state (rendering from the agent
-  // alone would reset the mode badge to its default).
   document.dispatchEvent(new CustomEvent("pi:status-update"));
   flashThinkingLevel(next, THINKING_LEVEL_COLORS[next]);
 
@@ -131,9 +118,7 @@ export function installKeyboardShortcuts(opts: {
   getActiveAgent: () => Agent | null;
   isActiveTabBusy: () => boolean;
   sidebar: PiSidebar;
-  /** Stops the active tab, exactly like the Stop button. */
   stopActiveTab: () => void;
-  /** Alt+Up: puts the last queued message back in the composer; false when there is none. */
   editLastQueued: () => boolean;
   onCreateTab?: () => void;
   onCloseActiveTab?: () => void;
@@ -237,7 +222,6 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event } = context;
-      // Tab shortcuts never act on the tabs hidden behind an open dialog.
       if (!isCreateTabShortcut(event) || !onCreateTab || isDialogOverlayOpen()) return false;
 
       event.preventDefault();
@@ -273,7 +257,6 @@ export function installKeyboardShortcuts(opts: {
         || !onSwitchAdjacentTab
         || (isTextEntryTarget(keyTarget) && !(event.ctrlKey && event.altKey))
         || isDialogOverlayOpen()
-        // A focused tab handles plain arrows itself; chords still switch here.
         || (isInsideSessionTabs(keyTarget) && !(event.metaKey || event.ctrlKey || event.altKey || event.shiftKey))
         || isPlainArrowInsideMenu(event, keyTarget)
       ) {
@@ -286,7 +269,6 @@ export function installKeyboardShortcuts(opts: {
     },
     (context) => {
       const { event, agent, textarea, keyTarget } = context;
-      // Leave Tab and Shift+Tab to native focus navigation everywhere.
       if (!(event.ctrlKey && event.altKey && !event.metaKey && !event.shiftKey && event.code === "KeyT")
         || !agent || !textarea || keyTarget !== textarea) return false;
 
@@ -317,8 +299,6 @@ export function installKeyboardShortcuts(opts: {
     // commits a candidate) are the input method's, not shortcuts.
     if (event.isComposing || event.keyCode === 229) return;
 
-    // A modal overlay owns the keyboard. Its own handlers take Escape and Tab;
-    // taskpane shortcuts must not act on the tabs or composer behind it.
     if (isModalOverlayOpen()) {
       return;
     }
@@ -330,7 +310,6 @@ export function installKeyboardShortcuts(opts: {
       sidebar,
     });
 
-    // The command menu is a combobox on the composer: it only takes keys typed there.
     if (isCommandMenuVisible() && context.isInEditor && handleCommandMenuKey(event)) {
       return;
     }

@@ -29,7 +29,6 @@ class TestSettingsStore extends SettingsStore {
 
   override get<T = unknown>(key: string): Promise<T | null> {
     const value = this.values.get(key);
-    // Test fixtures control every stored value and callers validate OAuth payloads.
     return Promise.resolve(value === undefined ? null : value as T);
   }
 

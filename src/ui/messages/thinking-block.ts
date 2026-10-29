@@ -1,24 +1,3 @@
-/**
- * <thinking-block> — collapsible reasoning section.
- *
- * First-party replacement for pi-web-ui's ThinkingBlock (docs/ui-ownership.md).
- * Keeps the same tag name and DOM contract relied on by theme CSS:
- * - `.thinking-block` card wrapper
- * - `.thinking-header` with chevron span first, label span second
- *   (CSS reorders them visually via flex `order`)
- * - expanded body rendered as a nested <markdown-block .isThinking>
- *
- * Label lifecycle:
- * - this block is the part of the response still streaming → "Thinking…"
- * - finished, with its start and end observed by the sidebar in this
- *   taskpane → "Thought for Xs" / "Xm Xs"
- * - otherwise (restored history, reload mid-response) → "Thought"
- *
- * The duration and expanded state live in transcript-state.ts, keyed by
- * message and content position, so they survive the element being replaced
- * when the response moves from the streaming container into the list.
- */
-
 import { html, LitElement } from "lit";
 import { customElement, property } from "lit/decorators.js";
 import { ChevronRight } from "lucide";

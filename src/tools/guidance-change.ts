@@ -1,4 +1,3 @@
-/** Consent and reversible feedback for changes to Pi's standing guidance. */
 import { t } from "../language/index.js";
 import { showActionToast, showToast } from "../ui/toast.js";
 import type { ExperimentalToolGateDependencies } from "./experimental-tool-gates/types.js";

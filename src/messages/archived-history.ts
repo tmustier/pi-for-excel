@@ -38,7 +38,6 @@ function flattenArchivedPayload(messages: readonly AgentMessage[]): AgentMessage
 
   for (const message of messages) {
     if (message.role === "artifact") {
-      // Artifacts are UI-only and already excluded from MessageList/LLM context.
       continue;
     }
 

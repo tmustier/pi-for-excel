@@ -1,7 +1,3 @@
-/**
- * Blob URL safety helpers shared by file open/download flows.
- */
-
 const ACTIVE_CONTENT_MIME_TYPES = new Set<string>([
   "text/html",
   "application/xhtml+xml",
@@ -10,9 +6,6 @@ const ACTIVE_CONTENT_MIME_TYPES = new Set<string>([
   "application/javascript",
 ]);
 
-/**
- * Returns a MIME type safe to open via blob URL under the add-in origin.
- */
 export function resolveSafeBlobUrlMimeType(mimeType: string): string {
   const trimmed = mimeType.trim();
   if (trimmed.length === 0) {

@@ -19,7 +19,6 @@ void test("Save As is reported once as a move from the old identity to the new o
     },
   });
 
-  // The pane opens on "budget"; a failed read (null) in between is not a move.
   for (let i = 0; i < 5; i += 1) await follower.checkOnce();
   assert.deepEqual(changes, [{ from: "url_sha256:budget", to: "url_sha256:budget-v2" }]);
 });
@@ -67,7 +66,6 @@ void test("the first save of a new workbook moves its tabs from the document tok
   });
 
   await follower.checkOnce();
-  // Two polls racing on the same change handle it once.
   await Promise.all([follower.checkOnce(), follower.checkOnce()]);
   assert.deepEqual(changes, [{ from: "doc_instance:abc", to: "url_sha256:book1" }]);
 });
@@ -85,7 +83,6 @@ void test("workbook rules follow identity changes without removing old rules or 
   });
   await follower.checkOnce();
 
-  // First save, Save As/rename and move all change the browser storage identity.
   for (const next of ["url_sha256:saved", "url_sha256:renamed", "url_sha256:moved"]) {
     const previous = identity;
     identity = next;
@@ -153,7 +150,6 @@ void test("moving tabs to a new identity relinks this workbook's sessions only",
     await moveSessionToWorkbook(settings, sessionId, "url_sha256:budget", "url_sha256:budget-v2");
   }
   assert.equal(await getSessionWorkbookId(settings, "mine"), "url_sha256:budget-v2");
-  // A session resumed from another workbook keeps its link.
   assert.equal(await getSessionWorkbookId(settings, "resumed"), "url_sha256:other-file");
   assert.equal(await getSessionWorkbookId(settings, "blank"), "url_sha256:budget-v2");
 });

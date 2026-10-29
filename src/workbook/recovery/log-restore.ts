@@ -1,7 +1,3 @@
-/**
- * Restore strategy helpers for workbook recovery snapshots.
- */
-
 import type { RecoveryWorkbookScope } from "../recovery-scope.js";
 import type {
   AppendChartRecoverySnapshotArgs,
@@ -88,7 +84,6 @@ export interface RestoreWorkbookRecoverySnapshotDependencies {
 
 export interface RestoreWorkbookRecoverySnapshotArgs {
   snapshot: WorkbookRecoverySnapshot;
-  /** Resolved once by the caller; the inverse checkpoint is appended under the same scope. */
   scope: RecoveryWorkbookScope;
   dependencies: RestoreWorkbookRecoverySnapshotDependencies;
 }
@@ -238,8 +233,6 @@ export async function restoreWorkbookRecoverySnapshot(
         {
           toolName: "restore_snapshot",
           toolCallId: `restore:${snapshot.id}`,
-          // A restore can rename the chart, so the inverse must be stored at
-          // the post-restore identity for the rollback backup to resolve.
           address: applied.address,
           changedCount: snapshot.changedCount,
           chartState: applied.state,

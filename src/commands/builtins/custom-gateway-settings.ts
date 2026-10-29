@@ -1,7 +1,3 @@
-/**
- * Settings section for custom OpenAI-compatible gateways.
- */
-
 import type { Models } from "@earendil-works/pi-ai";
 import { getAppStorage } from "../../storage/local/app-storage.js";
 
@@ -27,10 +23,6 @@ import { t } from "../../language/index.js";
 interface BuildCustomGatewaySectionOptions {
   models?: Pick<Models, "getModels">;
   onProvidersChanged: () => void;
-  /**
-   * Include the section's own title + hint. Defaults to true; the settings
-   * gateway page supplies its own page header instead.
-   */
   includeHeading?: boolean;
 }
 
@@ -122,7 +114,6 @@ function createGatewayCard(args: {
 
 export interface CustomGatewaySection {
   section: HTMLElement;
-  /** True while the form differs from the gateway being edited (or from empty). */
   hasUnsavedChanges: () => boolean;
 }
 

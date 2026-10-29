@@ -1,7 +1,3 @@
-/**
- * Status bar rendering + thinking level flash.
- */
-
 import type { Agent, ThinkingLevel } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
@@ -54,12 +50,6 @@ function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
   }
 }
 
-/**
- * Providers that serve the same models under different billing. When more
- * than one of a family is connected, the model name alone does not say which
- * account a tab bills, so the control adds this tag (P-89). Brand names, not
- * translated.
- */
 const SHARED_MODEL_PROVIDER_TAGS: Record<string, { family: string; tag: string }> = {
   openai: { family: "openai", tag: "API" },
   "openai-codex": { family: "openai", tag: "ChatGPT" },
@@ -99,22 +89,12 @@ function renderStatusBar(
 
   const state = agent.state;
 
-  // Model alias
-  // Agent needs an internal model to bootstrap; never present that fallback
-  // as a usable selection when no provider is connected.
   const model = getActiveProviders()?.size === 0 ? null : state.model;
   const providerTag = model ? ambiguousProviderTag(model.provider) : null;
   const modelName = model ? (model.name || model.id) : t("status.connect_provider");
   const modelAlias = providerTag ? `${modelName} · ${providerTag}` : modelName;
   const modelAliasEscaped = escapeHtml(modelAlias);
 
-  // Context usage
-  //
-  // For providers with prompt caching (e.g. Anthropic), `usage.input` excludes cached
-  // prompt tokens. Cached tokens still count towards the model's context window.
-  //
-  // The most reliable signal we have in the UI is the last successful assistant
-  // turn's usage, which already reflects the prompt size.
   const { totalTokens, lastUsage } = estimateContextTokens(state);
 
   const contextWindow = state.model?.contextWindow || 200000;
@@ -123,10 +103,8 @@ function renderStatusBar(
     ? `${(contextWindow / 1_000_000).toFixed(0)}M`
     : `${Math.round(contextWindow / 1000)}k`;
 
-  // Thinking level
   const thinkingLevel = getThinkingLevelLabel(state.thinkingLevel);
 
-  // Context health: color + tooltip based on usage
   const ctxDescription = getStatusContextTooltipDescription();
   const ctxTokenDetail = t("status.context.tokens", { used: totalTokens.toLocaleString(), total: contextWindow.toLocaleString() });
 
@@ -205,7 +183,6 @@ function renderStatusBar(
     return;
   }
 
-  // Re-rendering replaces the buttons; keep keyboard focus on the same control.
   const active = document.activeElement;
   const focusedControl = active instanceof Element && el.contains(active)
     ? STATUS_CONTROL_CLASSES.find((name) => active.classList.contains(name))
@@ -285,8 +262,6 @@ export function injectStatusBar(opts: {
     return active instanceof Element && active.closest("#pi-status-bar") !== null;
   };
 
-  // Avoid replacing status-bar DOM while it's hovered/focused so CSS tooltips
-  // stay stable even under high-frequency runtime updates.
   const shouldDeferRenderForInteraction = (): boolean => {
     return statusBarInteracting || isStatusBarFocused();
   };
@@ -303,8 +278,6 @@ export function injectStatusBar(opts: {
 
   const bindActiveAgent = () => {
     unsubscribeActiveAgent?.();
-    // Popovers describe the active tab (thinking, context, mode); a tab switch
-    // would leave them editing the old one (STATUS-08).
     closeStatusPopover();
 
     const activeAgent = getActiveAgent();
@@ -367,9 +340,6 @@ export function injectStatusBar(opts: {
     markStatusBarInteractionEndSoon();
   };
 
-  // Discrete changes (mode, model, rules, lock) render at once, even while the
-  // bar is hovered or focused: the user just asked for them. Only the
-  // high-frequency agent stream above waits for the interaction to settle.
   const onStatusUpdate = () => {
     hasDeferredRender = false;
     updateStatusBar(getActiveAgent, getLockState, getExecutionMode, autoCompactionEnabled);

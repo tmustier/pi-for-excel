@@ -1,9 +1,6 @@
 /**
- * Store for chat sessions (data and metadata).
- * Uses two object stores: sessions (full data) and sessions-metadata (lightweight).
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import type { AgentState } from "@earendil-works/pi-agent-core";
@@ -21,10 +18,6 @@ export class SessionsStore extends Store {
     };
   }
 
-  /**
-   * Additional config for sessions-metadata store.
-   * Must be included when creating the backend.
-   */
   static getMetadataConfig(): StoreConfig {
     return {
       name: "sessions-metadata",
@@ -44,13 +37,6 @@ export class SessionsStore extends Store {
     );
   }
 
-  /**
-   * Saves unless the stored session has changed since `baseRevision` (the
-   * revision this writer last loaded or saved; `undefined` for a session it
-   * has not seen stored). Check and write are one transaction, so another
-   * taskpane cannot save in between. Returns `false` on conflict, writing
-   * nothing.
-   */
   async saveIfUnchanged(
     data: SessionData,
     metadata: SessionMetadata,
@@ -78,7 +64,6 @@ export class SessionsStore extends Store {
   }
 
   async getAllMetadata(): Promise<SessionMetadata[]> {
-    // Use the lastModified index to get sessions sorted by most recent first
     return this.getBackend().getAllFromIndex<SessionMetadata>(
       "sessions-metadata",
       "lastModified",
@@ -103,7 +88,6 @@ export class SessionsStore extends Store {
       metadata.title = title;
       await this.getBackend().set("sessions-metadata", id, metadata);
     }
-    // Also update in full session data
     const data = await this.get(id);
     if (data) {
       data.title = title;
@@ -119,11 +103,6 @@ export class SessionsStore extends Store {
     return this.getBackend().requestPersistence();
   }
 
-  // Alias methods for backward compatibility
-  /**
-   * Saves agent state. With `revisions`, saves only over `revisions.base`
-   * (see `saveIfUnchanged`) and returns `false` on conflict.
-   */
   async saveSession(
     id: string,
     state: AgentState,
@@ -131,7 +110,6 @@ export class SessionsStore extends Store {
     title?: string,
     revisions?: { base: string | undefined; next: string },
   ): Promise<boolean> {
-    // If metadata is provided, use it; otherwise create it from state
     const meta: SessionMetadata = metadata ?? {
       id,
       title: title ?? "",

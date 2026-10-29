@@ -909,7 +909,6 @@ void test("a provider registered during a refresh pass gets its cached catalogue
   const startupNetworkPass = owner.refresh(true);
   await gatewayDiscoveryStarted;
 
-  // An extension activating mid-pass registers its provider, then asks for a refresh.
   runtime.registerExtensionProvider("ext.example", {
     id: providerId,
     name: "Example extension provider",
@@ -970,7 +969,6 @@ void test("model refresh owner publishes cached startup before network discovery
   assert.ok(runtime.models.getModel("Gateway · Acme", "cached-before-network"));
   assert.equal(runtime.models.getModel("Gateway · Acme", "network-model"), undefined);
 
-  // The network pass republishes the cached state, then the discovered catalogue.
   releaseFetch();
   await waitForOwnerRevision(owner, 3);
   assert.ok(runtime.models.getModel("Gateway · Acme", "network-model"));
@@ -1128,7 +1126,6 @@ void test("built-in providers add pi.dev catalogue models but keep their own tra
   const result = await runtime.refresh({ allowNetwork: true, force: true });
 
   assert.equal(result.errors.size, 0);
-  // Only configured providers are fetched, through the relay.
   assert.deepEqual(requested, ["https://relay.test/model-catalog/anthropic"]);
   assert.deepEqual(validators, [null]);
 
@@ -1144,7 +1141,6 @@ void test("built-in providers add pi.dev catalogue models but keep their own tra
     assert.equal(runtime.models.getModel("anthropic", dropped), undefined, dropped);
   }
 
-  // A fresh taskpane restores the persisted overlay offline, with every field intact.
   const offline = createRuntime({
     providerKeys,
     catalogs,
@@ -1154,7 +1150,6 @@ void test("built-in providers add pi.dev catalogue models but keep their own tra
   await offline.refresh({ allowNetwork: false });
   assert.deepEqual(offline.models.getModel("anthropic", "claude-next"), added);
 
-  // The next network refresh revalidates; 304 keeps the overlay.
   const revalidated = createRuntime({
     providerKeys,
     catalogs,
@@ -1178,13 +1173,10 @@ void test("an unusable pi.dev catalogue leaves bundled and cached models in plac
   const baseline = bundledIds(createRuntime({ providerKeys }));
 
   const responses: Response[] = [
-    // Self-hosted without the relay.
     new Response("Not found", { status: 404 }),
-    // Requires a newer pi-ai than this build ships.
     catalogResponse([remoteAnthropicModel({ id: "needs-newer-pi" })], {
       "x-pi-model-catalog-minimum-version": "999.0.0",
     }),
-    // Older than the bundled model data.
     catalogResponse([remoteAnthropicModel({ id: "stale-model" })], {
       "Last-Modified": "Thu, 01 Jan 2015 00:00:00 GMT",
     }),
@@ -1201,7 +1193,6 @@ void test("an unusable pi.dev catalogue leaves bundled and cached models in plac
     assert.deepEqual(bundledIds(runtime), baseline);
   }
 
-  // A good catalogue, then a failing request: the last good overlay survives.
   const good = createRuntime({
     providerKeys,
     catalogs,
@@ -1240,7 +1231,6 @@ void test("a newly connected provider is available before its catalogue request 
     getRuntimes: () => [],
   });
   await owner.startup(Promise.resolve(), 50);
-  // Let startup's background pass settle so only the connection refresh can publish.
   await owner.refresh(false);
   assert.deepEqual(owner.snapshot().availableProviders, []);
 

@@ -1,4 +1,3 @@
-// This fixture supports component logic only, never native browser-behavior claims.
 import assert from "node:assert/strict";
 
 type ConstructorSnapshot = {
@@ -194,7 +193,6 @@ class FakeHTMLElement extends FakeElement {
   tabIndex = -1;
 
   focus(_options?: FocusOptions): void {
-    // no-op for tests
   }
 }
 

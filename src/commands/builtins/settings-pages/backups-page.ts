@@ -1,11 +1,3 @@
-/**
- * Backups page — workbook recovery snapshots.
- *
- * Progressive-disclosure empty state: when there are no backups, only the
- * warning callout and empty message are shown. Search, filter, toolbar,
- * and paging controls appear once backups exist. Filters apply to one page.
- */
-
 import { formatRelativeDate } from "../overlay-relative-date.js";
 import { t } from "../../../language/index.js";
 import {
@@ -82,18 +74,10 @@ function formatBytes(bytes: number): string {
   return `${value.toFixed(value >= 10 ? 0 : 1)} ${unit}`;
 }
 
-// ---------------------------------------------------------------------------
-// Manual downloads
-// ---------------------------------------------------------------------------
-
 export interface ManualFullBackupSummary {
   id: string;
   sizeBytes: number;
 }
-
-// ---------------------------------------------------------------------------
-// Overlay
-// ---------------------------------------------------------------------------
 
 export interface BackupsPageCallbacks {
   loadCheckpoints: (options?: RecoveryPageOptions) => Promise<{
@@ -132,16 +116,12 @@ async function renderBackupsContent(
   addCleanup: (cleanup: () => void) => void,
   opts: BackupsPageCallbacks,
 ): Promise<void> {
-  // -- Warning callout --
-
   const warningCallout = createCallout(
     "warn",
     lucide(AlertTriangle),
     t("recovery.warning"),
     { compact: true },
   );
-
-  // -- Search + filters (hidden when empty) --
 
   const searchRow = document.createElement("div");
   searchRow.className = "pi-recovery-search-row pi-overlay-inline-row pi-overlay-inline-row--compact pi-overlay-inline-row--wrap";
@@ -160,8 +140,6 @@ async function renderBackupsContent(
   sortButton.textContent = t("recovery.sortNewest");
 
   searchRow.append(searchInput, toolFilterSelect, sortButton);
-
-  // -- Toolbar (hidden when empty) --
 
   const toolbar = document.createElement("div");
   toolbar.className = "pi-overlay-toolbar";
@@ -254,12 +232,8 @@ async function renderBackupsContent(
 
   toolbar.append(toolbarActions, statusText);
 
-  // -- List --
-
   const list = document.createElement("div");
   list.className = "pi-recovery-list";
-
-  // -- Assemble --
 
   const previousButton = createButton(t("recovery.previousPage"), {
     compact: true,
@@ -275,8 +249,6 @@ async function renderBackupsContent(
   pageHint.textContent = t("recovery.pageHint");
   host.append(warningCallout, searchRow, toolbar, pageHint, list, pager);
 
-  // -- State --
-
   let allCheckpoints: RecoveryCheckpointSummary[] = [];
   let nextCursor: RecoveryCursor | undefined;
   let cursors: Array<RecoveryCursor | undefined> = [undefined];
@@ -288,7 +260,6 @@ async function renderBackupsContent(
 
   const shortId = (id: string): string => (id.length > 12 ? id.slice(0, 12) : id);
 
-  /** Show/hide progressive-disclosure controls based on checkpoint count. */
   const syncVisibility = (): void => {
     const hasBackups = allCheckpoints.length > 0;
     searchRow.hidden = !hasBackups;
@@ -480,8 +451,6 @@ async function renderBackupsContent(
     } finally { setBusy(false); }
   };
 
-  // -- Event listeners --
-
   let searchTimer: ReturnType<typeof setTimeout> | null = null;
 
   searchInput.addEventListener("input", () => {
@@ -512,13 +481,9 @@ async function renderBackupsContent(
     } finally { setBusy(false); }
   };
 
-  // -- Cleanup --
-
   addCleanup(() => {
     if (searchTimer !== null) clearTimeout(searchTimer);
   });
-
-  // -- Initial load --
 
   setBusy(true);
   statusText.textContent = t("recovery.loading");

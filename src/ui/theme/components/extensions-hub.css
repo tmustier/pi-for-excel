@@ -1,14 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   Extensions hub — shared components
-   
-   Item cards, section headers, callouts, add forms,
-   empty states used by the Extensions hub overlay tabs.
-   
-   Used by: extensions-hub-overlay, -connections, -plugins, -skills
-   ═══════════════════════════════════════════════════════ */
-
-/* ── Item card (connection / plugin / skill) ────────── */
-
 .pi-item-card {
   display: flex;
   flex-direction: column;
@@ -146,13 +135,11 @@
   display: flex;
 }
 
-/* Config rows inside expanded cards */
 .pi-item-card__config-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  /* Let controls drop below the label instead of clipping at taskpane widths. */
   flex-wrap: wrap;
 }
 
@@ -195,7 +182,6 @@
   box-shadow: 0 0 0 2px var(--pi-green-lighter);
 }
 
-/* Permissions grid */
 .pi-item-card__permissions {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -205,8 +191,6 @@
 .pi-item-card__permissions .pi-toggle-row {
   min-height: 22px;
 }
-
-/* ── Section header ─────────────────────────────────── */
 
 .pi-section-header {
   display: flex;
@@ -244,8 +228,6 @@
 .pi-section-header__action:hover {
   text-decoration: underline;
 }
-
-/* ── Callout / notice ───────────────────────────────── */
 
 .pi-callout {
   display: flex;
@@ -297,8 +279,6 @@
   min-width: 0;
 }
 
-/* ── Add form (dashed border) ───────────────────────── */
-
 .pi-add-form {
   display: flex;
   flex-direction: column;
@@ -336,8 +316,6 @@
   color: var(--muted-foreground);
 }
 
-/* ── Empty state (inline) ───────────────────────────── */
-
 .pi-empty-inline {
   display: flex;
   flex-direction: column;
@@ -350,7 +328,7 @@
 }
 
 .pi-empty-inline__icon {
-  font-size: 20px; /* decorative glyph */
+  font-size: 20px;
   opacity: 0.4;
   display: flex;
   align-items: center;
@@ -366,11 +344,8 @@
   font-family: var(--font-sans);
   font-size: var(--text-sm);
   color: var(--muted-foreground);
-  /* Preserve intentional line breaks in empty-state copy (e.g. recovery.emptyState). */
   white-space: pre-line;
 }
-
-/* ── Layout helpers (avoiding inline styles) ────────── */
 
 .pi-hub-stack {
   display: flex;
@@ -384,7 +359,6 @@
 
 .pi-hub-inline-row {
   display: flex;
-  /* Wrap action buttons onto their own line when the input needs the width. */
   flex-wrap: wrap;
   gap: 6px;
   align-items: center;
@@ -520,8 +494,6 @@
 .pi-item-card__config-select {
   max-width: 180px;
 }
-
-/* ── Reduced motion ─────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
   .pi-item-card,

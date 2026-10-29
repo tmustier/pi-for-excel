@@ -2,10 +2,6 @@ function isConventionsStorePayloadShape(value: unknown): value is Record<string,
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Persistent conventions storage + resolution.
- */
-
 import {
   DEFAULT_COLOR_CONVENTIONS,
   DEFAULT_HEADER_STYLE,

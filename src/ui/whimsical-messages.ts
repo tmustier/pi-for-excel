@@ -1,17 +1,6 @@
-/**
- * Whimsical rotating messages for the "Working…" indicator.
- *
- * Inspired by mitsuhiko/agent-stuff whimsical.ts, but tailored
- * for a spreadsheet / finance audience instead of a coding agent.
- */
-
 import { t } from "../language/index.js";
 
-// Locale keys — resolved lazily via t() so the active language (set at boot,
-// after module import) is respected. Do NOT call t() at module scope.
 const messageKeys: string[] = [
-  // ── Short — universally charming verbs ──────────────────
-
   "whimsical.schlepping",
   "whimsical.combobulating",
   "whimsical.vibing",
@@ -54,8 +43,6 @@ const messageKeys: string[] = [
   "whimsical.improvising",
   "whimsical.frolicking",
 
-  // ── Short — spreadsheet / finance flavored ──────────────
-
   "whimsical.calculating",
   "whimsical.recalculating",
   "whimsical.pivoting",
@@ -71,8 +58,6 @@ const messageKeys: string[] = [
   "whimsical.forecasting",
   "whimsical.extrapolating",
   "whimsical.interpolating",
-
-  // ── Long — universally fun ──────────────────────────────
 
   "whimsical.consulting_the_void",
   "whimsical.asking_the_electrons",
@@ -98,8 +83,6 @@ const messageKeys: string[] = [
   "whimsical.kicking_the_tires",
   "whimsical.dusting_off_the_neurons",
   "whimsical.rearranging_deck_chairs",
-
-  // ── Long — spreadsheet & Excel themed ───────────────────
 
   "whimsical.appeasing_the_circular_reference",
   "whimsical.bribing_the_formula_bar",
@@ -129,8 +112,6 @@ const messageKeys: string[] = [
   "whimsical.persuading_offset_to_cooperate",
   "whimsical.checking_under_the_hood_of_indirect",
 
-  // ── Long — finance & modeling themed ────────────────────
-
   "whimsical.balancing_the_books",
   "whimsical.crunching_the_numbers",
   "whimsical.counting_beans",
@@ -153,7 +134,6 @@ const messageKeys: string[] = [
   "whimsical.forgetting_the_mid_year_convention",
 ];
 
-/** Pick a random message, avoiding the one currently shown. */
 export function pickWhimsicalMessage(current?: string): string {
   if (messageKeys.length <= 1) {
     return messageKeys[0] ? t(messageKeys[0]) : t("working.default");

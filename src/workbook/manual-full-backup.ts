@@ -1,11 +1,3 @@
-/**
- * Manual full-workbook backup flow (#191).
- *
- * This module intentionally stays separate from automatic range-level recovery
- * checkpoints. It captures the current workbook as a compressed Office file
- * only when the user explicitly requests a manual backup.
- */
-
 import { bytesToBase64 } from "../files/encoding.js";
 import { getFilesWorkspace, type PendingWorkspaceDownload } from "../files/workspace.js";
 import type { WorkspaceFileEntry } from "../files/types.js";
@@ -19,13 +11,12 @@ import { formatWorkbookLabel, getWorkbookContext, type WorkbookContext } from ".
 
 const FULL_BACKUP_PATH_PREFIX = "manual-backups/full-workbook/v1";
 const XLSX_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-const DEFAULT_SLICE_SIZE_BYTES = 1_048_576; // 1 MB
+const DEFAULT_SLICE_SIZE_BYTES = 1_048_576;
 const DEFAULT_LIST_LIMIT = 20;
 
 interface ManualFullBackupWorkspace {
   listFiles: () => Promise<WorkspaceFileEntry[]>;
   writeBase64File: (path: string, base64: string, mimeTypeHint?: string) => Promise<void>;
-  /** Must be called before any `await`, while the user's click still counts. */
   beginDownload: () => PendingWorkspaceDownload;
   deleteFile: (path: string) => Promise<void>;
 }
@@ -322,11 +313,6 @@ export class ManualFullWorkbookBackupStore {
     return this.listForWorkbookId(workbookId, limit);
   }
 
-  /**
-   * Opens the download before anything slow happens (see `beginDownload`),
-   * runs `produce`, and downloads the file it returns. Nothing produced closes
-   * the window again.
-   */
   private async withDownload<T extends ManualFullWorkbookBackup | null>(
     produce: () => Promise<T>,
   ): Promise<T> {
@@ -345,11 +331,6 @@ export class ManualFullWorkbookBackupStore {
     }
   }
 
-  /**
-   * Captures the workbook, stores the copy in the Files workspace, and
-   * downloads it. `runCapture` lets the caller hold the workbook lock during
-   * the capture so a copy never includes half of one of Pi's changes.
-   */
   async createAndDownload(options: {
     runCapture?: (capture: () => Promise<ManualFullWorkbookBackup>) => Promise<ManualFullWorkbookBackup>;
   } = {}): Promise<ManualFullWorkbookBackup> {
@@ -407,12 +388,6 @@ export class ManualFullWorkbookBackupStore {
     });
   }
 
-  /**
-   * Deletes every manual backup of the current workbook. Identity is checked
-   * and the backups counted before `confirm` is asked, so the user is never
-   * asked about a deletion that cannot happen; `confirm` is not asked when
-   * there is nothing to delete. Returns the number deleted.
-   */
   async clearForCurrentWorkbook(confirm: (count: number) => Promise<boolean> = () => Promise.resolve(true)): Promise<number> {
     const workbookContext = await this.dependencies.getWorkbookContext();
     const scoped = assertWorkbookIdentity(workbookContext);

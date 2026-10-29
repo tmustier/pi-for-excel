@@ -1,13 +1,3 @@
-/**
- * Codec helpers for persisted workbook recovery snapshots.
- *
- * A persisted snapshot is a schema keyed by `snapshotKind`; each kind requires
- * its own state and nothing else. An entry that fails its schema is dropped
- * rather than repaired: the writer is this module, so a mismatch means version
- * skew (a kind this build does not know) or corruption, and neither is a
- * checkpoint we can restore.
- */
-
 import { type Static, Type } from "typebox";
 import { Value } from "typebox/value";
 
@@ -55,25 +45,17 @@ const persistedSnapshotBase = {
   turnId: Type.Optional(Type.String()),
 };
 
-/**
- * Grids are optional on every kind but `range_values`. Chart-state snapshots
- * are stored without them so that codecs predating `chart_state` fail their
- * range grid check and drop the entry, instead of misreading it as an empty
- * range backup after a version downgrade.
- */
 const optionalGrids = {
   beforeValues: Type.Optional(RecoveryGridSchema),
   beforeFormulas: Type.Optional(RecoveryGridSchema),
 };
 
-/** `snapshotKind` was added after the first range snapshots shipped; absent means `range_values`. */
 export const PersistedWorkbookRecoverySnapshotSchema = Type.Union([
   Type.Object({
     ...persistedSnapshotBase,
     snapshotKind: Type.Optional(Type.Literal("range_values")),
     beforeValues: RecoveryGridSchema,
     beforeFormulas: RecoveryGridSchema,
-    /** What Pi's change left in the range; restore compares it to find later edits. */
     afterFormulas: Type.Optional(RecoveryGridSchema),
   }),
   Type.Object({
@@ -133,12 +115,6 @@ function defaultCreateId(): string {
   return `checkpoint_${Date.now().toString(36)}_${randomChunk}`;
 }
 
-/**
- * Builds the in-memory snapshot from a checked persisted entry. Grids take the
- * plain row-copy path; the kind states go through the schema clone, which also
- * drops properties an older build may have written. Neither the persisted
- * entry nor anything it references is kept.
- */
 function toSnapshot(persisted: PersistedWorkbookRecoverySnapshot): WorkbookRecoverySnapshot {
   const beforeValues = cloneGrid(persisted.beforeValues ?? []);
   const beforeFormulas = cloneGrid(persisted.beforeFormulas ?? []);
@@ -189,7 +165,6 @@ function toSnapshot(persisted: PersistedWorkbookRecoverySnapshot): WorkbookRecov
       fallbackCellCount = 1;
       break;
     default:
-      // "range_values", or a legacy entry written before snapshotKind existed.
       fallbackCellCount = gridStats(beforeValues, beforeFormulas).cellCount;
   }
 

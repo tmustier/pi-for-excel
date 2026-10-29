@@ -1,5 +1,3 @@
-/** Structure-state restore/apply helpers for workbook recovery snapshots. */
-
 import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryModifyStructureState } from "./clone.js";
 import { toRestoreValues } from "./grid.js";

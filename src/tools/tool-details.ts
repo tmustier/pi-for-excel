@@ -1,15 +1,3 @@
-/**
- * Structured tool result metadata for the UI.
- *
- * Tools still return human-readable markdown in `content`, but also attach a
- * small stable `details` payload so the UI doesn't need to parse strings.
- *
- * Each payload is a TypeBox schema; the exported types are `Static<>` of the
- * schema so the type and the runtime check cannot drift. `details` reaches the
- * UI as `unknown` (it may come from an older persisted session), so the UI
- * decodes it once with `decodeToolDetails` and switches on `kind` from there.
- */
-
 import { Type, type Static, type TSchema } from "typebox";
 import { Value } from "typebox/value";
 
@@ -53,36 +41,25 @@ export const toolOutputTruncationDetailsSchema = Type.Object({
 
 export type ToolOutputTruncationDetails = Static<typeof toolOutputTruncationDetailsSchema>;
 
-/** Truncation is merged into whatever details a tool returned, alongside its own fields. */
 const truncatedToolDetailsSchema = Type.Object({
   outputTruncation: toolOutputTruncationDetailsSchema,
 });
 
 const mutationDetailsProperties = {
   blocked: Type.Boolean(),
-  /** Sheet-qualified range when known, e.g. "Sheet1!A1:C3" */
   address: Type.Optional(Type.String()),
   existingCount: Type.Optional(Type.Number()),
   formulaErrorCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
-  /** How the write was checked: every cell (`full`), both ends plus a whole-range scan (`sampled`), or not at all (`failed`). */
   verification: Type.Optional(StringEnum(["full", "sampled", "failed"])),
-  /** Cells that do not hold the value sent (merged cells, spills, …). */
   notWrittenCount: Type.Optional(Type.Number()),
-  /** Text values Excel converted to numbers, dates or booleans. */
   convertedCount: Type.Optional(Type.Number()),
-  /** Cells that held a formula and now hold a constant. */
   formulasReplacedCount: Type.Optional(Type.Number()),
-  /** Written values that violate the cells' data validation. */
   invalidCount: Type.Optional(Type.Number()),
-  /** Workbook calculation mode, present only when it is not Automatic. */
   calculationMode: Type.Optional(Type.String()),
-  /** Office.js error code when the call failed. */
   errorCode: Type.Optional(Type.String()),
-  /** The user pressed Stop during the call; the text says what was written before it. */
   stopped: Type.Optional(Type.Boolean()),
-  /** With `stopped`: cells confirmed written before Stop took effect; 0 means nothing changed. */
   writtenCount: Type.Optional(Type.Number()),
 };
 
@@ -102,7 +79,6 @@ export type FillFormulaDetails = Static<typeof fillFormulaDetailsSchema>;
 
 export const formatCellsDetailsSchema = Type.Object({
   kind: Type.Literal("format_cells"),
-  /** Sheet-qualified range when known. May be a multi-range string. */
   address: Type.Optional(Type.String()),
   warningsCount: Type.Optional(Type.Number()),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
@@ -123,7 +99,6 @@ export const modifyStructureDetailsSchema = Type.Object({
   kind: Type.Literal("modify_structure"),
   action: Type.Optional(Type.String()),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
-  /** delete_rows: rows that were hidden (by a filter or by hand) when they were deleted. */
   hiddenRowsDeleted: Type.Optional(Type.Number()),
 });
 
@@ -197,20 +172,14 @@ const traceDependencySourceSchema = StringEnum(["api", "formula_scan", "mixed", 
 
 export type TraceDependencySource = Static<typeof traceDependencySourceSchema>;
 
-/**
- * A cell value as the host returned it. `range.values` is untyped in Office.js
- * and WPS; typing it belongs to the host adapters, after which this narrows.
- */
 const hostCellValueSchema = Type.Unknown();
 
 export const depNodeDetailSchema = Type.Cyclic({
   DepNode: Type.Object({
     address: Type.String(),
     value: hostCellValueSchema,
-    /** Excel number format string, e.g. "0.00%", "#,##0", "$#,##0.00". */
     numberFormat: Type.Optional(Type.String()),
     formula: Type.Optional(Type.String()),
-    /** Child nodes in traversal order (precedents for precedents mode, dependents for dependents mode). */
     precedents: Type.Array(Type.Ref("DepNode")),
   }),
 }, "DepNode");
@@ -253,13 +222,9 @@ export type ExplainFormulaDetails = Static<typeof explainFormulaDetailsSchema>;
 
 export const readRangeCsvDetailsSchema = Type.Object({
   kind: Type.Literal("read_range_csv"),
-  /** 0-indexed starting column (A=0, B=1, …) */
   startCol: Type.Number(),
-  /** 1-indexed starting row */
   startRow: Type.Number(),
-  /** Raw values grid from the host */
   values: Type.Array(Type.Array(hostCellValueSchema)),
-  /** Pre-serialized CSV string for the copy button */
   csv: Type.String(),
 });
 
@@ -328,19 +293,13 @@ export const pythonTransformRangeDetailsSchema = Type.Object({
   rowsWritten: Type.Optional(Type.Number()),
   colsWritten: Type.Optional(Type.Number()),
   formulaErrorCount: Type.Optional(Type.Number()),
-  /** Cells that held a formula and now hold a constant. */
   formulasReplacedCount: Type.Optional(Type.Number()),
   changes: Type.Optional(workbookCellChangeSummarySchema),
   recovery: Type.Optional(recoveryCheckpointDetailsSchema),
-  /** How the write was checked (see write_cells). */
   verification: Type.Optional(StringEnum(["full", "sampled", "failed"])),
-  /** Cells that do not hold the value sent (merged cells, spills, …). */
   notWrittenCount: Type.Optional(Type.Number()),
-  /** Text values Excel converted to numbers, dates or booleans. */
   convertedCount: Type.Optional(Type.Number()),
-  /** Result rows shorter than the widest row, padded with blank cells. */
   paddedRowCount: Type.Optional(Type.Number()),
-  /** Stop was pressed; the result says what was written before it took effect. */
   stopped: Type.Optional(Type.Boolean()),
   ...bridgeGateProperties,
 });
@@ -468,7 +427,6 @@ export const webSearchDetailsSchema = Type.Object({
   proxyBaseUrl: Type.Optional(Type.String()),
   fallback: Type.Optional(webSearchFallbackDetailsSchema),
   error: Type.Optional(Type.String()),
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
   proxyDown: Type.Optional(Type.Boolean()),
 });
 
@@ -485,7 +443,6 @@ export const fetchPageDetailsSchema = Type.Object({
   proxyBaseUrl: Type.Optional(Type.String()),
   contentType: Type.Optional(Type.String()),
   error: Type.Optional(Type.String()),
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
   proxyDown: Type.Optional(Type.Boolean()),
 });
 
@@ -501,7 +458,6 @@ export const mcpGatewayDetailsSchema = Type.Object({
   proxyBaseUrl: Type.Optional(Type.String()),
   resultPreview: Type.Optional(Type.String()),
   error: Type.Optional(Type.String()),
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
   proxyDown: Type.Optional(Type.Boolean()),
 });
 
@@ -589,7 +545,6 @@ export type FilesToolDetails =
   | FilesWriteDetails
   | FilesDeleteDetails;
 
-/** Every details payload, keyed by its `kind` discriminator. */
 const toolDetailsSchemasByKind = {
   write_cells: writeCellsDetailsSchema,
   fill_formula: fillFormulaDetailsSchema,
@@ -638,20 +593,11 @@ function isToolDetailsKind(kind: string): kind is ToolDetailsKind {
 
 const kindedDetailsSchema = Type.Object({ kind: Type.String() });
 
-/**
- * Decode a tool result's `details` at the UI boundary.
- *
- * Returns `undefined` for details with no `kind`, an unknown `kind`, or a
- * payload that does not match its kind's schema (for example a session
- * persisted by an older build); callers then fall back to generic rendering.
- * Extra properties such as `outputTruncation` are allowed and preserved.
- */
 export function decodeToolDetails(raw: unknown): ExcelToolDetails | undefined {
   if (!Value.Check(kindedDetailsSchema, raw) || !isToolDetailsKind(raw.kind)) return undefined;
   return decodeToolDetailsOfKind(raw, raw.kind);
 }
 
-/** Decode `details` when the caller already knows which kind it expects. */
 export function decodeToolDetailsOfKind<K extends ToolDetailsKind>(
   raw: unknown,
   kind: K,
@@ -675,7 +621,6 @@ export type BridgeGateErrorDetails =
     error: string;
   });
 
-/** A bridge tool result that failed before reaching the bridge, with a setup hint for the user. */
 export function isBridgeGateError(details: ExcelToolDetails): details is BridgeGateErrorDetails {
   switch (details.kind) {
     case "tmux_bridge":

@@ -1,7 +1,3 @@
-/**
- * fetch_page — fetch a webpage URL and extract readable markdown content.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 
@@ -49,7 +45,6 @@ export interface FetchPageToolDetails {
   proxyBaseUrl?: string;
   contentType?: string;
   error?: string;
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
   proxyDown?: boolean;
 }
 
@@ -462,7 +457,6 @@ export function createFetchPageTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
-          // A failure: the model sees an error result and the card is drawn red.
           isError: true,
           details: createFetchPageDetails({
             ok: false,

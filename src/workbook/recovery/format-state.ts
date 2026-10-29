@@ -1,5 +1,3 @@
-/** Format-state capture/apply for workbook recovery snapshots. */
-
 import { excelRun, getRange, parseRangeRef } from "../../excel/helpers.js";
 import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { qualifyAddressWithSheet, splitRangeList } from "./address.js";
@@ -400,7 +398,6 @@ function applyFormatRangeStateToArea(range: Excel.Range, state: RecoveryFormatAr
   }
 
   if (state.fillColor !== undefined) {
-    // Excel on the web reads "no fill" as "" but rejects "" as a color.
     if (state.fillColor === "") range.format.fill.clear();
     else range.format.fill.color = state.fillColor;
   }

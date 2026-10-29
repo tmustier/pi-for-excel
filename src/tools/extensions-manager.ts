@@ -1,7 +1,3 @@
-/**
- * extensions_manager — manage runtime extensions from chat.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static } from "typebox";
 

@@ -1,7 +1,3 @@
-/**
- * Desktop platform detection for user-facing copy (shortcut glyphs, terminal names).
- */
-
 function readPlatformStrings(): { ua: string; platform: string } {
   if (typeof navigator === "undefined") return { ua: "", platform: "" };
   // navigator.platform is deprecated but widely supported; userAgentData
@@ -29,10 +25,6 @@ export function isWindowsPlatform(): boolean {
   return platform.startsWith("Win") || ua.includes("Windows");
 }
 
-/**
- * True in Excel on the web, where the browser keeps tab chords (Ctrl/⌘+T, W,
- * Shift+T, Ctrl+PageUp/PageDown) for itself before the taskpane sees them.
- */
 export function isOfficeOnline(): boolean {
   try {
     return typeof Office !== "undefined" && String(Office.context?.platform) === "OfficeOnline";

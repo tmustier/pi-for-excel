@@ -1,13 +1,3 @@
-/**
- * Consent gates for assistant actions that change local state outside the
- * workbook: Files workspace writes/deletes and extension lifecycle changes.
- *
- * Rule (see src/tools/DECISIONS.md, "Consent outside the workbook"):
- * - Both modes ask before deleting/overwriting files Pi did not create in
- *   this chat, and before extension install/enable/uninstall.
- * - Confirm also asks before disabling extensions.
- */
-
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
 import { Value } from "typebox/value";
@@ -22,9 +12,6 @@ import type {
   LocalChangeApprovalRequest,
 } from "./types.js";
 
-// The subset of each tool's parameters the gate reads. Extra fields are
-// allowed; params that fail the schema go straight to the tool, which
-// rejects them with its own validation error.
 const FilesGateParamsSchema = Type.Object({
   action: Type.String(),
   path: Type.Optional(Type.String()),
@@ -110,12 +97,10 @@ export function wrapFilesToolWithChangeGate(
       try {
         path = normalizeWorkspacePath(rawPath);
       } catch {
-        // Invalid paths fail inside the tool with its own message.
         return tool.execute(toolCallId, params, signal, onUpdate);
       }
 
       const existing = await inspect(path);
-      // Built-in docs are read-only; the tool rejects the change itself.
       if (existing?.readOnly === true) {
         return tool.execute(toolCallId, params, signal, onUpdate);
       }

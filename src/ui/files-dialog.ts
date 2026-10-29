@@ -1,7 +1,3 @@
-/**
- * Files workspace dialog.
- */
-
 import { base64ToBytes } from "../files/encoding.js";
 import { formatBytes } from "../files/mime.js";
 import {
@@ -270,7 +266,6 @@ function createBinaryPreview(args: {
   return preview;
 }
 
-/** File extensions previewed as rendered markdown instead of plain text. */
 const MARKDOWN_PREVIEW_EXTENSIONS = new Set(["md", "markdown"]);
 
 function isMarkdownPreviewFile(fileName: string): boolean {
@@ -293,17 +288,11 @@ function createTextPreview(args: {
   const hasMoreLines = lines.length > TEXT_PREVIEW_MAX_LINES;
 
   if (isMarkdownPreviewFile(args.fileName)) {
-    // Rendered markdown — readable, wrapping document view. MarkdownBlock
-    // escapes raw HTML by default and the marked pipeline is hardened at
-    // boot (safe links, no image network requests), so untrusted file
-    // content is safe here.
     preview.className = "pi-files-detail-preview pi-files-detail-preview--markdown";
     const block = new MarkdownBlock();
     block.content = visibleLines.join("\n");
     preview.appendChild(block);
   } else {
-    // Plain text — wrapped prose view, no line numbers. Preview is for
-    // reading, not code editing.
     preview.className = "pi-files-detail-preview pi-files-detail-preview--text";
     const body = document.createElement("div");
     body.className = "pi-files-detail-preview__body";
@@ -399,7 +388,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   const dialog = createOverlayDialog({
     overlayId: OVERLAY_ID,
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-files-dialog",
-    // Escape in a file preview goes back to the list, like the back arrow.
     onEscape: () => {
       if (currentView !== "detail") return false;
       showListView();
@@ -465,7 +453,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
   actionsRow.append(uploadButton, connectFolderButton);
 
-  // Visible reason when "Connect folder" cannot work in this host.
   const connectFolderHint = document.createElement("p");
   connectFolderHint.className = "pi-overlay-hint pi-files-connect-hint";
   connectFolderHint.hidden = true;
@@ -790,8 +777,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
 
     row.append(icon, info);
 
-    // Badge sits at row level (right-aligned column) so all badges share
-    // the same x position regardless of filename length.
     const badge = resolveFilesDialogBadge(file);
     if (badge) {
       const badgeElement = document.createElement("span");
@@ -956,12 +941,10 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
         const sectionList = document.createElement("div");
         sectionList.className = "pi-files-section-list";
 
-        // Root-level files
         section.files.forEach((file) => {
           sectionList.appendChild(createFileItem(file));
         });
 
-        // Folder groups
         section.folders.forEach((folder) => {
           sectionList.appendChild(createFolderGroup(folder, `${section.key}:${folder.name}`));
         });
@@ -1000,11 +983,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const onWorkspaceChanged: EventListener = (event) => {
-    // Preview actions refresh after updating their file reference. Reacting to
-    // their earlier workspace event would mistake the old path for an external removal.
     if (ownMutationPending) return;
-    // The dialog shows no audit trail, and reading a file for the detail view
-    // records one: re-rendering on it replaced the detail buttons in a loop.
     const detail: unknown = event instanceof CustomEvent ? event.detail : null;
     if (typeof detail === "object" && detail !== null && "reason" in detail && detail.reason === "audit") return;
     void (async () => {

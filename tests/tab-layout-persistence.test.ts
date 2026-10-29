@@ -54,7 +54,6 @@ async function persistStartupFallback(settings: StartupLayoutSettings): Promise<
     await loadWorkbookTabLayout(settings, "wb-1");
     readSucceeded = true;
   } catch {
-    // Startup falls back to a fresh runtime, but must preserve unread storage.
   }
 
   const fallback: WorkbookTabLayout = {

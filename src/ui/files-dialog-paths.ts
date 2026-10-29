@@ -1,7 +1,3 @@
-/**
- * Path helpers for Files dialog actions.
- */
-
 interface PathParts {
   directory: string;
   baseName: string;
@@ -56,14 +52,6 @@ function resolvePreservedExtension(args: {
   return currentExtension;
 }
 
-/**
- * Resolves a rename destination path from user input.
- *
- * Rules:
- * - Empty input keeps the current path.
- * - Name-only input stays in the current folder.
- * - If the target basename omits an extension, preserve the current extension.
- */
 export function resolveRenameDestinationPath(currentPath: string, inputPath: string): string {
   const normalizedInput = inputPath.trim().replaceAll("\\", "/");
   if (normalizedInput.length === 0) {

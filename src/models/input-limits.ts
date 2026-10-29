@@ -18,7 +18,6 @@ const modelInputLimitsSchema = Type.Object({
   })),
 });
 
-/** Decode model input metadata from extension or persisted-storage boundaries. */
 export function decodeModelInputLimits(value: object): ModelInputLimits | null {
   if (!Value.Check(modelInputLimitsSchema, value)) return null;
   const { maxRequestBytes, images } = value;

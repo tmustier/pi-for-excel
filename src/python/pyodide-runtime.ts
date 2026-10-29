@@ -1,17 +1,3 @@
-/**
- * Pyodide runtime adapter — main-thread API for in-browser Python execution.
- *
- * Manages a Web Worker that loads Pyodide (Python compiled to WebAssembly).
- * Provides the same request/response interface as the native Python bridge,
- * so callers don't need to know which backend is being used.
- *
- * Key design decisions:
- * - Lazy initialization: Pyodide (~15MB WASM) is only loaded on first use
- * - Web Worker isolation: Python runs off the main thread
- * - CDN loading: Pyodide served from jsDelivr, cached by the browser
- * - Timeout support: Worker calls are bounded by configurable timeouts
- */
-
 import type {
   PythonBridgeRequest,
   PythonBridgeResponse,
@@ -34,8 +20,6 @@ const pendingRequests = new Map<string, {
 function getOrCreateWorker(): Worker {
   if (worker) return worker;
 
-  // The worker file is bundled by Vite as a separate chunk.
-  // Using `new URL(..., import.meta.url)` tells Vite to emit the worker file.
   worker = new Worker(
     new URL("./pyodide-worker.ts", import.meta.url),
     { type: "module" },
@@ -52,7 +36,6 @@ function getOrCreateWorker(): Worker {
   });
 
   worker.addEventListener("error", (event) => {
-    // Reject all pending requests on worker crash
     const error = new Error(`Pyodide worker error: ${event.message}`);
     for (const [id, pending] of pendingRequests) {
       clearTimeout(pending.timeoutId);
@@ -60,7 +43,6 @@ function getOrCreateWorker(): Worker {
       pendingRequests.delete(id);
     }
 
-    // Reset so next call creates a fresh worker
     worker = null;
   });
 
@@ -75,7 +57,6 @@ function sendToWorker(
     const timeoutId = setTimeout(() => {
       pendingRequests.delete(request.id);
 
-      // Terminate the hung worker so it doesn't block future calls
       if (worker) {
         worker.terminate();
         worker = null;
@@ -91,12 +72,6 @@ function sendToWorker(
   });
 }
 
-/**
- * Execute Python code via Pyodide (in-browser WebAssembly runtime).
- *
- * Accepts the same request shape as the native Python bridge and returns
- * a compatible response, so callers can swap between backends transparently.
- */
 export async function callPyodideRuntime(
   request: PythonBridgeRequest,
   signal?: AbortSignal,
@@ -121,7 +96,6 @@ export async function callPyodideRuntime(
     workerRequest.inputJson = request.input_json;
   }
 
-  // Set up abort handling
   let abortHandler: (() => void) | null = null;
   if (signal) {
     abortHandler = () => {
@@ -167,19 +141,16 @@ export async function callPyodideRuntime(
   }
 }
 
-/** Check if Pyodide is available in this environment (Web Workers + WASM). */
 export function isPyodideAvailable(): boolean {
   if (typeof Worker === "undefined") return false;
   if (typeof WebAssembly === "undefined") return false;
   return true;
 }
 
-/** Check if Pyodide has already been loaded (warm). */
 export function isPyodideLoaded(): boolean {
   return worker !== null;
 }
 
-/** Terminate the Pyodide worker and release resources. */
 export function terminatePyodide(): void {
   if (!worker) return;
 

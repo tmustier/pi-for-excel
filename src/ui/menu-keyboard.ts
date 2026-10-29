@@ -1,13 +1,3 @@
-/**
- * Keyboard model shared by every menu and popover in the taskpane
- * (gear menu, tab context menu, status-bar popovers). See src/ui/README.md, "Menus".
- *
- * - Opening moves focus to the checked item, else the first item.
- * - ↑/↓ move and wrap, Home/End jump, a letter jumps to the next item starting with it.
- * - Enter/Space activate (native buttons).
- * - Escape closes and returns focus to the trigger; Tab closes too.
- */
-
 const MENU_ITEM_SELECTOR = "[role='menuitem'], [role='menuitemradio'], [role='menuitemcheckbox']";
 
 function getMenuItems(menu: HTMLElement): HTMLElement[] {
@@ -30,10 +20,6 @@ export function focusInitialMenuItem(menu: HTMLElement): void {
   }
 }
 
-/**
- * Handle a keydown inside a menu.
- * `onClose` must close the menu and return focus to its trigger.
- */
 export function handleMenuKeydown(
   event: KeyboardEvent,
   menu: HTMLElement,
@@ -49,8 +35,6 @@ export function handleMenuKeydown(
   }
 
   if (event.key === "Tab") {
-    // Stop it too: Office on the web moves focus out of the add-in frame on
-    // Tab from its own window listener, undoing the return to the trigger.
     event.preventDefault();
     event.stopPropagation();
     onClose();

@@ -92,7 +92,6 @@ export interface WpsGlobal {
 
 function readPropertyOrMethod<T>(owner: object, value: WpsPropertyOrMethod<T> | undefined): T | undefined {
   if (typeof value !== "function") return value;
-  // The union's callable branch is established above; WPS methods require their owner receiver.
   const method = value as () => T;
   return method.call(owner);
 }
@@ -118,7 +117,6 @@ interface WpsHostGlobals {
 }
 
 function getWpsHostGlobals(): WpsHostGlobals {
-  // WPS injects these non-standard globals before taskpane boot.
   return globalThis as typeof globalThis & WpsHostGlobals;
 }
 
@@ -126,7 +124,6 @@ function getWpsGlobal(): WpsGlobal | null {
   return parseWpsGlobal(getWpsHostGlobals().wps);
 }
 
-/** Resolve the active WPS ET Application lazily at call time. */
 export function getWpsEtApplication(): WpsEtApplication | null {
   const wpsGlobal = getWpsGlobal();
   if (typeof wpsGlobal?.EtApplication === "function") {

@@ -1,12 +1,3 @@
-/**
- * Tests for Pyodide fallback behavior in python_run and python_transform_range.
- *
- * These tests verify:
- * - Native bridge is preferred when configured
- * - Pyodide fallback is used when no bridge is configured
- * - Proper error when neither backend is available
- */
-
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -33,7 +24,6 @@ void test("python_run reports Pyodide failures with stderr and stdout when the e
   const tool = createPythonRunTool({
     getBridgeConfig: () => Promise.resolve(null),
     isPyodideAvailable: () => true,
-    // Pyodide reports error "" and puts the traceback in stderr.
     callPyodide: () => Promise.resolve(makePyodideResponse({
       ok: false,
       exit_code: 1,

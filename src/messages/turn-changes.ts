@@ -5,7 +5,6 @@ import type { WorkbookChangeAuditEntry } from "../audit/workbook-change-audit.js
 import type { WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
 import type { RecoveryMetadata, RecoveryPage, RecoveryPageOptions } from "../workbook/recovery/log-store.js";
 
-/** A turn may contain more than one metadata page; never load its payloads. */
 export async function readTurnBackups(
   log: { pageForCurrentWorkbook(options: RecoveryPageOptions): Promise<RecoveryPage> },
   turnId: string,
@@ -25,7 +24,6 @@ export const turnChangesSchema = Type.Object({
   timestamp: Type.Number(),
   outcome: StringEnum(["finished", "stopped", "failed"]),
   ranOfficeJs: Type.Optional(Type.Boolean()),
-  /** Cells Office.js code changed, from Excel's change events; never undone. */
   officeJsRanges: Type.Optional(Type.Array(Type.String())),
   undoneBackupIds: Type.Optional(Type.Array(Type.String())),
   changes: Type.Array(Type.Object({
@@ -59,8 +57,6 @@ export function summarizeTurnChanges(args: {
   backups: readonly Pick<WorkbookRecoverySnapshot, "id" | "at" | "toolCallId" | "address" | "changedCount">[];
 }): TurnChangesMessage | null {
   const changes: TurnChangesMessage["changes"] = [];
-  // Calls start in workbook-queue order. Preserve that order even for partial
-  // failures with no audit entry, and when timestamps share a millisecond.
   for (const callId of args.toolCallIds) {
     const saved = args.backups.filter((backup) => backup.toolCallId === callId)
       .sort((a, b) => a.at - b.at || a.id.localeCompare(b.id));
@@ -69,7 +65,6 @@ export function summarizeTurnChanges(args: {
       changes.push({ address: entry.outputAddress ?? entry.inputAddress ?? entry.toolName,
         changedCount: entry.changedCount, backupIds: saved.map((backup) => backup.id) });
     } else {
-      // A failed tool can still have changed the workbook and saved a backup.
       for (const backup of saved) changes.push({ address: backup.address, changedCount: backup.changedCount, backupIds: [backup.id] });
     }
   }
@@ -80,7 +75,6 @@ export function summarizeTurnChanges(args: {
   };
 }
 
-/** Each restore is ordinary recovery: it captures its own inverse backup. */
 export async function undoTurnChanges(
   summary: TurnChangesMessage,
   restore: (backupId: string) => Promise<boolean>,
@@ -101,7 +95,6 @@ export async function undoTurnChanges(
 
 const MAX_OFFICE_JS_RANGES_SHOWN = 6;
 
-/** The Office.js warning, naming the cells it changed when they are known. */
 export function describeOfficeJsChanges(summary: TurnChangesMessage): string {
   const ranges = summary.officeJsRanges ?? [];
   if (ranges.length === 0) return t("turnChanges.officeJsUncovered");

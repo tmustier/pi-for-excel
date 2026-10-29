@@ -1,16 +1,3 @@
-/**
- * Selection context — what the user has selected, sent with every request.
- *
- * The address and size come first and are always exact. The cell contents
- * are a bounded sample: the selection plus a few rows around it, clipped to
- * the sheet's used range, at most 20 columns, and for tall selections only
- * the first and last rows. A whole-column selection therefore costs the same
- * as a small one, and nothing the user selects can flood the model context.
- *
- * Failures are reported in the text (the agent learns that the selection
- * could not be read and why) and logged, never swallowed.
- */
-
 import { excelRun, qualifiedAddress, colToLetter, ExcelCellEditModeError } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { Value } from "typebox/value";
@@ -24,25 +11,19 @@ import {
   type CellValue,
 } from "../utils/format.js";
 
-/** Rows of context above and below the selection. */
 const CONTEXT_ROWS = 5;
 const MAX_COLS = 20;
-/** Cells in the sample; tall samples show fewer columns. */
 const MAX_SAMPLE_CELLS = 240;
-/** Tall windows show this many rows from the top and the bottom. */
 const HEAD_ROWS = 15;
 const TAIL_ROWS = 5;
 const MAX_CELL_CHARS = 60;
 const MIN_CELL_CHARS = 8;
-/** Upper bound for the sample table, whatever the cell contents. */
 const MAX_TABLE_CHARS = 4000;
 const MAX_FORMULAS = 15;
 const MAX_ERRORS = 10;
 
 export interface SelectionContext {
-  /** Qualified selection address, or null when it could not be read. */
   address: string | null;
-  /** Agent-facing text. */
   text: string;
 }
 
@@ -65,8 +46,6 @@ function formatGrid(blocks: readonly RowBlock[], startCol: number, colCount: num
   const lines = [`| | ${letters.join(" | ")} |`, `|---|${letters.map(() => "---").join("|")}|`];
   let chars = lines.join("\n").length;
   let previousEnd: number | null = null;
-  // Share the budget across every sampled cell (leaving room for row numbers
-  // and separators) so the last rows fit too.
   const rowCount = blocks.reduce((sum, block) => sum + block.values.length, 0);
   const perCell = Math.floor((MAX_TABLE_CHARS * 0.8) / Math.max(1, rowCount * colCount)) - 3;
   const maxCellChars = Math.max(MIN_CELL_CHARS, Math.min(MAX_CELL_CHARS, perCell));
@@ -127,8 +106,6 @@ async function readSelection(context: Excel.RequestContext): Promise<SelectionCo
     : [[startRow, HEAD_ROWS], [endRow - TAIL_ROWS + 1, TAIL_ROWS]];
   const sampleRows = spans.reduce((sum, [, count]) => sum + count, 0);
   const maxCols = Math.max(1, Math.min(MAX_COLS, Math.floor(MAX_SAMPLE_CELLS / sampleRows)));
-  // Keep left-hand labels only when the selection fits beside them; otherwise
-  // use spare columns for context without dropping selected columns that fit.
   const startCol = selEndCol < used.columnIndex + maxCols
     ? used.columnIndex
     : Math.max(used.columnIndex, sel.columnIndex - Math.min(2, Math.max(0, maxCols - sel.columnCount)));
@@ -182,10 +159,6 @@ async function readSelection(context: Excel.RequestContext): Promise<SelectionCo
   return { address, text: lines.join("\n") };
 }
 
-/**
- * Read the user's current selection. Never waits for the user to leave
- * cell-edit mode, and never throws: a failure becomes the text.
- */
 export async function readSelectionContext(): Promise<SelectionContext> {
   try {
     return await excelRun(readSelection, { waitForCellEdit: false });

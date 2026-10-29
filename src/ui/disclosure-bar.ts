@@ -1,10 +1,3 @@
-/**
- * First-run disclosure, built on the shared banner primitive.
- *
- * Tells the user once that Pi can reach external services, with a way to
- * review the related settings. Dismissed for good (per add-in) either way.
- */
-
 import { t } from "../language/index.js";
 import { createBanner, type BannerHandle } from "./banner.js";
 
@@ -22,18 +15,14 @@ function setAcknowledged(): void {
   try {
     localStorage.setItem(ACKNOWLEDGED_KEY, "1");
   } catch {
-    // ignore — private mode / storage unavailable
   }
 }
 
 export interface DisclosureBarOptions {
-  /** Number of configured providers (shows only when ≥1). */
   providerCount: number;
-  /** Opens the settings that control external access. */
   onOpenSettings: () => void;
 }
 
-/** Create the disclosure banner, or `null` if it was already acknowledged. */
 export function createDisclosureBar(options: DisclosureBarOptions): BannerHandle | null {
   if (isAcknowledged() || options.providerCount < 1) {
     return null;

@@ -1,10 +1,3 @@
-/**
- * Workbook recovery snapshots.
- *
- * Stores lightweight, local-only backups for workbook cell edits so users
- * can revert Pi's changes without pre-execution approval prompts.
- */
-
 import { colToLetter, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";
 import { runMutation } from "../tools/mutation/run-mutation.js";
 import { getWorkbookContext, type WorkbookContext } from "./context.js";
@@ -91,7 +84,6 @@ export interface WorkbookRecoverySnapshot {
   cellCount: number;
   beforeValues: unknown[][];
   beforeFormulas: unknown[][];
-  /** Range backups: the formulas/values Pi's change left (absent on older backups). */
   afterFormulas?: unknown[][];
   snapshotKind?: WorkbookRecoverySnapshotKind;
   formatRangeState?: RecoveryFormatRangeState;
@@ -112,7 +104,6 @@ export interface AppendWorkbookRecoverySnapshotArgs {
   changedCount?: number;
   beforeValues: unknown[][];
   beforeFormulas: unknown[][];
-  /** What the change left in the range, so a later restore can spot edits made since. */
   afterFormulas?: unknown[][];
   restoredFromSnapshotId?: string;
 }
@@ -171,7 +162,6 @@ export interface AppendChartRecoverySnapshotArgs {
 export interface RestoreWorkbookRecoverySnapshotResult {
   restoredSnapshotId: string;
   inverseSnapshotId: string | null;
-  /** Set when the restore succeeded but its inverse backup could not be saved. */
   inverseSnapshotError?: string;
   address: string;
   changedCount: number;
@@ -209,21 +199,13 @@ interface WorkbookRecoveryLogDependencies {
     address: string,
     state: RecoveryChartState,
   ) => Promise<RecoveryChartApplyResult>;
-  /** Current formulas (values for constants) of a range. */
   readRangeFormulas: (address: string) => Promise<unknown[][]>;
 }
 
-/** What restoring a backup would do, for a warning before it overwrites anything. */
 export interface WorkbookRecoveryRestorePreview {
   id: string;
-  /** When the backup was taken (ms since epoch). */
   at: number;
   address: string;
-  /**
-   * Cells changed since Pi's change, which the restore would overwrite.
-   * `null` when none changed, or when the backup cannot tell (non-range
-   * backups, and range backups saved before this was recorded).
-   */
   laterEdits: { count: number; sample: Array<{ address: string; content: string }> } | null;
 }
 
@@ -407,11 +389,6 @@ export class WorkbookRecoveryLog {
     });
   }
 
-  /**
-   * Scope for a new checkpoint. A restore passes the scope it already resolved so
-   * the inverse checkpoint lands under the same identity. Host failures mean
-   * "no identity": the mutation must still succeed, so nothing is thrown here.
-   */
   private async resolveAppendScope(
     scopeOverride?: RecoveryWorkbookScope,
   ): Promise<RecoveryWorkbookScope | null> {
@@ -423,11 +400,6 @@ export class WorkbookRecoveryLog {
     }
   }
 
-  /**
-   * Stores a new backup. Returns `null` when there is no storage; throws
-   * "Backup could not be saved: …" when the write fails, so callers can tell
-   * the user this change cannot be reverted rather than implying it can.
-   */
   private async appendSnapshot(
     snapshot: WorkbookRecoverySnapshot,
   ): Promise<WorkbookRecoverySnapshot | null> {
@@ -699,7 +671,6 @@ export class WorkbookRecoveryLog {
     return scope && store ? store.page(scope.workbookId, options) : { entries: [] };
   }
 
-  /** Loads only this backup; never applies it or reads another workbook's sheet. */
   async read(snapshotId: string): Promise<WorkbookRecoverySnapshot | null> {
     const scope = await this.scope.resolveForRead();
     if (!scope) throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
@@ -721,11 +692,6 @@ export class WorkbookRecoveryLog {
     return (await this.dependencies.getStore())?.clear(scope.workbookId) ?? 0;
   }
 
-  /**
-   * Moves backups from one identity to another. A never-saved workbook's
-   * backups are filed under its document token; when its first save gives it
-   * a path identity, they follow it there instead of being stranded.
-   */
   async rescopeWorkbook(args: { fromWorkbookId: string; toWorkbookId: string; workbookLabel: string }): Promise<number> {
     return (await this.dependencies.getStore())?.move(args.fromWorkbookId, args.toWorkbookId, args.workbookLabel) ?? 0;
   }
@@ -744,8 +710,6 @@ export class WorkbookRecoveryLog {
       throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");
     }
 
-    // The workbook has changed by the time the inverse backup is stored, so a
-    // failed save must not turn a completed restore into a reported failure.
     const inverse: { error: string | null } = { error: null };
     const keepRestoreOnAppendFailure = <TArgs>(
       append: (args: TArgs, scope: RecoveryWorkbookScope) => Promise<WorkbookRecoverySnapshot | null>,
@@ -780,10 +744,6 @@ export class WorkbookRecoveryLog {
     });
 
     if (!result.inverseSnapshotId) {
-      // Nothing to roll back to (a created chart cannot be re-created, or the
-      // rollback could not be stored). The backup is used up: re-applying it
-      // does nothing, and left in place it would stay "latest" and hide every
-      // older backup from /revert.
       try {
         await this.delete(snapshot.id);
       } catch (error) {
@@ -794,18 +754,11 @@ export class WorkbookRecoveryLog {
     return inverse.error === null ? result : { ...result, inverseSnapshotError: inverse.error };
   }
 
-  /**
-   * Reads, without changing anything, what a restore of `snapshotId` would
-   * overwrite: cells edited since Pi's change. Backups now last until the
-   * storage ceiling removes them, often days, so the user may have
-   * worked in the range since.
-   */
   async previewRestore(snapshotId: string): Promise<WorkbookRecoveryRestorePreview> {
     const snapshot = await this.read(snapshotId);
     if (!snapshot) {
       throw new Error("Snapshot not found.");
     }
-    // Same refusals as restore, so a preview never reads another workbook.
     const scope = await this.scope.resolveForRead();
     if (!scope) {
       throw new Error("Current workbook identity is unavailable; cannot safely restore this snapshot.");

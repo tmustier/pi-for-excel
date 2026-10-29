@@ -1,8 +1,3 @@
-/**
- * Stub for Node.js 'stream' module.
- * The Anthropic SDK's transitive deps import Readable from 'stream',
- * but this code path is never executed in the browser (fetch() is used instead).
- */
 export class Readable {
   static from() { return new Readable(); }
   pipe() { return this; }

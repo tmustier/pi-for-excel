@@ -199,8 +199,6 @@ void test("web search config clears only the selected provider key", async () =>
   assert.equal(getApiKeyForProvider(config, "brave"), "br-123");
 });
 
-// ── checkApiKeyFormat ────────────────────────────────────
-
 void test("API-key format policy accepts and diagnoses representative keys", () => {
   const rows = [
     { provider: "jina" as const, key: "jina_abc123defXYZ456", diagnosis: null },

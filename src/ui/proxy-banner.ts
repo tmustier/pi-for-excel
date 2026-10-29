@@ -1,12 +1,3 @@
-/**
- * Proxy warning banner, built on the shared banner primitive.
- *
- * Shown only when the user has turned the proxy on and it is not answering
- * (users who never enabled it are not warned about something they do not use).
- * Dismissing it hides it until the proxy comes back and fails again, or the
- * taskpane reopens.
- */
-
 import { t } from "../language/index.js";
 import { PROXY_HELPER_COMMAND } from "../auth/proxy-validation.js";
 import { createBanner, hideBanner, mountBanner } from "./banner.js";
@@ -18,7 +9,6 @@ const BANNER_ID = "proxy";
 export type ProxyBannerState = "detected" | "not-detected" | "unknown";
 
 export interface ProxyBannerController {
-  /** `blockedByBrowser`: the browser forbids reaching localhost here, so running the proxy cannot help. */
   update: (state: ProxyBannerState, blockedByBrowser?: boolean) => Promise<void>;
 }
 

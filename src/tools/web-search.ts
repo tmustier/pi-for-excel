@@ -2,10 +2,6 @@ function isToolsWebSearchPayloadShape(value: unknown): value is Record<string, u
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * web_search — external web search (Jina/Serper/Tavily/Brave).
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "./string-enum.js";
@@ -843,8 +839,6 @@ export function createWebSearchTool(
           } catch (error) {
             if (signal?.aborted) throw error;
             nativeFailure = new Error(getErrorMessage(error));
-            // A provider/model may reject native search; the configured search
-            // backend remains the fallback, with its usual error/setup UI.
           }
         }
 
@@ -939,7 +933,6 @@ export function createWebSearchTool(
 
         return {
           content: [{ type: "text", text: displayMessage }],
-          // A failure: the model sees an error result and the card is drawn red.
           isError: true,
           details: createWebSearchDetails({
             ok: false,

@@ -1,9 +1,3 @@
-/* ═══════════════════════════════════════════════════════
-   NOTICE AREA + BANNERS
-   One banner primitive (src/ui/banner.ts) for every persistent
-   condition: run errors, proxy warnings, the first-run disclosure.
-   ═══════════════════════════════════════════════════════ */
-
 .pi-notices {
   flex-shrink: 0;
   display: flex;

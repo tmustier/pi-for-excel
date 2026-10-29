@@ -1,10 +1,3 @@
-/**
- * Build concise, citation-aware change explanations from structured audit metadata.
- *
- * This module is deterministic and UI-only; it does not mutate workbook state or
- * inject additional context into model prompts by default.
- */
-
 import type { WorkbookCellChangeSummary } from "./cell-diff.js";
 
 export const MAX_EXPLANATION_PROMPT_CHARS = 1_200;
@@ -26,15 +19,10 @@ export interface ChangeExplanationInput {
 }
 
 export interface ChangeExplanation {
-  /** Bounded prompt-like payload used to shape the explanation source. */
   prompt: string;
-  /** Human-readable explanation shown in the tool card. */
   text: string;
-  /** Clickable citations (ranges/cells) that support navigation. */
   citations: string[];
-  /** True when source payload or output text was truncated for budget/safety. */
   truncated: boolean;
-  /** True when we had to fall back due partial/insufficient metadata. */
   usedFallback: boolean;
 }
 

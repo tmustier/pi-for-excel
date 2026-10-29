@@ -1,7 +1,3 @@
-/**
- * Plain-language recovery for a failed response. Raw provider text stays in Details.
- */
-
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 
 import { t } from "../language/index.js";
@@ -10,27 +6,16 @@ import { isLikelyCorsErrorMessage } from "./runtime-utils.js";
 
 export interface TurnFailureContext {
   messages: readonly AgentMessage[];
-  /** The run ended in a context overflow (for the active model). */
   isContextOverflow: boolean;
-  /** Pi already compacted and retried once, and the retry overflowed too. */
   overflowAfterRecovery: boolean;
-  /** The user dismissed the connection dialog for this provider during the turn. */
   missingCredentialsFor: string | null;
-  /** Provider display label whose login expired and could not be refreshed; no stale token was sent. */
   expiredLoginFor?: string | null;
   online: boolean;
-  /** The configured proxy URL when the proxy is enabled. */
   proxyUrl: string | null;
   defaultProxyUrl: string;
-  /** The browser forbids this frame from reaching a localhost proxy at all (Local Network Access). */
   proxyBlockedByBrowser: boolean;
 }
 
-/**
- * Returns the banner for the turn's final model response, or null when the
- * turn did not fail. A stop is never an error: it is recognized by the
- * response's stop reason, not by words like "abort" in a provider message.
- */
 export function describeTurnFailure(context: TurnFailureContext): string | null {
   const last = context.messages[context.messages.length - 1];
   if (!last || last.role !== "assistant" || last.stopReason !== "error") return null;
@@ -54,7 +39,6 @@ export function describeTurnFailure(context: TurnFailureContext): string | null 
   }
   if (isLikelyCorsErrorMessage(error)) {
     if (!context.online) return t("turn.error.offline");
-    // Enabling or starting the proxy cannot help where the browser blocks it.
     if (context.proxyBlockedByBrowser) return t("proxy.blocked_by_browser");
     if (context.proxyUrl) return t("turn.error.proxyUnreachable", { url: context.proxyUrl });
     return t("turn.error.cors", { url: context.defaultProxyUrl, guide: PROXY_HELPER_DOCS_URL });

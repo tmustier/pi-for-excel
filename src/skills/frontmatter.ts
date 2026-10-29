@@ -1,7 +1,3 @@
-/**
- * Agent Skill markdown/frontmatter parsing.
- */
-
 export interface ParsedSkillFrontmatter {
   name: string;
   description: string;
@@ -34,7 +30,6 @@ function parseTopLevelFrontmatter(frontmatterBlock: string): Record<string, stri
     if (line.length === 0) continue;
     if (line.startsWith("#")) continue;
 
-    // Ignore nested YAML blocks (e.g. metadata:) and list items.
     if (rawLine.startsWith(" ") || rawLine.startsWith("\t") || line.startsWith("- ")) {
       continue;
     }

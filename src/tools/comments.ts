@@ -1,10 +1,3 @@
-/**
- * comments — CRUD for cell comments (add, read, update, reply, delete, resolve, reopen).
- *
- * Supports single cells for all actions, and ranges for read.
- * Handles threaded replies via the Excel CommentReply API.
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";
@@ -30,9 +23,6 @@ import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 
-// ── Helpers ──────────────────────────────────────────────────────────
-
-/** Strip sheet prefix from an address (e.g. "Sheet1!A1" → "A1"). */
 function stripSheet(address: string): string {
   const bangIndex = address.indexOf("!");
   return bangIndex >= 0 ? address.slice(bangIndex + 1) : address;
@@ -71,8 +61,6 @@ const schema = Type.Object({
 
 type Params = Static<typeof schema>;
 type CommentAction = Params["action"];
-
-// ── Interfaces for extracted comment data ────────────────────────────
 
 interface ReplyData {
   author: string;
@@ -120,8 +108,6 @@ const defaultDependencies: CommentsToolDependencies = {
   appendRecoverySnapshot: (args) => getWorkbookRecoveryLog().appendCommentThread(args),
 };
 
-// ── Tool ─────────────────────────────────────────────────────────────
-
 export function createCommentsTool(
   dependencies: Partial<CommentsToolDependencies> = {},
   attribution: RecoveryAttribution = {},
@@ -147,8 +133,6 @@ export function createCommentsTool(
       toolCallId: string,
       params: Params,
     ): Promise<AgentToolResult<CommentsDetails>> => {
-      // Schema validation normally rejects a missing range; check here too so a
-      // misnamed parameter (e.g. `cell`) gets a usable answer, not a JavaScript error.
       if (typeof params.range !== "string" || params.range.trim() === "") {
         return {
           content: [{
@@ -276,8 +260,6 @@ async function dispatchAction(params: Params): Promise<CommentsDispatchResult> {
   }
 }
 
-// ── Action implementations ───────────────────────────────────────────
-
 async function executeRead(ref: string): Promise<CommentsDispatchResult> {
   const result = await runMutation(async (context) => {
     const { sheet, range } = getRange(context, ref);
@@ -296,7 +278,6 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
       };
     }
 
-    // Phase 2: load each comment's properties, location, and replies
     const entries = commentsCol.items.map((comment) => {
       comment.load("content,authorName,resolved");
       comment.replies.load("items");
@@ -306,7 +287,6 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
     });
     await context.sync();
 
-    // Phase 3: load reply details (only if replies exist)
     let needsSync = false;
     for (const { comment } of entries) {
       for (const reply of comment.replies.items) {
@@ -318,7 +298,6 @@ async function executeRead(ref: string): Promise<CommentsDispatchResult> {
       await context.sync();
     }
 
-    // Filter comments to those within the requested range
     const rangeAddr = range.address;
     const comments: CommentData[] = [];
     for (const { comment, location } of entries) {

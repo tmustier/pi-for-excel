@@ -1,5 +1,3 @@
-/** Browser/UI-gallery host used when no spreadsheet host is ready. */
-
 import { settingsBackedSessionStorage } from "./session-storage.js";
 import {
   createUnknownWorkbookContext,

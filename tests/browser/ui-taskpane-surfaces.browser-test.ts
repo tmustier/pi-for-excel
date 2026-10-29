@@ -62,9 +62,7 @@ void test("renaming a tab uses the in-pane dialog, focused on the title field", 
 
 void test("a busy model choice applies to the next run without changing the running request", async () => {
   await withTaskpane(async (page) => {
-    // A connected provider, so the picker has models to list.
     await page.evaluate(async () => {
-      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
       const storage = await import("../../src/storage/local/app-storage.ts");
       await storage.getAppStorage().providerKeys.set("openai", "sk-test");
     });
@@ -73,14 +71,12 @@ void test("a busy model choice applies to the next run without changing the runn
     const modelBefore = await page.evaluate(() => {
       const sidebar = document.querySelector("pi-sidebar");
       if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
-      // The sidebar's agent is the active tab's Agent: a stream that never answers keeps the turn running.
       const agent = sidebar.agent as {
         state: { model: { id: string } };
         getApiKey: () => Promise<string>;
         streamFunction: (model: { id: string }, context: unknown, options?: { signal?: AbortSignal }) => Promise<never>;
       };
       agent.getApiKey = () => Promise.resolve("test-key");
-      // Never answers; Stop (abort) ends the turn.
       agent.streamFunction = (_model, _context, options) => new Promise<never>((_resolve, reject) => {
         document.body.dataset.requestModel = _model.id;
         options?.signal?.addEventListener("abort", () => reject(new Error("aborted")));
@@ -151,7 +147,6 @@ void test("a new tab inherits the active tab's chosen thinking level", async () 
 void test("a tab saved on a provider that is no longer connected reloads on a connected model", async () => {
   await withTaskpane(async (page) => {
     await page.evaluate(async () => {
-      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
       const storage = await import("../../src/storage/local/app-storage.ts");
       await storage.getAppStorage().providerKeys.set("openai", "sk-test");
     });
@@ -168,14 +163,12 @@ void test("a tab saved on a provider that is no longer connected reloads on a co
         && (sidebar.agent as { state: { model: { provider: string } } }).state.model.provider === "openai";
     });
 
-    // The tab's saved model belongs to Google, which has no credentials here.
     await page.evaluate(() => {
       const sidebar = document.querySelector("pi-sidebar");
       if (!sidebar || !("agent" in sidebar)) throw new Error("sidebar missing");
       const agent = sidebar.agent as { state: { model: Record<string, unknown> } };
       agent.state.model = { ...agent.state.model, provider: "google", id: "gemini-2.5-flash-lite" };
     });
-    // Renaming saves the session, model included.
     await page.locator(".pi-session-tab.is-active .pi-session-tab__main").dblclick();
     const dialog = page.locator("#pi-text-input-dialog-overlay");
     await dialog.locator("input").fill("Gemini tab");
@@ -375,9 +368,7 @@ void test("an expired login whose refresh fails asks the user to sign in again a
       sentToAnthropic.push(route.request().headers()["authorization"] ?? route.request().headers()["x-api-key"] ?? "");
       return route.fulfill({ status: 401, headers: { "access-control-allow-origin": "*" }, body: "{}" });
     });
-    // A Claude login stored by an earlier session; its token expired a minute ago.
     await page.evaluate(async () => {
-      // Resolves from the page (/src/taskpane.html) to the module the app itself loaded.
       const storage = await import("../../src/storage/local/app-storage.ts");
       const appStorage = storage.getAppStorage();
       await appStorage.settings.set("oauth.anthropic", {
@@ -411,7 +402,6 @@ void test("an expired login whose refresh fails asks the user to sign in again a
 void test("GitHub Copilot login reaches its device code, and closing the code dialog stops the login", async () => {
   await withTaskpane(async (page, context) => {
     let tokenPolls = 0;
-    // In development GitHub's login endpoints go through Vite's /oauth-proxy/github route.
     await context.route("**/oauth-proxy/github/login/device/code", (route) => route.fulfill({
       contentType: "application/json",
       body: JSON.stringify({
@@ -431,7 +421,6 @@ void test("GitHub Copilot login reaches its device code, and closing the code di
     await page.getByText("GitHub Copilot", { exact: true }).first().click();
     const firstPoll = page.waitForResponse("**/oauth-proxy/github/login/oauth/access_token");
     await page.getByRole("button", { name: "Login with GitHub Copilot" }).click();
-    // GitHub Enterprise domain: blank means github.com.
     const prompt = page.locator("#pi-prompt-overlay");
     await prompt.locator("input").waitFor({ state: "visible" });
     await prompt.getByRole("button", { name: /continue/i }).click();

@@ -194,11 +194,6 @@ function normalizeExtensionSessionKeyPart(value: string | undefined): string {
   return value.trim();
 }
 
-/**
- * Side `llm.complete` requests are intentionally independent from the main
- * runtime loop. Use a deterministic extension-scoped session key so prefix
- * churn/debug signals don't get mixed into the primary runtime session key.
- */
 export function createExtensionLlmCompletionSessionId(args: {
   agentSessionId: string | undefined;
   extensionId: string;

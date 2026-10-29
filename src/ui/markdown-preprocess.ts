@@ -1,7 +1,3 @@
-/**
- * Markdown preprocessing helpers for UI rendering.
- */
-
 const COMMON_FRONTMATTER_KEYS = new Set([
   "title",
   "date",
@@ -59,12 +55,10 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
     if (!line) continue;
     if (line.startsWith("#")) continue;
 
-    // YAML list item (e.g., under a mapping key).
     if (/^-\s+\S/u.test(line)) {
       continue;
     }
 
-    // YAML mapping entry (supports dotted/hyphenated and quoted keys).
     const mappingMatch = YAML_MAPPING_RE.exec(rawLine);
     if (mappingMatch) {
       const rawKey = mappingMatch[1];
@@ -75,8 +69,6 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
       const key = normalizeFrontmatterKey(rawKey);
       const normalizedKey = key.toLowerCase();
 
-      // Keep prose guard: allow arbitrary lowercase keys, but only allow
-      // title-case/uppercase keys for canonical frontmatter fields.
       if (key !== normalizedKey && !COMMON_FRONTMATTER_KEYS.has(normalizedKey)) {
         return false;
       }
@@ -91,24 +83,16 @@ function isLikelyYamlFrontmatterBlock(block: string): boolean {
       continue;
     }
 
-    // Allow indented continuation lines for nested YAML content.
     if (lineIndent > 0 && sawMapping) {
       continue;
     }
 
-    // Anything else is likely markdown/text, not frontmatter metadata.
     return false;
   }
 
   return sawMapping;
 }
 
-/**
- * Remove YAML frontmatter only when the opening block is likely metadata.
- *
- * This avoids dropping ordinary markdown that happens to begin with
- * thematic breaks (`---`).
- */
 export function stripYamlFrontmatter(text: string): string {
   const match = text.match(/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*(?:\r?\n|$)/u);
   if (!match) return text;

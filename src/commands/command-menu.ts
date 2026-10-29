@@ -1,10 +1,3 @@
-/**
- * Slash command popup menu.
- *
- * Shows above the textarea when user types `/`.
- * Filters as user types, arrow keys navigate, Enter selects, Esc dismisses.
- */
-
 import { t } from "../language/index.js";
 import { commandRegistry, type SlashCommand } from "./types.js";
 import type { PiInput } from "../ui/pi-input.js";
@@ -24,11 +17,6 @@ function getCommandTextarea(): HTMLTextAreaElement | null {
   return document.querySelector("pi-input textarea");
 }
 
-/**
- * Choosing a command puts its name in the draft (keeping any arguments typed
- * after the name) and submits it the way Enter does, so a command refused
- * while Pi is busy leaves the draft in place.
- */
 function runCommand(command: SlashCommand): void {
   hideCommandMenu();
   const textarea = getCommandTextarea();
@@ -61,7 +49,6 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
   }
 
 
-  // Position above the anchor (the input card)
   const anchorRect = anchor.getBoundingClientRect();
   menuEl.style.bottom = `${window.innerHeight - anchorRect.top + 4}px`;
   menuEl.style.left = `${anchorRect.left}px`;
@@ -69,8 +56,6 @@ export function showCommandMenu(filter: string, anchor: HTMLElement): void {
 
   renderMenu();
   menuEl.style.display = "block";
-  // Toasts sit above the open menu so they never cover (and swallow clicks
-  // on) its rows; see toasts.css.
   const menuOffset = Math.round(window.innerHeight - menuEl.getBoundingClientRect().top);
   document.documentElement.style.setProperty("--pi-command-menu-offset", `${menuOffset}px`);
 }
@@ -88,11 +73,6 @@ export function isCommandMenuVisible(): boolean {
   return menuEl !== null && menuEl.style.display !== "none";
 }
 
-/**
- * The menu owns arrows, Enter, Tab and Escape only while focus is in the
- * composer it belongs to; a handled key goes nowhere else (one Escape closes
- * the menu without also stopping the turn).
- */
 export function handleCommandMenuKey(e: KeyboardEvent): boolean {
   if (!isCommandMenuVisible()) return false;
   const textarea = getCommandTextarea();
@@ -179,7 +159,6 @@ function renderMenu(): void {
     description.title = description.textContent;
     item.appendChild(description);
 
-    // Keep focus (and the menu) in the composer while clicking a row.
     item.addEventListener("mousedown", (event) => {
       event.preventDefault();
     });
@@ -187,9 +166,6 @@ function renderMenu(): void {
       runCommand(command);
     });
 
-    // Only a moving pointer moves the highlight (a menu that opens under a
-    // resting pointer keeps its first row), and it never re-renders rows,
-    // which would swallow the click.
     item.addEventListener("mousemove", () => {
       if (selectedIndex !== index) selectIndex(index);
     });
@@ -214,17 +190,11 @@ function selectIndex(index: number): void {
   }
 }
 
-/**
- * Listens on the composer element, not its textarea: the composer renders a
- * fresh textarea for each tab (see `PiInput.loadDraft`).
- */
 export function wireCommandMenu(composer: HTMLElement): void {
-  // The textarea in use names the menu it controls (#793), whichever tab's it is.
   composer.addEventListener("focusin", (event) => {
     if (event.target instanceof HTMLTextAreaElement) event.target.setAttribute("aria-controls", "pi-command-menu");
   });
 
-  // Like any popover, a press outside the menu and the composer closes it (#793).
   document.addEventListener("pointerdown", (event) => {
     if (!isCommandMenuVisible()) return;
     const target = event.target;
@@ -240,7 +210,7 @@ export function wireCommandMenu(composer: HTMLElement): void {
       ?? textarea;
     const value = textarea.value;
     if (value.startsWith("/") && !value.includes("\n")) {
-      const filter = value.slice(1); // strip the `/`
+      const filter = value.slice(1);
       showCommandMenu(filter, anchor);
       return;
     }
@@ -248,7 +218,6 @@ export function wireCommandMenu(composer: HTMLElement): void {
     hideCommandMenu();
   });
 
-  // Clicking elsewhere, switching tabs or opening an overlay closes the menu.
   composer.addEventListener("focusout", (event) => {
     if (event.target instanceof HTMLTextAreaElement) hideCommandMenu();
   });

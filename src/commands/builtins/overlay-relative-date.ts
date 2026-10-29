@@ -1,7 +1,3 @@
-/**
- * Shared relative date formatting for overlay lists.
- */
-
 import { t } from "../../language/index.js";
 
 export function formatRelativeDate(iso: string): string {

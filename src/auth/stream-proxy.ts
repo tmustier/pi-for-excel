@@ -1,13 +1,3 @@
-/**
- * Office taskpanes run in a browser webview.
- *
- * Many LLM providers (and especially subscription / OAuth-based flows) either:
- * - block browser requests via CORS, or
- * - require the "anthropic-dangerous-direct-browser-access" header, which some orgs disable.
- *
- * We route requests through a user-configured local CORS proxy when enabled.
- */
-
 import { t } from "../language/index.js";
 import {
   createAssistantMessageEventStream,
@@ -70,22 +60,17 @@ function shouldProxyProvider(
   }
 
   switch (p) {
-    // Known to require proxy in browser webviews (CORS blocked)
     case "openai-codex":
     case "github-copilot":
       return true;
 
-    // Anthropic OAuth tokens are blocked by CORS; some orgs also block direct browser access.
-    // We proxy OAuth tokens (sk-ant-oat-*) unconditionally.
     case "anthropic":
       return typeof apiKey === "string" && apiKey.startsWith("sk-ant-oat");
 
-    // Google Cloud Code Assist providers frequently require proxy in Office webviews.
     case "google-gemini-cli":
     case "google-antigravity":
       return true;
 
-    // Z-AI always requires proxy (matches pi-web-ui default)
     case "zai":
       return true;
 
@@ -116,7 +101,6 @@ function applyProxy(
 
   const normalizedProxy = normalizeProxyUrl(proxyUrl);
 
-  // Avoid double-proxying
   if (model.baseUrl.startsWith(`${normalizedProxy}/?`)) return model;
 
   const transportQuery = transport ? `pi_transport=${transport}&` : "";
@@ -189,15 +173,7 @@ function normalizeGoogleOAuthModel(modelsRuntime: Models, model: Model<Api>): Mo
   return normalized;
 }
 
-/**
- * Is this call a tool-result continuation?
- *
- * Used for debug/telemetry (payload snapshots and status pills), not for
- * capability gating. Continuations still receive a deterministic tool bundle
- * so the agent can complete multi-step tool loops in a single turn.
- */
 function isToolContinuation(messages: TranscriptContext["messages"]): boolean {
-  // The per-request selection note is always appended last; look past it.
   for (let i = messages.length - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (!message) return false;
@@ -208,30 +184,16 @@ function isToolContinuation(messages: TranscriptContext["messages"]): boolean {
   return false;
 }
 
-// ---------------------------------------------------------------------------
-// Payload stats — lightweight counters for debug pill in status bar.
-// ---------------------------------------------------------------------------
-
 export interface PayloadStats {
-  /** LLM calls since app start. */
   calls: number;
-  /** Chars of system prompt on last call. */
   systemChars: number;
-  /** Chars of tool schemas (compact JSON) on last call, 0 if no tools. */
   toolSchemaChars: number;
-  /** Number of tool definitions on last call, 0 if no tools. */
   toolCount: number;
-  /** Number of messages on last call. */
   messageCount: number;
-  /** Total chars of all messages (JSON-serialized) on last call. */
   messageChars: number;
-  /** Number of calls where cached prefix fingerprint changed within a session. */
   prefixChanges: number;
-  /** Prefix changes attributed to model identity changes. */
   prefixModelChanges: number;
-  /** Prefix changes attributed to system prompt changes. */
   prefixSystemPromptChanges: number;
-  /** Prefix changes attributed to tool schema changes. */
   prefixToolChanges: number;
 }
 
@@ -275,30 +237,12 @@ const stats: PayloadStats = {
   prefixToolChanges: 0,
 };
 
-/**
- * Debug retention limits.
- *
- * Why 24?
- * - Large enough to inspect recent multi-step tool loops in one session
- *   (typically several user turns with follow-up calls).
- * - Small enough to keep memory bounded in long-lived taskpane sessions.
- *
- * If we need deeper forensic traces, we can raise this temporarily,
- * but should keep it bounded to avoid silent memory growth.
- */
 const MAX_PAYLOAD_SNAPSHOTS = 24;
 
-/**
- * Number of session-scoped contexts kept for debug inspection.
- *
- * This is separate from the per-call ring buffer above and is capped for
- * the same reason: preserve useful visibility without unbounded retention.
- */
 const MAX_SESSION_CONTEXTS = 24;
 
 const payloadSnapshots: PayloadSnapshot[] = [];
 
-/** Snapshot of the last LLM context (only kept when debug is on). */
 let lastContext: Context | undefined;
 const lastContextBySession = new Map<string, Context>();
 const prefixChangeTracker = new PrefixChangeTracker({
@@ -381,7 +325,6 @@ function pushSnapshot(snapshot: PayloadSnapshot): void {
 }
 
 function setSessionContext(sessionId: string, context: Context): void {
-  // Refresh insertion order to behave like an LRU cache.
   if (lastContextBySession.has(sessionId)) {
     lastContextBySession.delete(sessionId);
   }
@@ -521,9 +464,6 @@ function withPayloadHook(
   return { onPayload };
 }
 
-/**
- * Create a StreamFn compatible with Agent that proxies provider base URLs when needed.
- */
 interface CodexBridgeCapabilityCacheEntry {
   checkedAt: number;
   supported: boolean;
@@ -580,7 +520,6 @@ async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<bool
 function normalizeOpenRouterModel(model: Model<Api>): Model<Api> {
   if (model.provider !== "openrouter" || !hasApi(model, "anthropic-messages")) return model;
   if (!model.compat?.supportsMidConvoEffort) return model;
-  // OpenRouter rejects the configuration_update beta; ordinary adaptive effort works.
   return { ...model, compat: { ...model.compat, supportsMidConvoEffort: false } };
 }
 
@@ -590,7 +529,6 @@ export function createOfficeStreamFn(
   runtimeProviderRoute?: RuntimeProviderRoute,
 ): OfficeStreamFn {
   return async (model: Model<Api>, context: TranscriptContext, options?: StreamOptions) => {
-    // A tool can finish after Stop; don't send its continuation request.
     if (options?.signal?.aborted) {
       const stream = createAssistantMessageEventStream();
       stream.push({
@@ -664,7 +602,6 @@ export function createOfficeStreamFn(
       return streamWithProviderFailure((requestOptions) => modelsRuntime.streamSimple(normalizedModel, context, requestOptions), effectiveOptions);
     }
 
-    // Guardrails: fail fast for known-bad proxy configs (e.g., HTTP proxy from HTTPS taskpane).
     const validated = validateOfficeProxyUrl(proxyUrl);
     let proxyTransport: OfficeProxyTransport | undefined;
     if (needsCodexBridge) {
@@ -681,8 +618,6 @@ export function createOfficeStreamFn(
     const proxiedOptions: StreamOptions | undefined = proxyTransport
       ? {
           ...effectiveOptions,
-          // Native Pi sessions use UUIDv7. ChatGPT's Codex router can assign an
-          // unavailable Luna rollout alias to older UUIDv4 session identifiers.
           sessionId: resolveCodexWebSocketBridgeSessionId(effectiveOptions?.sessionId),
           transport: "sse",
         }

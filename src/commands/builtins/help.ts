@@ -1,7 +1,3 @@
-/**
- * Builtin help / UX commands.
- */
-
 import type { SlashCommand } from "../types.js";
 import { openSettings } from "./overlays.js";
 import { t } from "../../language/index.js";

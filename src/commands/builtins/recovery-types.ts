@@ -1,8 +1,3 @@
-/**
- * Shared recovery checkpoint types, used by the Backups settings page,
- * recovery filtering helpers, and taskpane wiring.
- */
-
 export type RecoveryCheckpointToolName =
   | "write_cells"
   | "fill_formula"

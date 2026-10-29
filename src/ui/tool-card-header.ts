@@ -55,10 +55,6 @@ function renderChevron(expanded: boolean): TemplateResult {
   `;
 }
 
-/**
- * Header for a self-contained card (archive and summary cards) that toggles
- * its body in place and does not follow details mode.
- */
 export function renderCollapsibleToolCardHeader(
   state: ToolHeaderState,
   text: TemplateResult,

@@ -121,8 +121,6 @@ test("proxy behavior permits its reachability probe target", async (t) => {
   );
 });
 
-// Static contract: taskpane CSP is a shipped policy string; HTTP behavior cannot prove
-// that every provider origin remains declared in connect-src.
 test("static contract: taskpane CSP connect-src allows all web-search provider hosts", async () => {
   const connectTokens = await readTaskpaneConnectSrcTokens();
 

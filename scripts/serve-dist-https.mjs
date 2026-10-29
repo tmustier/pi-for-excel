@@ -1,16 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Serve the Vite production build (dist/) over HTTPS.
- *
- * Useful for Office add-in smoke tests where the manifest must load from HTTPS
- * but we want to exercise the *production* code path (import.meta.env.DEV === false).
- *
- * Requires mkcert-generated certs in the repo root:
- *   - cert.pem
- *   - key.pem
- */
-
 import https from "node:https";
 import fs from "node:fs";
 import path from "node:path";
@@ -63,7 +50,6 @@ function safeJoin(base, reqPath) {
   const cleaned = decoded.replace(/^\/+/, "");
   const full = path.resolve(base, cleaned);
 
-  // Prevent path traversal. String-prefix checks are insufficient (e.g. /dist2).
   const rel = path.relative(base, full);
   if (rel.startsWith("..") || path.isAbsolute(rel)) {
     throw new Error("Path traversal");
@@ -106,7 +92,6 @@ const server = https.createServer(
       res.setHeader("content-type", MIME[ext] || "application/octet-stream");
       console.log(`[serve-dist-https] ${req.method || "GET"} ${reqPath} -> 200`);
 
-      // Cache hashed assets aggressively, keep HTML uncached
       if (reqPath.startsWith("/assets/") && /-[A-Za-z0-9]{8,}\./.test(reqPath)) {
         res.setHeader("cache-control", "public, max-age=31536000, immutable");
       } else {

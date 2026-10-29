@@ -1,7 +1,3 @@
-/**
- * explain_formula — provide a concise natural-language explanation for a formula cell.
- */
-
 import { Type, type Static } from "typebox";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { cellAddress, excelRun, getRange, parseCell, parseRangeRef, qualifiedAddress } from "../excel/helpers.js";

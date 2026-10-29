@@ -1,11 +1,3 @@
-/**
- * First-party Lucide icon helpers.
- *
- * Replaces @mariozechner/mini-lit's `icon`/`iconDOM` (which sized icons via
- * Tailwind utility classes). We size via explicit SVG width/height attributes
- * so icons render correctly without any utility CSS. See docs/ui-ownership.md.
- */
-
 import { html, type TemplateResult } from "lit";
 import { unsafeSVG } from "lit/directives/unsafe-svg.js";
 import { createElement, type IconNode } from "lucide";
@@ -20,7 +12,6 @@ const SIZE_PX: Record<IconSize, number> = {
   xl: 32,
 };
 
-/** Create a sized Lucide SVG element for imperative DOM code. */
 export function iconDOM(lucideIcon: IconNode, size: IconSize = "md", className?: string): SVGElement {
   const px = SIZE_PX[size];
   const element = createElement(lucideIcon, {
@@ -31,7 +22,6 @@ export function iconDOM(lucideIcon: IconNode, size: IconSize = "md", className?:
   return element;
 }
 
-/** Create a sized Lucide icon template for Lit renders. */
 export function icon(lucideIcon: IconNode, size: IconSize = "md", className?: string): TemplateResult {
   return html`${unsafeSVG(iconDOM(lucideIcon, size, className).outerHTML)}`;
 }

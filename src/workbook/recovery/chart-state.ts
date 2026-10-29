@@ -1,5 +1,3 @@
-/** Chart-state capture/apply for workbook recovery snapshots. */
-
 import { excelRun } from "../../excel/helpers.js";
 import { runMutation } from "../../tools/mutation/run-mutation.js";
 import { cloneRecoveryChartState } from "./clone.js";
@@ -145,13 +143,6 @@ async function findChartByName(
   return match;
 }
 
-/**
- * Locate a chart by its stable Office.js id across all sheets. Rename-proof:
- * the id survives chart renames, so this never confuses the target with an
- * unrelated chart that reused its name. Throws when the host cannot load
- * chart ids; callers must fail safely rather than degrade to name matching
- * (name matching is reserved for legacy states with no captured id).
- */
 async function findChartById(
   context: Excel.RequestContext,
   chartId: string,
@@ -295,9 +286,6 @@ export async function applyChartState(
         try {
           target = await findChartById(context, targetState.chartId);
         } catch {
-          // The id was captured at create time, so a host that cannot read
-          // ids now is anomalous. Never degrade to mutable-name deletion —
-          // that is exactly the wrong-chart risk the id exists to prevent.
           throw new Error(
             `Could not verify the created chart's identity by id; nothing was deleted. ` +
             `Delete chart "${currentChartName}" manually if it still exists.`,
@@ -312,7 +300,6 @@ export async function applyChartState(
         return { state: null, address };
       }
 
-      // Legacy states without a captured id: unique-name match only.
       const target = await findChartByNameOrNull(context, currentChartName, currentSheetName);
       if (target) {
         target.chart.delete();
@@ -335,8 +322,6 @@ export async function applyChartState(
     applyChartPresentState(target.chart, targetState);
     await context.sync();
 
-    // The restore may have renamed the chart back to targetState.name, so the
-    // inverse snapshot must be addressed at the post-restore identity.
     return {
       state: cloneRecoveryChartState(currentState),
       address: chartAddress(currentState.sheetName, targetState.name),

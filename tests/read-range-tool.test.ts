@@ -11,16 +11,13 @@ type Cell = { value: string | number | boolean; formula?: string; r1c1?: string;
 
 interface SheetFixture {
   name: string;
-  /** Sparse cells by A1 address. */
   cells?: Record<string, Cell>;
-  /** Dense generator for big sheets: value at (rowIndex, columnIndex), 0-based. */
   dense?: { rows: number; columns: number; value: (row: number, column: number) => string | number };
   protected?: boolean;
   merged?: string;
   hiddenRows?: number[];
 }
 
-/** Excel on the web refuses a response this big; one load of more cells throws. */
 const MAX_CELLS_PER_LOAD = 50_000;
 const SHEET_ROWS = 1_048_576;
 const SHEET_COLUMNS = 16_384;
@@ -241,7 +238,6 @@ void test("sheet state, formulas and errors come before the table and survive ou
   }
   cells.C400 = { value: "#DIV/0!", formula: "=1/0" };
 
-  // Truncation at 200 lines, the floor for small-window models.
   const tool = applyToolOutputTruncation([createReadRangeTool()], { limits: { maxLines: 200, maxBytes: 8 * 1024 } })[0];
   assert.ok(tool);
   const text = await readRange([{
@@ -257,7 +253,6 @@ void test("sheet state, formulas and errors come before the table and survive ou
   assert.match(text, /Sheet is protected: every cell here is locked/u);
   assert.match(text, /Hidden rows \(filtered or hidden\): 3-5, 9/u);
   assert.match(text, /Merged: A1:B1/u);
-  // A filled block is one entry, not 399.
   assert.match(text, /\*\*Formulas:\*\* B2:B400: =A2\*2 \(filled, 399 cells\), C400: =1\/0/u);
   assert.match(text, /\*\*Errors:\*\* C400=#DIV\/0!/u);
   assert.ok(text.indexOf("**Errors:**") < text.indexOf("| --- |"), "summaries precede the table");
@@ -274,12 +269,10 @@ void test("reads flag numbers stored as text and give exact column sums for long
       A5: { value: "#1 priority" },
     },
   }], { range: "Prices!A1:A5" });
-  // "12" is a number SUM/AVERAGE would skip; a zero-padded code and a label are ordinary text.
   assert.match(text, /Numbers stored as text .*: A3 "12"$/mu);
   assert.doesNotMatch(text, /A4 "00123"|A5 "#1/u);
   assert.doesNotMatch(text, /Column sums/u);
 
-  // Qty cycles 1..17 over IDs 1..999 (the verifier's Big sheet); 0.1 steps check float noise is rounded.
   const page = await readRange([{
     name: "Big",
     dense: {
@@ -288,6 +281,5 @@ void test("reads flag numbers stored as text and give exact column sums for long
       value: (row, column) => (row === 0 ? `H${column}` : column === 0 ? (row % 17) + 1 : column === 1 ? `Item ${row}` : row * 0.1),
     },
   }], { range: "Big!A1:C500", mode: "csv" });
-  // Sum of (i % 17) + 1 for i = 1..499 and of i / 10, computed by hand: 4,464 and 12,475.
   assert.match(page, /Column sums on this page \(numbers only\): A 4,464 \(499 numbers\), C 12,475 \(499 numbers\)\./u);
 });

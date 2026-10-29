@@ -217,7 +217,7 @@ void test("credential restore adds no duplicate fast refresh and one late refres
   await awaitCredentialRestoreForStartup(Promise.resolve(), 50, () => {
     refreshCount += 1;
   });
-  refreshCount += 1; // The normal provider lookup performed by taskpane startup.
+  refreshCount += 1;
   assert.equal(refreshCount, 1);
 
   refreshCount = 0;
@@ -231,7 +231,7 @@ void test("credential restore adds no duplicate fast refresh and one late refres
     }),
     /timed out/,
   );
-  refreshCount += 1; // First-paint provider lookup proceeds after the timeout.
+  refreshCount += 1;
   resolveRestore?.();
   await delayedRestore;
   await Promise.resolve();
@@ -280,7 +280,6 @@ void test("awaitWithTimeout rejects with label on timeout", async () => {
       "slow task",
       5,
       new Promise<string>(() => {
-        // Never resolves; timeout controls completion.
       }),
     ),
     /slow task timed out after 5ms/,

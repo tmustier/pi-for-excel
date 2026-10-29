@@ -1,10 +1,3 @@
-/**
- * Session ↔ workbook association.
- *
- * `SessionsStore` metadata schema is fixed (pi-web-ui), so we store the mapping
- * in `SettingsStore` using a dedicated key prefix.
- */
-
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";
@@ -26,12 +19,6 @@ export async function getSessionWorkbookId(
   return typeof value === "string" && value.trim().length > 0 ? value : null;
 }
 
-/**
- * Link a session to a workbook.
- *
- * Does not overwrite an existing link (so resuming an old session in a different
- * workbook won't accidentally "move" it).
- */
 export async function linkSessionToWorkbook(
   settings: SettingsWriter,
   sessionId: string,
@@ -43,10 +30,6 @@ export async function linkSessionToWorkbook(
   await settings.set(key, workbookId);
 }
 
-/**
- * Move a session's link from one workbook identity to another, when the same
- * document got a new identity (Save As). A session linked elsewhere is left alone.
- */
 export async function moveSessionToWorkbook(
   settings: SettingsWriter,
   sessionId: string,
@@ -80,13 +63,6 @@ export interface SessionWorkbookPartition {
   foreignSessionIds: string[];
 }
 
-/**
- * Partition session ids by workbook association.
- *
- * - `matchingSessionIds`: linked to this workbook
- * - `unlinkedSessionIds`: legacy/no mapping
- * - `foreignSessionIds`: linked to another workbook
- */
 export async function partitionSessionIdsByWorkbook(
   settings: SettingsWriter,
   sessionIds: string[],

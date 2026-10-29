@@ -1,10 +1,3 @@
-/**
- * Proxy status detection.
- *
- * Periodically checks whether the local HTTPS proxy is reachable and
- * dispatches a custom event so UI surfaces can react.
- */
-
 import {
   DEFAULT_PROXY_URL,
   isLoopbackHostname,
@@ -26,11 +19,6 @@ export function getProxyState(): ProxyState {
   return currentState;
 }
 
-/**
- * True when the last check could not reach a localhost proxy because the
- * browser forbids this frame from reaching the local device at all, so
- * running the proxy cannot help.
- */
 export function isProxyBlockedByBrowser(): boolean {
   return blockedByBrowser;
 }
@@ -48,7 +36,6 @@ function isLoopbackBlockedByFramePolicy(proxyUrl: string): boolean {
   const policy = (document as Document & {
     featurePolicy?: { features(): string[]; allowsFeature(feature: string): boolean };
   }).featurePolicy;
-  // Browsers without Local Network Access do not know the feature and allow the request.
   if (!policy || !policy.features().includes("loopback-network")) return false;
   return !policy.allowsFeature("loopback-network");
 }
@@ -58,9 +45,6 @@ async function probeProxy(proxyUrl: string): Promise<boolean> {
   const timeout = setTimeout(() => controller.abort(), CHECK_TIMEOUT_MS);
 
   try {
-    // Health never proxies upstream data and includes CORS headers for allowed
-    // add-in origins, so status detection does not depend on target allowlists
-    // or a browser accepting an error response body from `/`.
     const url = `${normalizeProxyUrl(proxyUrl)}/healthz`;
     const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
     return resp.ok;
@@ -75,13 +59,6 @@ function dispatchProxyStateChanged(state: ProxyState): void {
   document.dispatchEvent(new CustomEvent("pi:proxy-state-changed", { detail: { state } }));
 }
 
-/**
- * Probe the proxy and dispatch the state.
- *
- * `force` dispatches even when the state is unchanged. Use it after the proxy
- * settings change, so surfaces that also depend on `proxy.enabled` (such as
- * the proxy banner) re-evaluate straight away.
- */
 export async function checkProxyOnce(
   settings: SettingsReader,
   opts: { force?: boolean } = {},
@@ -94,7 +71,6 @@ export async function checkProxyOnce(
       proxyUrl = stored;
     }
   } catch {
-    // use default
   }
 
   const reachable = await probeProxy(proxyUrl);

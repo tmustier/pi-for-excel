@@ -234,7 +234,6 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
               errorMessage,
             );
           } catch {
-            // best-effort redaction only; fallback to original message below.
           }
 
           try {
@@ -242,7 +241,6 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
               message: errorMessage,
             });
           } catch {
-            // best-effort status update only
           }
 
           const refreshedSnapshot = await connectionManager.getSnapshot(authFailureSnapshot.connectionId);

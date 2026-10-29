@@ -30,7 +30,6 @@ void test("the dev bridge configures MCP only in the active chat and rejects inv
     const result = new Promise<string>((resolve) => { receive = resolve; });
     nextCommand = { id: "configure", type: "configureIntegration", payload };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    // agent-default (not a user rule): 2026-10-17 — fail a stalled test bridge after 10 seconds.
     const timeout = new Promise<never>((_resolve, reject) => {
       timer = setTimeout(() => reject(new Error("Integration bridge command timed out")), 10_000);
     });

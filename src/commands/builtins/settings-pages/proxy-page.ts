@@ -1,7 +1,3 @@
-/**
- * Proxy page — local proxy helper toggle, URL, and live status.
- */
-
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import {
@@ -124,13 +120,11 @@ export function createProxyPage(): SettingsShellPage {
       const statusHost = document.createElement("div");
       statusHost.className = "pi-settings-proxy-status";
 
-      // Re-check right after a change instead of showing the previous URL's result until the next poll.
       let recheckToken = 0;
       const recheckProxy = async (): Promise<void> => {
         const token = ++recheckToken;
         proxyState = "unknown";
         updateStatus();
-        // Forced, so the notice-area proxy banner re-reads the settings (#793, PROXY-07).
         const state = await checkProxyOnce(settingsStore, { force: true });
         if (token !== recheckToken) return;
         proxyState = state;

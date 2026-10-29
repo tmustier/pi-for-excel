@@ -1,24 +1,16 @@
 #!/usr/bin/env bash
-# Token-efficient bridge helpers for observing/driving Pi-for-Excel taskpanes.
-# Usage:
-#   bridge.sh clients                          # list live clients (compact)
-#   bridge.sh status <clientId>                # one-line runtime status
-#   bridge.sh watch <clientId> [timeout_s]     # poll until idle; prints only state changes
-#   bridge.sh cmd <clientId> <type> <payloadJson> [timeoutMs]   # raw command, JSON out
 set -euo pipefail
 
 BRIDGE_URL="${PI_BRIDGE_URL:-https://localhost:3157}"
 TOKEN_FILE="${PI_BRIDGE_TOKEN_FILE:-/tmp/pi-background-verify-token.evalrun}"
 
-post() { # type clientId payload timeoutMs
+post() {
   local ms="${4:-15000}"
   case "$ms" in (*[!0-9]*|'') echo "bridge.sh: timeoutMs must be an integer, got '$ms'" >&2; return 1;; esac
   if [ ! -r "$TOKEN_FILE" ]; then
     echo "bridge.sh: token file not readable: $TOKEN_FILE (is the bridge server running?)" >&2
     return 1
   fi
-  # Build the body with a real JSON encoder: token/type/clientId are
-  # escaped, payload must itself parse as JSON (fail early otherwise).
   BRIDGE_TYPE="$1" BRIDGE_CLIENT="$2" BRIDGE_PAYLOAD="$3" BRIDGE_MS="$ms" \
   TOKEN_FILE="$TOKEN_FILE" python3 -c '
 import json, os, sys

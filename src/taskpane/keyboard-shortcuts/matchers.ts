@@ -1,7 +1,3 @@
-/**
- * Pure keyboard shortcut matchers + predicate helpers.
- */
-
 export interface TabShortcutEventLike {
   key: string;
   code?: string;

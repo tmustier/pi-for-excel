@@ -2,12 +2,6 @@ function isExtensionsStorePayloadShape(value: unknown): value is Record<string, 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Persisted extension registry (SettingsStore-backed).
- *
- * We keep this as a versioned document so migrations remain explicit.
- */
-
 import {
   deriveStoredExtensionTrust,
   getDefaultPermissionsForTrust,
@@ -277,7 +271,6 @@ export async function saveStoredExtensions(
   await settings.set(EXTENSIONS_REGISTRY_STORAGE_KEY, createRegistryDocument(items));
 }
 
-/** Read before loading defaults: only an intact registry can prove an extension was uninstalled. */
 export async function readIntactStoredExtensionIds(
   settings: SettingsWriter,
 ): Promise<string[] | null> {
@@ -295,13 +288,6 @@ export async function readIntactStoredExtensionIds(
   return ids;
 }
 
-/**
- * Load stored extensions from SettingsStore.
- *
- * If nothing is stored (or stored data is invalid), we seed defaults (Snake).
- * Legacy `extensions.registry.v1` data is migrated to `extensions.registry.v2`.
- * Storage read failures propagate so defaults cannot replace an unread registry.
- */
 export async function loadStoredExtensions(settings: SettingsWriter): Promise<StoredExtensionEntry[]> {
   const normalizedCurrent = normalizeDocument(await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));
 

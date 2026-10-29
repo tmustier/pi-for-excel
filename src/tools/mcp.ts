@@ -2,10 +2,6 @@ function isToolsMcpPayloadShape(value: unknown): value is Record<string, unknown
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * mcp — Model Context Protocol gateway for configured HTTP servers.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 import { Value } from "typebox/value";
@@ -101,7 +97,6 @@ export interface McpGatewayDetails {
   proxyBaseUrl?: string;
   resultPreview?: string;
   error?: string;
-  /** `true` when the failure is due to the local CORS proxy being unreachable. */
   proxyDown?: boolean;
 }
 
@@ -369,7 +364,6 @@ function matchesConnection(
     && connection.proxyBaseUrl === proxyBaseUrl;
 }
 
-/** One caller's cancellation must not abort another caller's shared handshake. */
 async function waitForServerTools(
   promise: Promise<ServerToolList>,
   signal: AbortSignal | undefined,
@@ -405,7 +399,6 @@ export function createMcpTool(
       session,
       timeoutMs: MCP_TIMEOUT_MS,
     }));
-    // Each request has a bounded lifetime; waiters cancel independently.
     const signal = undefined;
     await callJsonRpc({
       server,

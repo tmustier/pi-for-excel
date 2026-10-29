@@ -1,16 +1,9 @@
-/* ═══════════════════════════════════════════════════════
-   11. MESSAGE LAYOUT
-   First-party message components (src/ui/messages/) at sidebar width.
-   ═══════════════════════════════════════════════════════ */
-
-/* Message list — vertical stack */
 .pi-message-list {
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-/* User message — white card, right-aligned */
 .pi-user-row {
   display: flex;
   justify-content: flex-end;
@@ -28,7 +21,6 @@
   margin-left: var(--pill-inset);
 }
 
-/* Attachments strip inside a user message */
 .pi-user-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -69,7 +61,6 @@
 
 assistant-message { margin-right: var(--pill-inset); }
 
-/* Assistant message body — ordered text/thinking/tool parts */
 .pi-assistant-body {
   display: flex;
   flex-direction: column;
@@ -104,7 +95,6 @@ assistant-message { margin-right: var(--pill-inset); }
   }
 }
 
-/* Assistant error row */
 .pi-assistant-error {
   margin: 12px 16px 0;
   padding: 12px;
@@ -116,18 +106,9 @@ assistant-message { margin-right: var(--pill-inset); }
   overflow-wrap: anywhere;
 }
 
-/* Indent prose so it aligns with pill header text. */
 .pi-assistant-body > markdown-block {
   margin-left: var(--pill-text-indent);
 }
-
-/* ── Markdown heading scale (sidebar-appropriate) ───────────── */
-/*
- * Target `markdown-block h1` (stable custom-element tag). This always
- * matches regardless of rendering timing, and also covers headings inside
- * thinking blocks and tool cards without needing separate overrides
- * (those have their own more-specific rules if needed).
- */
 
 markdown-block h1 {
   font-size: var(--text-lg);
@@ -168,8 +149,6 @@ markdown-block h6:first-child {
   margin-top: 0;
 }
 
-/* Horizontal gutter for custom message renderers (archived/compact cards,
-   sidebar-rendered rows). Replaces the old Tailwind px-4. */
 .pi-message-gutter {
   padding-inline: 16px;
 }

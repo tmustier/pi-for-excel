@@ -1,18 +1,8 @@
-/**
- * Shared provider login row builder — used by both welcome screen and /login command.
- *
- * Renders an inline expandable row with:
- * - OAuth button (for providers that support it)
- * - "or enter API key" divider
- * - API key input + Save button
- */
-
 import { getAppStorage } from "../storage/local/app-storage.js";
 import { checkProviderApiKey } from "../auth/api-key-check.js";
 import { showToast } from "./toast.js";
 import { isMacPlatform, isWindowsPlatform } from "../utils/platform.js";
 
-/** Where the user runs the proxy helper, named for their platform. */
 function terminalAppName(): string {
   if (isMacPlatform()) return t("platform.terminal.mac");
   if (isWindowsPlatform()) return t("platform.terminal.windows");
@@ -38,10 +28,6 @@ import { escapeAttr, escapeHtml, setSafeInnerHTML } from "../utils/html.js";
 import { t } from "../language/index.js";
 import { filterProvidersByAllowlist, resolveAllowedProviderIds } from "./provider-allowlist.js";
 
-/**
- * Quick reachability check against the configured proxy URL.
- * Returns true if the proxy is enabled and responding.
- */
 async function isProxyReachable(): Promise<boolean> {
   try {
     const storage = getAppStorage();
@@ -56,13 +42,6 @@ async function isProxyReachable(): Promise<boolean> {
   }
 }
 
-/**
- * Show a blocking dialog explaining the proxy is needed, with
- * a copy-able terminal command and retry / cancel buttons.
- *
- * Resolves `true` if the user retried and proxy is now reachable.
- * Resolves `false` if the user cancelled.
- */
 function showProxyGateDialog(): Promise<boolean> {
   return new Promise((resolve) => {
     closeOverlayById(PROXY_GATE_OVERLAY_ID);
@@ -153,7 +132,6 @@ function showProxyGateDialog(): Promise<boolean> {
       retryBtn.style.opacity = "0.7";
 
       void (async () => {
-        // Auto-enable the proxy setting so the fetch interceptor will route through it.
         try {
           const storage = getAppStorage();
           const url = await storage.settings.get("proxy.url");
@@ -168,7 +146,6 @@ function showProxyGateDialog(): Promise<boolean> {
             return;
           }
         } catch {
-          // fall through
         }
 
         retryBtn.textContent = t("provider.proxy_gate.retry");
@@ -220,36 +197,27 @@ const OAUTH_CALLBACK_CAPTURE_IDS = new Set([
 
 export interface ProviderDef {
   id: string;
-  label: string;
+  brand: string;
   oauth?: string;
   desc?: string;
 }
 
 export const ALL_PROVIDERS: ProviderDef[] = [
-  // No-helper API key options first; subscription flows remain available below.
-  { id: "openai", label: /* brand */ "OpenAI (API)", desc: "provider.desc.api_key" },
-  { id: "google", label: /* brand */ "Google Gemini (API)", desc: "provider.desc.api_key" },
-  { id: "deepseek", label: /* brand */ "DeepSeek" },
-  { id: "mistral", label: /* brand */ "Mistral" },
-  { id: "groq", label: /* brand */ "Groq" },
-  { id: "xai", label: /* brand */ "xAI / Grok" },
-  // Only list flows that are supported in-browser (PKCE with proxy-assisted or manual callback handling).
-  // desc holds a locale key (resolved via t() at render time in buildProviderRow).
-  { id: "anthropic",          label: /* brand */ "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
-  { id: "openai-codex",       label: /* brand */ "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
-  { id: "google-gemini-cli",  label: /* brand */ "Google Code Assist",       oauth: "google-gemini-cli",  desc: "provider.desc.gemini_account" },
-  { id: "google-antigravity", label: /* brand */ "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
-  { id: "github-copilot",     label: /* brand */ "GitHub Copilot",           oauth: "github-copilot" },
+  { id: "openai", brand: "OpenAI (API)", desc: "provider.desc.api_key" },
+  { id: "google", brand: "Google Gemini (API)", desc: "provider.desc.api_key" },
+  { id: "deepseek", brand: "DeepSeek" },
+  { id: "mistral", brand: "Mistral" },
+  { id: "groq", brand: "Groq" },
+  { id: "xai", brand: "xAI / Grok" },
+  { id: "anthropic",          brand: "Anthropic",                oauth: "anthropic",          desc: "provider.desc.claude" },
+  { id: "openai-codex",       brand: "OpenAI (ChatGPT)",         oauth: "openai-codex",       desc: "provider.desc.openai_sub" },
+  { id: "google-gemini-cli",  brand: "Google Code Assist",       oauth: "google-gemini-cli",  desc: "provider.desc.gemini_account" },
+  { id: "google-antigravity", brand: "Google Antigravity",       oauth: "google-antigravity", desc: "provider.desc.antigravity" },
+  { id: "github-copilot",     brand: "GitHub Copilot",           oauth: "github-copilot" },
 
-  // Bedrock requires AWS credentials rather than a browser API key.
-  { id: "amazon-bedrock",     label: /* brand */ "Amazon Bedrock" },
+  { id: "amazon-bedrock",     brand: "Amazon Bedrock" },
 ];
 
-/**
- * Providers to show in connect UIs. Equals ALL_PROVIDERS unless the build
- * sets VITE_PI_ALLOWED_PROVIDERS (org deployments — see docs/central-proxy.md).
- * UI-level filter only; enforcement lives at the proxy/network layer.
- */
 export const VISIBLE_PROVIDERS: ProviderDef[] = filterProvidersByAllowlist(
   ALL_PROVIDERS,
   resolveAllowedProviderIds(
@@ -272,17 +240,14 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
   const value = input.trim();
   if (!value) return value;
 
-  // Accept full redirect URL (or any URL with code/state query params)
   try {
     const url = new URL(value);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     if (code) return state ? `${code}#${state}` : code;
   } catch {
-    // ignore
   }
 
-  // Accept query-string style pastes (code=...&state=...)
   if (value.includes("code=")) {
     try {
       const params = new URLSearchParams(value.startsWith("?") ? value.slice(1) : value);
@@ -290,11 +255,9 @@ function normalizeAnthropicAuthorizationInput(input: string): string {
       const state = params.get("state");
       if (code) return state ? `${code}#${state}` : code;
     } catch {
-      // ignore
     }
   }
 
-  // Accept whitespace-separated values (code state)
   if (!value.includes("#")) {
     const parts = value.split(/\s+/).filter(Boolean);
     const [code, state] = parts;
@@ -338,14 +301,11 @@ function normalizeApiKeyForProvider(
   let key = raw.trim();
   if (!key) return { ok: false, error: t("provider.error.empty_key") };
 
-  // Common copy/paste format: "Bearer <token>"
   if (/^bearer\s+/i.test(key)) {
     key = key.replace(/^bearer\s+/i, "").trim();
   }
 
   if (providerId === "anthropic") {
-    // Prevent saving Anthropic OAuth *authorization code* (code#state) as an API key.
-    // OAuth access tokens are sk-ant-oat*, API keys are sk-ant-api*.
     const looksLikeAuthCode = key.includes("#") && !key.includes("sk-ant-");
     if (looksLikeAuthCode) {
       return { ok: false, error: t("provider.error.oauth_code_as_key") };
@@ -367,11 +327,6 @@ function normalizeApiKeyForProvider(
   return { ok: true, key };
 }
 
-/**
- * Show a non-blocking dialog with a device-code login code (e.g. GitHub
- * Copilot). The login flow keeps polling in the background, so the dialog
- * only informs the user; the caller closes it when login settles.
- */
 function showDeviceCodeDialog(
   info: { userCode: string; verificationUri: string },
   onClose: () => void,
@@ -420,19 +375,12 @@ function showDeviceCodeDialog(
   helper.textContent = t("provider.device_code.helper", { uri: info.verificationUri });
 
   dialog.card.append(title, message, codeRow, helper);
-  // Closing the dialog (Escape, ×, backdrop) cancels the login instead of
-  // leaving it polling in the background.
   dialog.addCleanup(onClose);
   dialog.mount();
 
   return () => dialog.close();
 }
 
-/**
- * Show a select dialog for OAuth flows that need the user to pick between
- * options (pi-ai `OAuthLoginCallbacks.onSelect`). Resolves the selected
- * option id, or `undefined` if the user cancels.
- */
 function promptForSelect(opts: {
   title: string;
   message: string;
@@ -506,7 +454,6 @@ async function copyTextToClipboard(text: string): Promise<void> {
       await clipboard.writeText(text);
       return;
     } catch {
-      // Fall through to legacy copy for WebViews/insecure dev origins.
     }
   }
 
@@ -749,10 +696,6 @@ function promptForText(opts: {
   });
 }
 
-/**
- * Build a provider login row with inline OAuth + API key.
- * Manages expand/collapse via the shared expandedRef.
- */
 export function buildProviderRow(
   provider: ProviderDef,
   opts: {
@@ -760,7 +703,7 @@ export function buildProviderRow(
     expandedRef: { current: HTMLElement | null };
   } & ProviderRowCallbacks,
 ): HTMLElement {
-  const { id, label, oauth, desc } = provider;
+  const { id, brand: label, oauth, desc } = provider;
   const { isActive, expandedRef, onConnected, onDisconnected } = opts;
   const storage = getAppStorage();
 
@@ -839,7 +782,6 @@ export function buildProviderRow(
 
   setConnectedState(isActive);
 
-  // Toggle expand
   headerBtn.addEventListener("click", () => {
     if (expandedRef.current === detail) {
       detail.hidden = true;
@@ -852,7 +794,6 @@ export function buildProviderRow(
     }
   });
 
-  // OAuth login
   if (oauthBtn) {
     oauthBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -870,13 +811,9 @@ export function buildProviderRow(
             throw new Error(`OAuth provider not supported: ${oauth}`);
           }
 
-          // In production, OAuth providers need the local CORS proxy.
-          // Check reachability before sending the user through the browser login.
           if (!import.meta.env.DEV && OAUTH_IDS_NEEDING_PROXY.has(id)) {
             const reachable = await isProxyReachable();
             if (!reachable) {
-              // Where the browser blocks localhost (Excel on the web), the gate's
-              // "run the helper, then Retry" can never succeed: say why instead.
               await checkProxyOnce(getAppStorage().settings);
               if (isProxyBlockedByBrowser()) {
                 errorEl.textContent = t("proxy.blocked_by_browser");
@@ -887,7 +824,6 @@ export function buildProviderRow(
               }
               const userRetried = await showProxyGateDialog();
               if (!userRetried) {
-                // User cancelled — reset button and bail.
                 oauthBtn.textContent = t("provider.login_with", { label });
                 oauthBtn.style.opacity = "1";
                 return;
@@ -904,13 +840,10 @@ export function buildProviderRow(
             cred = await oauthProvider.login({
               onAuth: (info) => {
                 authUrlRef.current = info.url;
-                // Prevent the OAuth page from gaining a handle to the add-in window.
                 const w = window.open(info.url, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
               },
               onDeviceCode: (info) => {
-                // Device-code flows (e.g. GitHub Copilot): open the verification
-                // page and show the user code to enter there.
                 const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
                 deviceCodeDialogRef.close = showDeviceCodeDialog(info, () => loginAbort.abort());
@@ -960,7 +893,6 @@ export function buildProviderRow(
             });
           } catch (error) {
             if (loginAbort.signal.aborted) {
-              // The user closed the device-code dialog: the login is cancelled.
               oauthBtn.textContent = t("provider.login_with", { label });
               oauthBtn.style.opacity = "1";
               return;
@@ -979,12 +911,10 @@ export function buildProviderRow(
           expandedRef.current = null;
         } catch (err) {
           if (err instanceof PromptCancelledError) {
-            // User cancelled the prompt; leave UI unchanged.
             return;
           }
 
           const msg = getErrorMessage(err);
-          // The login flow's code itself could not load (GitHub Copilot's flow is not bundled for the browser).
           const flowUnavailable = err instanceof Error && isModuleLoadError(err);
           const isLikelyCors = !flowUnavailable && (
             isCorsError(err) ||
@@ -1019,7 +949,6 @@ export function buildProviderRow(
     });
   }
 
-  // Credential disconnect
   if (disconnectBtn) {
     disconnectBtn.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -1049,7 +978,6 @@ export function buildProviderRow(
     });
   }
 
-  // API key save
   saveBtn.addEventListener("click", () => { void (async () => {
     const rawKey = keyInput.value.trim();
     if (!rawKey) return;
@@ -1077,7 +1005,6 @@ export function buildProviderRow(
       await storage.providerKeys.set(id, key);
       setConnectedState(true);
       onConnected(row, id, label);
-      // After the caller's "connected" toast, so this caveat is the one left showing.
       if (check.status === "unverified") {
         showToast(t("provider.key_unverified", { label }), 4000);
       }
@@ -1094,7 +1021,6 @@ export function buildProviderRow(
     }
   })(); });
 
-  // Enter key in input
   keyInput.addEventListener("keydown", (e) => {
     if (e.key === "Enter") saveBtn.click();
   });

@@ -19,7 +19,6 @@ async function setContextUsage(page: Page, percent: number): Promise<void> {
   await page.evaluate((pct) => {
     const sidebar = document.querySelector("pi-sidebar");
     const agent = sidebar.agent;
-    // A 200k window: yellow above 120k (75% of the 160k soft warning budget), red above 160k.
     agent.state.model = { ...agent.state.model, contextWindow: 200_000 };
     const tokens = pct * 2_000;
     agent.state.messages.push({
@@ -74,7 +73,6 @@ void test("Shift+Tab moves focus; Ctrl+Alt+T cycles thinking only in the compose
     assert.notEqual(cycled, before);
     assert.equal(await input.evaluate((el) => el === document.activeElement), true);
 
-    // From Send, Shift+Tab moves focus back to the text field and leaves the level alone.
     await page.getByRole("button", { name: "Send" }).focus();
     await page.keyboard.press("Shift+Tab");
     assert.equal(await level(), cycled);
@@ -119,7 +117,6 @@ void test("the tab strip's left arrow reaches the first tab", async () => {
 void test("toasts sit above the composer dock as it grows", async () => {
   await withTaskpane({ width: 380, height: 622 }, async (page) => {
     const gap = await page.evaluate(async () => {
-      // A queue strip is inserted into the dock above the input, as queue-display.ts does.
       const inputArea = document.querySelector(".pi-input-area");
       const strip = document.createElement("div");
       strip.style.height = "60px";
@@ -147,7 +144,6 @@ void test("toasts never cover the open slash-command menu", async () => {
     await rows.first().waitFor({ state: "visible" });
     const result = await rows.evaluateAll((items) => {
       const menu = document.querySelector("#pi-command-menu")?.getBoundingClientRect();
-      // Only rows scrolled into the menu's own viewport can be clicked.
       const visible = items.filter((item) => {
         const box = item.getBoundingClientRect();
         return menu !== undefined && box.top >= menu.top && box.bottom <= menu.bottom;
@@ -162,7 +158,6 @@ void test("toasts never cover the open slash-command menu", async () => {
     assert.ok(result.visible > 0);
     assert.equal(result.covered, 0);
 
-    // A pointer click on a row runs it (hovering must not re-render the row away).
     await page.locator("pi-input textarea").fill("/shortcuts");
     await page.locator("#pi-command-menu .pi-cmd-item").first().click();
     await page.waitForFunction(() => document.querySelector("pi-input textarea")?.value === "", undefined, { timeout: 3_000 });
@@ -226,7 +221,6 @@ void test("a tab switch closes the thinking popover instead of leaving it bound 
     await page.locator(".pi-status-thinking").click();
     const popover = page.locator(".pi-status-popover--thinking");
     await popover.waitFor({ state: "visible" });
-    // Keyboard switch: no outside click to close the popover as a side effect.
     await page.keyboard.press("Control+Alt+ArrowLeft");
     await page.locator(".pi-session-tab").first().and(page.locator(".is-active")).waitFor({ state: "visible" });
     await popover.waitFor({ state: "detached", timeout: 2_000 });

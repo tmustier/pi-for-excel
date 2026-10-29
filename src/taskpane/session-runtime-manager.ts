@@ -1,7 +1,3 @@
-/**
- * UI-independent lifecycle owner for taskpane session runtimes.
- */
-
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
@@ -15,20 +11,14 @@ import type { TabState } from "./tab-state.js";
 
 export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
 
-/** How a run ended, as far as the user needs to know. */
 export type RuntimeRunOutcome = "finished" | "failed";
 
-/**
- * Marker for a background tab whose run ended while the user was elsewhere.
- * Cleared when the tab becomes active.
- */
 export type RuntimeAttention = "none" | RuntimeRunOutcome;
 
 export interface RuntimeRunSettledEvent {
   runtimeId: string;
   title: string;
   outcome: RuntimeRunOutcome;
-  /** Whether the tab was the active one when its run ended. */
   wasActive: boolean;
 }
 
@@ -37,7 +27,6 @@ export interface SessionRuntime {
   agent: Agent;
   actionQueue: ActionQueue;
   queueDisplay: QueueDisplay;
-  /** Draft, error banner and activity line of this tab. */
   tab: TabState;
   persistence: SessionPersistenceController;
   lockState: RuntimeLockState;
@@ -48,12 +37,7 @@ export interface SessionRuntime {
 export interface CreateRuntimeOptions {
   activate: boolean;
   autoRestoreLatest: boolean;
-  /** Reuse this session id (a tab restored from the saved layout). */
   sessionId?: string;
-  /**
-   * Default "Chat N" number to give the tab, e.g. the number it had before a
-   * reload or before it was closed. Ignored when another open tab has it.
-   */
   tabNumber?: number;
 }
 
@@ -78,10 +62,6 @@ export type RuntimeSnapshotListener = (snapshot: RuntimeLifecycleSnapshot) => vo
 export type SessionRuntimeFactory = (opts: CreateRuntimeOptions) => Promise<SessionRuntime>;
 export type ModelSelectionResult = { outcome: "missing" | "unchanged" | "updated" | "next_turn" };
 
-/**
- * Where a saved session should open. A session is open in at most one tab, so
- * either target switches to the tab that already shows it.
- */
 export type OpenSessionTarget =
   | { kind: "new_tab"; tabNumber?: number }
   | { kind: "resume" };
@@ -124,9 +104,7 @@ export class SessionRuntimeManager {
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
     warnCapabilityRefresh?: (error: unknown) => void;
-    /** Classify a run that just ended; `null` (e.g. the user stopped it) leaves no trace. */
     getRunOutcome?: (runtime: SessionRuntime) => RuntimeRunOutcome | null;
-    /** Called once per run, when the tab goes from busy to idle. */
     onRunSettled?: (event: RuntimeRunSettledEvent) => void;
   }) {
     this.createSessionRuntime = opts.createRuntime;
@@ -136,7 +114,6 @@ export class SessionRuntimeManager {
     this.onRunSettled = opts.onRunSettled ?? (() => {});
   }
 
-  /** Re-read runtime state, e.g. when an action queue finishes outside an agent event. */
   notifyRuntimeChanged(): void {
     this.emit();
   }
@@ -163,8 +140,6 @@ export class SessionRuntimeManager {
     const unsubscribePersistence = runtime.persistence.subscribe(() => {
       this.emit();
     });
-    // Compaction, retry waits and queued work change the busy dot without an
-    // agent event; draft keystrokes do not need a new snapshot.
     const isTabBusy = () => runtime.tab.busy || runtime.tab.activity !== null;
     let wasBusy = isTabBusy();
     const unsubscribeTab = runtime.tab.subscribe(() => {
@@ -185,10 +160,6 @@ export class SessionRuntimeManager {
     return runtime;
   }
 
-  /**
-   * The next number a new tab gets. Numbers are never reused while they are
-   * remembered, so a reload can seed this from the saved layout.
-   */
   getNextTabNumber(): number {
     return this.nextDefaultTabNumber;
   }
@@ -203,10 +174,6 @@ export class SessionRuntimeManager {
     return this.runtimeDefaultTabNumbers.get(runtimeId) ?? null;
   }
 
-  /**
-   * Opens a saved session. If any tab already shows it, that tab becomes
-   * active instead, so one session never backs two tabs.
-   */
   async openSession(sessionData: SessionData, target: OpenSessionTarget): Promise<OpenSessionResult> {
     const existing = this.findRuntimeBySessionId(sessionData.id);
     if (existing) {
@@ -321,8 +288,6 @@ export class SessionRuntimeManager {
     }
 
     const busy = isRuntimeBusy(runtime);
-    // Agent captures model and thinking once per run. Updating state changes the
-    // next run, not the model already streaming or continuing a tool batch.
     const thinkingLevel = clampThinkingLevel(args.nextModel, runtime.agent.state.thinkingLevel);
     runtime.agent.state.model = args.nextModel;
     runtime.agent.state.thinkingLevel = thinkingLevel;
@@ -336,8 +301,6 @@ export class SessionRuntimeManager {
     if (this.refreshPromise) return this.refreshPromise;
 
     const pass = this.runCapabilityRefreshes();
-    // A pass with no runtime to await has already finished and released the
-    // slot; holding its settled promise would swallow every later request.
     if (this.refreshPassRunning) this.refreshPromise = pass;
     return pass;
   }
@@ -422,9 +385,6 @@ export class SessionRuntimeManager {
         }
       }
     } finally {
-      // Release the in-flight slot before notifying listeners so a refresh
-      // requested from a snapshot listener starts a new pass instead of being
-      // coalesced into this finished one.
       this.refreshPromise = null;
       this.refreshPassRunning = false;
     }

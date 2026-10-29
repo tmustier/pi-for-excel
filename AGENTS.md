@@ -71,6 +71,10 @@ Notes for agents working in this repo.
 - Do not reintroduce blanket eager `setTools(...)` on refresh passes when extension tools exist; use fingerprint + extension tool revision semantics.
 - When changing context/tool/model wiring, validate against `docs/cache-observability-baselines.md` and record expected vs observed `prefixChangeReasons`.
 
+## Comments
+- Write none. The code says it; a comment survives only as a license header, a public API doc comment (`src/commands/extension-api-types.ts`), a functional directive, or a named behavior forced by an external platform/vendor/dependency we cannot change. When unsure, delete.
+- A surprise in our own code gets a refactor (rename, extract, narrow the type, add the test), not a comment. `npm run check:comment-burndown` ratchets per-file comment counts against `scripts/comment-burndown-baseline.json`. Full rule: `docs/coding-standards.md` → Comments.
+
 ## TypeScript policy
 - No `// @ts-ignore`.
 - If unavoidable: `// @ts-expect-error -- <reason>` with a real reason.

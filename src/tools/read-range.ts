@@ -1,17 +1,3 @@
-/**
- * read_range — Read cell values, formulas, and optionally formatting.
- *
- * Three modes:
- * - "compact" (default): Markdown table of displayed values. Token-efficient.
- * - "csv": Raw CSV values only. Analysis-friendly.
- * - "detailed": Formulas, number formats and comments as well.
- *
- * Reads are bounded: whole-column/row addresses and ranges larger than one
- * page are clipped to the sheet's used range and returned one page at a time,
- * with the exact range to read next. Summaries (sheet state, formulas,
- * errors) come before the table so output truncation only cuts the bulk.
- */
-
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
@@ -41,10 +27,6 @@ import { getAppStorage } from "../storage/local/app-storage.js";
 import type { ReadRangeCsvDetails } from "./tool-details.js";
 import { canSpill, collectRangeState, renderRangeState, type RangeState } from "./sheet-state.js";
 
-/**
- * Cells and rows returned per call. Compact mode costs roughly 8 bytes per
- * cell plus 10 per row, so a full page is about 25 KB, half the output limit.
- */
 const READ_RANGE_PAGE_CELLS = 2_500;
 const MAX_PAGE_ROWS = 500;
 const MAX_PAGE_COLUMNS = 100;
@@ -82,15 +64,12 @@ interface CommentSummary {
 interface ReadRangePage {
   sheetName: string;
   sheetSource: SheetSource;
-  /** The address as given, without the sheet. */
   requested: string;
-  /** Requested block after clipping to the used range; null when that leaves nothing. */
   target: CellBlock | null;
   clippedToUsedRange: boolean;
   page: CellBlock | null;
   values: CellValue[][];
   formulas: CellValue[][];
-  /** R1C1 formulas, to group filled formulas; empty in csv mode. */
   formulasR1C1: CellValue[][];
   numberFormats: string[][];
   text: string[][];
@@ -121,7 +100,6 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
     requested: resolved.address,
   };
 
-  // Whole columns/rows and anything bigger than a page only make sense where data is.
   const clip = WHOLE_LINE_PATTERN.test(resolved.address) || requested.rowCount * requested.columnCount > READ_RANGE_PAGE_CELLS;
   let target: CellBlock | null = requested;
   if (clip) {
@@ -148,7 +126,6 @@ async function loadPage(context: Excel.RequestContext, ref: string, mode: Mode):
     try {
       await context.sync();
     } catch (error) {
-      // Long text can exceed the host's response limit even within the cell budget.
       if (page.rowCount > 1 && isResponsePayloadLimitMessage(getErrorMessage(error))) {
         rowCount = Math.ceil(rowCount / 2);
         continue;
@@ -259,7 +236,6 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
             const conventions = await getResolvedConventions(getAppStorage().settings);
             resolvedLabels = buildResolvedFormatLabels(conventions);
           } catch {
-            // Ignore conventions lookup failures in read-only output.
           }
         }
         return formatTable(lines, result, result.page, mode, resolvedLabels);
@@ -273,7 +249,6 @@ export function createReadRangeTool(): AgentTool<typeof schema> {
   };
 }
 
-/** Header, sheet note, paging note and sheet-state notes: the lines truncation must not cut. */
 function renderPreamble(result: ReadRangePage): string[] {
   const lines: string[] = [];
   const { page, target } = result;
@@ -302,18 +277,11 @@ function renderPreamble(result: ReadRangePage): string[] {
   return lines;
 }
 
-/** Text that Excel would read as a number if typed: "12", "-3.5", "1,200", "40%". Codes with leading zeros ("00123") are left alone. */
 const NUMERIC_TEXT_PATTERN = /^[-+]?(?:\d{1,3}(?:,\d{3})+|0|[1-9]\d*)?(?:\.\d+)?%?$/u;
 const MAX_LISTED_TEXT_NUMBERS = 10;
-/** A page with at least this many numbers in one column gets the aggregate hint. */
 const AGGREGATE_HINT_MIN_NUMBERS = 50;
 const MAX_SUMMED_COLUMNS = 10;
 
-/**
- * Notes about the values themselves: numbers stored as text (SUM and AVERAGE
- * skip them, and the grid shows them like numbers), and, for long numeric
- * columns, that totals must be computed rather than added up by hand.
- */
 function renderValueNotes(values: CellValue[][], page: CellBlock): string[] {
   const lines: string[] = [];
   const textNumbers: string[] = [];
@@ -341,7 +309,6 @@ function renderValueNotes(values: CellValue[][], page: CellBlock): string[] {
     .slice(0, MAX_SUMMED_COLUMNS);
   if (longColumns.length > 0) {
     const sums = longColumns.map(([c, { count, sum }]) => {
-      // Round away float noise (0.1 + 0.2) without hiding real digits.
       const shown = Number(sum.toPrecision(12)).toLocaleString("en-US", { maximumFractionDigits: 10 });
       return `${colToLetter(page.columnIndex + c)} ${shown} (${count} numbers)`;
     });
@@ -403,7 +370,6 @@ function formatAsExcelMarkdownTable(values: string[][], page: CellBlock): string
   return formatAsMarkdownTable(rows);
 }
 
-/** Group a format's cells into per-column runs: "A2:A6, E2:E3, K2". */
 function formatCellRuns(cells: Array<{ row: number; col: number }>): string[] {
   const byColumn = new Map<number, number[]>();
   for (const { row, col } of cells) {
@@ -432,10 +398,6 @@ function formatCellRuns(cells: Array<{ row: number; col: number }>): string[] {
   return runs;
 }
 
-/**
- * Formula summary with filled blocks collapsed: cells in one column with the
- * same R1C1 formula in consecutive rows read "F2:F833: =C2*2 (filled, 832 cells)".
- */
 function summarizeFormulas(result: ReadRangePage, page: CellBlock): string[] {
   interface Run { col: number; startRow: number; endRow: number; formula: string; r1c1: string }
   const runs: Run[] = [];
@@ -548,8 +510,6 @@ function renderNumberFormats(
   }
   return lines;
 }
-
-/* ── CSV helpers (migrated from get-range-as-csv) ──────────────────── */
 
 function toCsvField(value: CellValue): string {
   if (value === null || value === undefined) return "";

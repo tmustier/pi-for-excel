@@ -7,7 +7,6 @@ import { createModifyStructureTool } from "../src/tools/modify-structure.ts";
 import { createWebSearchTool } from "../src/tools/web-search.ts";
 import { OfficeError } from "./fixtures/excel-write-host.ts";
 
-/** An Excel host whose structural edits fail with `failure`, as Excel on the web does on a protected sheet. */
 async function withFailingStructureHost<T>(failure: Error & { code: string }, action: () => Promise<T>): Promise<T> {
   let failNextSync = false;
   const sheet = {
@@ -249,9 +248,6 @@ void test("error-path matrix: a protected sheet is named as the reason, as a too
 });
 
 void test("error-path matrix: cell-edit mode tells the agent to ask the user to leave the cell", async () => {
-  // Shape of excelRun's ExcelCellEditModeError (#792) when nothing had reached Excel. A raw
-  // InvalidOperationInCellEditMode no longer reaches tools: excelRun retries and then wraps it,
-  // and in this fake the sheet load before the insert succeeds, which excelRun reports as applied.
   const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
     code: "excel_cell_edit_mode",
     waitedMs: 0,
@@ -269,7 +265,6 @@ void test("error-path matrix: cell-edit mode tells the agent to ask the user to 
 });
 
 void test("error-path matrix: cell-edit mode after an earlier step reached Excel does not claim nothing changed", async () => {
-  // Shape of excelRun's ExcelCellEditModeError (#792): it gives up without retrying once a sync succeeded.
   const gaveUp = Object.assign(new Error("Excel is in cell-edit mode…"), {
     code: "excel_cell_edit_mode",
     waitedMs: 0,

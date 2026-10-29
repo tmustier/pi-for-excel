@@ -1,28 +1,12 @@
-/**
- * Shared helpers for fullscreen overlays.
- *
- * Consolidates:
- * - single-instance toggle behavior by overlay id
- * - Escape handling
- * - backdrop-click close
- * - focus restoration after close
- */
-
 import { requestChatInputFocus } from "./input-focus.js";
 import { installOverlayEscapeClose } from "./overlay-escape.js";
 
 const overlayClosers = new WeakMap<HTMLElement, () => void>();
 
-/**
- * Register a close handler for an overlay element that is not built through
- * `createOverlayDialog` (e.g. the settings shell), so `closeOverlayById`
- * routes through its cleanup path instead of removing the node directly.
- */
 export function registerOverlayCloser(overlay: HTMLElement, close: () => void): void {
   overlayClosers.set(overlay, close);
 }
 
-/** Remove a previously registered overlay close handler. */
 export function unregisterOverlayCloser(overlay: HTMLElement): void {
   overlayClosers.delete(overlay);
 }
@@ -47,15 +31,7 @@ export interface OverlayDialogOptions {
   overlayId: string;
   cardClassName: string;
   closeOnBackdrop?: boolean;
-  /**
-   * Focus always returns to the element that opened the overlay when it is still
-   * on the page. When it is gone, `true` (default) falls back to the composer.
-   */
   restoreFocusOnClose?: boolean;
-  /**
-   * Called on Escape before the overlay closes. Return true when the dialog
-   * handled it (e.g. went back one level) so the overlay stays open.
-   */
   onEscape?: () => boolean;
   zIndex?: number;
 }
@@ -209,12 +185,10 @@ function isRendered(element: HTMLElement): boolean {
   return element.getClientRects().length > 0 && !element.closest("[hidden], [inert]");
 }
 
-/** Tabbable elements inside `root`, in DOM order, skipping hidden ones. */
 export function getTabbableElements(root: ParentNode): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(isRendered);
 }
 
-/** True while any modal overlay (Settings, a dialog, the welcome screen…) is open. */
 export function isModalOverlayOpen(): boolean {
   if (typeof document === "undefined") return false;
   return getTopmostModalOverlay() !== null;
@@ -240,25 +214,16 @@ function pickInitialFocus(card: HTMLElement): HTMLElement {
   );
   if (field) return field;
 
-  // Focus the card itself: screen readers announce the dialog, and the next Tab
-  // reaches the first control without anything being activated by accident.
   if (!card.hasAttribute("tabindex")) card.tabIndex = -1;
   return card;
 }
 
 export interface OverlayFocusHandle {
-  /** Move focus into the card. Call after the overlay is in the document. */
   focusInitial: () => void;
-  /** Return focus to the element that had it when the overlay opened. */
   restore: (fallbackToComposer: boolean) => void;
   dispose: () => void;
 }
 
-/**
- * Modal focus contract shared by every overlay: remember the opener, move focus
- * in, keep Tab/Shift+Tab inside the card while this overlay is topmost, and
- * hand focus back to the opener on close (or the composer when it is gone).
- */
 export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): OverlayFocusHandle {
   const activeElement = document.activeElement;
   const opener = activeElement instanceof HTMLElement && activeElement !== document.body ? activeElement : null;
@@ -270,9 +235,6 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
     const tabbables = getTabbableElements(card);
     const first = tabbables[0];
     const last = tabbables[tabbables.length - 1];
-    // Office on the web handles Tab itself from its own keydown listener and
-    // ignores defaultPrevented: with no next tabbable it exits the add-in
-    // frame. Every Tab the trap handles must stop there too.
     const handled = (target: HTMLElement): void => {
       event.preventDefault();
       event.stopPropagation();
@@ -284,8 +246,6 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
       return;
     }
 
-    // The trap moves focus itself for every Tab, wrapping at the ends. From
-    // the card (tabindex=-1) or anywhere outside the list, start at an end.
     const index = document.activeElement instanceof HTMLElement ? tabbables.indexOf(document.activeElement) : -1;
     if (index === -1) {
       handled(event.shiftKey ? last : first);
@@ -295,8 +255,6 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
     handled(tabbables[(index + step + tabbables.length) % tabbables.length] ?? first);
   };
 
-  // Focus that lands behind the backdrop (a composer refocusing itself, a click
-  // that slips through) is pulled back into the card. Toasts stay reachable.
   const onFocusIn = (event: FocusEvent) => {
     if (!isTopmost()) return;
     const target = event.target;
@@ -333,11 +291,6 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
   };
 }
 
-/**
- * Make the overlays already open inert while `overlay` is on top. WebKit exposes
- * only one aria-modal dialog to assistive technology, and it may pick an older one.
- * Returns the function that releases them.
- */
 export function coverOpenOverlays(overlay: HTMLElement): () => void {
   const covered = Array.from(document.body.children).filter(
     (element): element is HTMLElement => element instanceof HTMLElement
@@ -386,7 +339,6 @@ export function createOverlayDialog(options: OverlayDialogOptions): OverlayDialo
       try {
         cleanup();
       } catch {
-        // ignore cleanup errors
       }
     }
 

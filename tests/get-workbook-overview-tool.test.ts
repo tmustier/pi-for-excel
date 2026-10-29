@@ -5,7 +5,6 @@ import { createGetWorkbookOverviewTool } from "../src/tools/get-workbook-overvie
 
 interface SheetFixture {
   name: string;
-  /** Used range by zero-based indexes, with its rows of values. */
   used: { rowIndex: number; columnIndex: number; rows: Array<Array<string | number>> };
 }
 
@@ -34,7 +33,6 @@ function makeSheet(fixture: SheetFixture, position: number) {
           .map((values) => values.slice(column - columnIndex, column - columnIndex + count));
       },
     }),
-    // Row 1 of a sheet whose data starts lower down is empty.
     getRange: () => ({ getUsedRangeOrNullObject: () => nullObject }),
     tables: { items: [], load: () => undefined },
     charts: { count: 0, load: () => undefined },

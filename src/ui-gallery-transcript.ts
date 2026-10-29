@@ -1,17 +1,3 @@
-/**
- * UI Gallery — scripted live turn.
- *
- * Mounts the real <pi-sidebar>, a real pi-agent-core Agent and the real tool
- * renderers, fed by pi-ai's faux provider instead of a model. The turn
- * streams thinking, text and three parallel read_range calls, then a second
- * response with code fences. Tool calls finish when released: by timer in
- * "Play" mode, or by hand (`window.piTranscriptHarness.release(id)`) so
- * browser contracts can observe each state deterministically.
- *
- * No Office.js dependency; cell links fail here, which exercises the
- * failed-navigation path.
- */
-
 import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import {
   createFauxCore,
@@ -28,7 +14,6 @@ import "./ui/message-renderers.js";
 
 export const TRANSCRIPT_TOOL_CALL_IDS = ["read-1", "read-2", "read-3"] as const;
 
-/** Release delays used by the Play button (ms after the tool starts). */
 const PLAY_DELAYS_MS: Record<string, number> = {
   "read-1": 1000,
   "read-2": 1500,
@@ -63,9 +48,7 @@ function createGate(): Gate {
 export interface TranscriptHarness {
   readonly agent: Agent;
   readonly sidebar: PiSidebar;
-  /** Start the scripted turn. With `autoRelease`, tools finish on PLAY_DELAYS_MS. */
   start(options?: { autoRelease?: boolean }): Promise<void>;
-  /** Finish one tool call (manual mode). */
   release(toolCallId: string): void;
   reset(): void;
 }
@@ -113,8 +96,6 @@ export function mountTranscriptHarness(host: HTMLElement): TranscriptHarness {
   sidebar.agent = agent;
   host.appendChild(sidebar);
 
-  // Factories, so each response is stamped when it is requested, as a
-  // provider stamps it when it starts streaming.
   function script(): void {
     faux.setResponses([
       () => fauxAssistantMessage([

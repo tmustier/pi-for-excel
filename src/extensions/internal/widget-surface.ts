@@ -1,10 +1,3 @@
-/**
- * Shared host-side extension widget surface manager.
- *
- * Supports deterministic ordering, owner-scoped cleanup, and
- * optional placement metadata for Widget API v2.
- */
-
 export type ExtensionWidgetPlacement = "above-input" | "below-input";
 
 export interface ExtensionWidgetSpec {

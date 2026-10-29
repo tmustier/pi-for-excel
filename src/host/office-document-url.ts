@@ -15,9 +15,7 @@
  */
 
 export interface OfficeDocumentUrlSource {
-  /** `Office.context.document.url`, or `null` when unavailable. */
   readStaticUrl: () => string | null;
-  /** Resolves the live URL; rejects when the host reports an error. */
   readLiveUrl: () => Promise<string | null>;
   timeoutMs: number;
 }

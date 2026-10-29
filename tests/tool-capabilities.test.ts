@@ -63,7 +63,6 @@ void test("every core tool has a described row and humanized representative inpu
     );
   }
 
-  // Local-state tools behind a consent gate need a readable row too.
   for (const name of ["files", "extensions_manager"]) {
     assert.ok(isSupportedToolName(name), `${name} must have a described row`);
     assert.notEqual(humanizeToolInput(name, { action: "list" }), null);

@@ -1,7 +1,3 @@
-/**
- * Builtin command for the Files workspace overlay.
- */
-
 import type { SlashCommand } from "../types.js";
 import { t } from "../../language/index.js";
 

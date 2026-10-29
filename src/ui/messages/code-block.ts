@@ -1,16 +1,3 @@
-/**
- * <code-block> — first-party highlighted code block with copy button.
- *
- * Replaces @mariozechner/mini-lit's CodeBlock (docs/ui-ownership.md), keeping
- * the same tag name and light DOM. Two input modes:
- * - `.code` property with raw text (tool renderers, Lit templates)
- * - `code` attribute with base64 + `encoding="base64"` (emitted by
- *   <markdown-block>, which must pass code through an HTML attribute)
- *
- * Highlighting uses highlight.js core with the same language set mini-lit
- * registered, so bundle size does not regress.
- */
-
 import hljs from "highlight.js/lib/core";
 import bash from "highlight.js/lib/languages/bash";
 import css from "highlight.js/lib/languages/css";
@@ -91,7 +78,6 @@ export class CodeBlock extends LitElement {
         }, 1500);
       })
       .catch(() => {
-        // Clipboard unavailable — leave the label unchanged.
       });
   }
 

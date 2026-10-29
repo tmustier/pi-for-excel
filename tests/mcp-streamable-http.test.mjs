@@ -6,7 +6,6 @@ import { createMcpTool } from "../src/tools/mcp.ts";
 import { probeMcpServer } from "../src/commands/builtins/extensions-hub-mcp-probe.ts";
 import { startMcpServer } from "./fixtures/mcp-streamable-server.mjs";
 
-// agent-default (not a user rule): 2026-10-17 — bound deliberately unclosed-stream regressions.
 const TEST_TIMEOUT_MS = 3_000;
 const settings = { get: async () => undefined, set: async () => {}, delete: async () => {} };
 const config = (url) => ({ id: "shared-id", name: "fixture", url, enabled: true });
@@ -33,7 +32,6 @@ void test("gateway and probe finish batched SSE replies without waiting for EOF"
   assertOk(result);
   assert.match(result.content[0].text, /搜索🦊/);
   assert.deepEqual(await probeMcpServer(config(server.url), settings), { toolCount: 1, proxied: false });
-  // All five response streams should be cancelled by the client, not by fixture teardown.
   for (let i = 0; server.closedStreams < 5 && i < 100; i++) await delay(1);
   assert.equal(server.closedStreams, 5);
   assert.equal(server.openStreams, 0);

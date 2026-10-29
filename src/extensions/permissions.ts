@@ -2,12 +2,6 @@ function isExtensionsPermissionsPayloadShape(value: unknown): value is Record<st
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Extension trust + capability permissions.
- *
- * This module is storage/runtime-facing (no UI strings beyond short labels).
- */
-
 import { t } from "../language/index.js";
 import { classifyExtensionSource } from "../commands/extension-source-policy.js";
 

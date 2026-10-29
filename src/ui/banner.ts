@@ -1,12 +1,3 @@
-/**
- * Banners: a condition that stays true until it is fixed or acknowledged
- * (the last run failed, the proxy is down, the first-run disclosure).
- * See src/ui/README.md, "Notifications".
- *
- * Every banner lives in the notice area under the tab strip (`#pi-notices`),
- * most severe first, and can be dismissed. Banners never move focus.
- */
-
 import { t } from "../language/index.js";
 import { AlertTriangle, CircleX, Info, lucide } from "./lucide-icons.js";
 
@@ -15,27 +6,21 @@ export type BannerTone = "error" | "warning" | "info";
 export interface BannerAction {
   label: string;
   onClick: () => void;
-  /** Primary actions render as a filled button; others as text links. */
   primary?: boolean;
-  /** Disclosure state, omitted for actions that do not toggle details. */
   expanded?: boolean;
 }
 
 export interface BannerOptions {
-  /** One banner per id; showing an id again replaces it in place. */
   id: string;
   tone: BannerTone;
   message: string;
   actions?: BannerAction[];
-  /** Optional extra content under the message (e.g. expandable steps). */
   details?: HTMLElement;
-  /** Called after the user dismisses the banner with ×. Omit to hide ×. */
   onDismiss?: () => void;
 }
 
 export interface BannerHandle {
   root: HTMLElement;
-  /** Re-render the action row (labels and attributes). */
   setActions: (actions: BannerAction[]) => void;
 }
 
@@ -56,17 +41,14 @@ function renderActions(row: HTMLElement, actions: readonly BannerAction[]): void
     button.addEventListener("click", action.onClick);
     row.appendChild(button);
   }
-  // Updating a disclosure's label must not drop keyboard focus to the page.
   if (focusedIndex >= 0) row.querySelectorAll("button")[focusedIndex]?.focus({ preventScroll: true });
 }
 
-/** Build a banner element without mounting it. */
 export function createBanner(options: BannerOptions): BannerHandle {
   const root = document.createElement("section");
   root.className = `pi-banner pi-banner--${options.tone}`;
   root.dataset.bannerId = options.id;
   root.dataset.tone = options.tone;
-  // Errors interrupt; everything else waits for the user.
   root.setAttribute("role", options.tone === "error" ? "alert" : "status");
 
   const body = document.createElement("div");
@@ -110,7 +92,6 @@ export function createBanner(options: BannerOptions): BannerHandle {
   };
 }
 
-/** Insert `root` into the notice area, keeping banners ordered by severity. */
 export function mountBanner(root: HTMLElement): boolean {
   const area = document.getElementById("pi-notices");
   if (!area) return false;
@@ -134,7 +115,6 @@ export function mountBanner(root: HTMLElement): boolean {
   return true;
 }
 
-/** Show (or replace) a banner in the notice area. */
 export function showBanner(options: BannerOptions): BannerHandle | null {
   const handle = createBanner(options);
   return mountBanner(handle.root) ? handle : null;

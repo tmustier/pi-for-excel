@@ -10,7 +10,6 @@ interface SearchSheetFixture {
   address: string;
   values: unknown[][];
   formulas?: unknown[][];
-  /** Loads larger than this fail like Excel's response payload limit. */
   maxCellsPerLoad?: number;
 }
 
@@ -45,7 +44,6 @@ async function withSearchWorkbook<T>(
       getRangeByIndexes: (rowIndex: number, _columnIndex: number, rowCount: number, chunkColumns: number) => {
         const from = rowIndex - (start.row - 1);
         if (fixture.maxCellsPerLoad !== undefined && rowCount * chunkColumns > fixture.maxCellsPerLoad) {
-          // What Excel on the web throws when one load is too large.
           const error = new Error("The response payload size has exceeded the limit.");
           return {
             load: (_properties: string) => { pendingError = error; },
@@ -233,13 +231,11 @@ void test("search finds a match at the end of a sheet too large to load at once"
 
   const result = await withSearchWorkbook([
     { name: "Small", address: "Small!A1:A2", values: [["alpha"], ["beta"]] },
-    // A single load of this sheet fails, as one used-range load of a 200k-row sheet does in Excel.
     { name: "Big", address: "Big!A1:B30001", values, maxCellsPerLoad: 50_000 },
   ], () => createSearchWorkbookTool().execute("search-big-sheet", { query: "needle", context_rows: 1 }));
 
   const text = firstText(result);
   assert.match(text, /\*\*Big!B30001\*\*: needle at the end/u);
-  // Context spans a chunk boundary: the row above comes from the previous chunk's range.
   assert.match(text, /\| 30000 \| 30000 \| row 30000 \|/u);
 });
 

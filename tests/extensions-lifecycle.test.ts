@@ -162,8 +162,6 @@ void test("startup deletes stored connections of extensions that are no longer i
   const installedId = await firstPane.installFromModuleSpecifier("Model account", "./model-account.js");
   await connectionManager.updateSecretsFromHost(`${installedId}.account`, { apiKey: "installed-secret" });
 
-  // Storage as an earlier version left it: the same registry, a secret left by
-  // an old uninstall, and no record that the cleanup has run.
   const goneId = "ext.00000000-0000-4000-8000-000000000000";
   const upgraded = new MemorySettingsStore();
   await upgraded.set(EXTENSIONS_REGISTRY_STORAGE_KEY, await settings.get(EXTENSIONS_REGISTRY_STORAGE_KEY));

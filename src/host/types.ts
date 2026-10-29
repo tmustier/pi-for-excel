@@ -1,5 +1,3 @@
-/** Host abstraction types for Office, WPS, and browser/UI-test runtimes. */
-
 import type { SettingsStore } from "../storage/local/settings-store.js";
 
 import type { SessionWorkbookPartition } from "../workbook/session-association.js";
@@ -34,21 +32,13 @@ export interface SpreadsheetHost {
   readonly displayName: string;
   readonly sessionStorage: SpreadsheetHostSessionStorage;
 
-  /** Resolve when the host is ready enough for the taskpane to initialize. */
   whenReady(): Promise<SpreadsheetHostReadyInfo>;
 
-  /** Subscribe to a host-ready signal where the host supports one. */
   onReady(callback: SpreadsheetHostReadyCallback): () => void;
 
-  /** Privacy-preserving workbook identity. Never expose or persist raw document URLs. */
   getWorkbookContext(): Promise<WorkbookContext>;
 
-  /**
-   * Document-stored token for workbooks that have no path-derived identity yet.
-   * `null` when the host cannot store anything inside the document.
-   */
   readonly documentInstance: DocumentInstanceIdentity | null;
 
-  /** Host theme signal, if available. Returns null when unknown/unsupported. */
   resolveThemeDark(): boolean | null;
 }

@@ -1,18 +1,6 @@
-#!/usr/bin/env node
-/**
- * `unknown` burn-down ratchet.
- *
- * `unknown` is allowed only at the seam that decodes a raw external value;
- * the anti-slop `no-unknown-*` rules flag every parameter, return and alias
- * that lets it travel further. `src` had far too many when the
- * `DynamicValue` alias was deleted to enable those rules as errors, so this
- * check runs them as warnings and fails when the count rises above the
- * committed baseline. Lower the baseline whenever a change reduces the
- * count; never raise it.
- */
 import { spawnSync } from "node:child_process";
 
-const BASELINE = 417; // 2026-10-27: 352 no-unknown-parameters, 65 no-unknown-returns, 0 no-unknown-type-aliases
+const BASELINE = 417;
 
 const result = spawnSync(
   "npx",
@@ -32,7 +20,6 @@ if (jsonStart < 0) {
 }
 const report = JSON.parse(result.stdout.slice(jsonStart));
 const diagnostics = Array.isArray(report.diagnostics) ? report.diagnostics : [];
-// oxlint also reports its default rules; only the no-unknown-* rules count.
 const RULE_PATTERN = /^anti-slop\((no-unknown-[a-z-]+)\)$/;
 const perRule = new Map();
 let total = 0;

@@ -2,14 +2,12 @@ import type { ESTree, SourceCode } from "@oxlint/plugins";
 
 export type FunctionParameter = ESTree.ParamPattern;
 
-/** Return whether a type is or contains TypeScript's absorbing unknown top type. */
 export function containsUnknownType(type: ESTree.TSType): boolean {
 	if (type.type === "TSUnknownKeyword") return true;
 	if (type.type === "TSParenthesizedType") return containsUnknownType(type.typeAnnotation);
 	return type.type === "TSUnionType" && type.types.some(containsUnknownType);
 }
 
-/** Return the TypeScript annotation attached to a function parameter or its wrapped binding. */
 export function functionParameterTypeAnnotation(
 	parameter: FunctionParameter,
 ): ESTree.TSTypeAnnotation | null | undefined {
@@ -25,7 +23,6 @@ export function functionParameterTypeAnnotation(
 	return parameter.typeAnnotation;
 }
 
-/** Return only a function parameter's local binding, excluding its annotation and default value. */
 export function functionParameterBindingName(
 	parameter: FunctionParameter,
 	sourceCode: SourceCode,

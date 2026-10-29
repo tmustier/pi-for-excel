@@ -1,5 +1,3 @@
-/** Fail-fast wrappers for tools whose implementation is absent on a host. */
-
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { TSchema } from "typebox";
 
@@ -20,12 +18,6 @@ function unsupportedMessage(hostKind: SpreadsheetHostKind, toolName: string): st
   return `${toolName} is not supported on host '${hostKind}'.`;
 }
 
-/**
- * Typed error thrown when a tool has no implementation on the current host.
- *
- * Callers/tests/UI can distinguish "unsupported on this host" from an
- * implementation failure via `instanceof` or the stable `code` field.
- */
 export class UnsupportedHostToolError extends Error {
   readonly code = "unsupported_host_tool";
   readonly hostKind: SpreadsheetHostKind;

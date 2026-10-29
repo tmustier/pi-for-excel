@@ -63,7 +63,6 @@ void test("theme follows Office by default, permits persistent overrides, and ke
     await theme.selectOption("light");
     await page.waitForFunction(() => !document.documentElement.classList.contains("dark"));
     await theme.selectOption("office");
-    // Host snapshot is an external boundary; preference must track it, not OS theme.
     await page.evaluate(() => Reflect.set(window, "Office", {
       context: { officeTheme: { isDarkTheme: true }, host: "Excel" },
     }));

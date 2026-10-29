@@ -11,7 +11,6 @@ function moduleExportName(name: ESTree.ModuleExportName): string {
   return name.type === "Literal" ? String(name.value) : name.name;
 }
 
-/** Names exported through `export { a, b as c }` (local side) or `export default name`. */
 function namesExportedLater(program: ESTree.Program): Set<string> {
   const names = new Set<string>();
   for (const statement of program.body) {
@@ -25,7 +24,6 @@ function namesExportedLater(program: ESTree.Program): Set<string> {
   return names;
 }
 
-/** Exported top-level functions declare return types so public contracts read without re-inference. */
 export const exportedFunctionReturnTypesRule = defineRule({
   meta: {
     type: "suggestion",

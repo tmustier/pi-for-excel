@@ -40,7 +40,6 @@ function appendWrite(log: WorkbookRecoveryLog, address: string): Promise<unknown
 void test("two taskpanes sharing one store keep each other's backups", async () => {
   const store = createInMemorySettingsStore();
   const clock = { now: 1_700_000_000_000 };
-  // Both panes open (and list) before either writes, as two taskpanes do.
   const paneA = createLog(store, "url_sha256:book", clock, "a");
   const paneB = createLog(store, "url_sha256:book", clock, "b");
   assert.equal((await paneA.listForCurrentWorkbook()).length, 0);
@@ -100,7 +99,6 @@ void test("restore preview finds cells edited since Pi's change", async () => {
 
   assert.equal((await log.previewRestore("snap")).laterEdits, null);
 
-  // The user later changed C2 and cleared B3.
   current = [[1, "=B2*3"], ["", 4]];
   const preview = await log.previewRestore("snap");
   assert.equal(preview.at, 1_700_000_000_000);

@@ -1,7 +1,3 @@
-/**
- * Tool wrapper that routes mutating tool calls through the workbook coordinator.
- */
-
 import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 import { Value } from "typebox/value";
@@ -32,48 +28,30 @@ export interface WorkbookMutationEvent {
   revision: number;
 }
 
-/** When one of Pi's mutating tool calls held the workbook lock. */
 export interface WorkbookWriteWindow {
   toolCallId: string;
   toolName: string;
   startedAt: number;
-  /** `Infinity` while the call runs; set when it settles. */
   settledAt: number;
 }
 
 export interface WorkbookMutationObserver {
   onWriteCommitted?: (event: WorkbookMutationEvent) => void;
-  /**
-   * Every mutating call as it starts, committed or not (for telling Pi's edits
-   * from the user's). The wrapper sets `settledAt` on the same object when the
-   * call settles.
-   */
   onWriteStarted?: (window: WorkbookWriteWindow) => void;
 }
 
 export interface ToolApprovalRequest {
-  /** The call that asks, so the transcript can ask in its row. */
   toolCallId: string;
   executionMode: ExecutionMode;
-  /** Why this call asks: Confirm mode, or an action that always asks (see execution-policy). */
   reason: "confirm_mode" | "always" | "irreversible";
   toolName: string;
   params: unknown;
-  /** Aborts when the turn is stopped; the request should then be withdrawn. */
   signal?: AbortSignal;
-  /** Existing content the change replaces, when the tool could tell. */
   overwrites?: OverwrittenCells;
   unbackableCellCount?: number;
 }
 
-/**
- * A tool may check, before approval is asked, whether the call would be
- * refused anyway (write_cells: invalid input or overwrite protection). A
- * result ends the call: the user is not asked about a change that will not
- * happen. It runs as a workbook read; the tool checks again when it runs.
- */
 export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
-  /** Destructive tools inspect backup coverage even in Auto mode. */
   alwaysCheckBeforeApproval?: boolean;
   checkBeforeApproval?: (
     toolCallId: string,
@@ -81,17 +59,11 @@ export interface ApprovalPrecheck<TParameters extends TSchema, TDetails> {
   ) => Promise<ApprovalPrecheckResult<TDetails>>;
 }
 
-/** Non-empty cells a change would replace, so the approval can name them. */
 export interface OverwrittenCells {
   count: number;
-  /** A few of them, in reading order: address and current value or formula. */
   sample: Array<{ address: string; content: string }>;
 }
 
-/**
- * `refused`: the call ends with this result and nothing is asked.
- * `overwrites`: the call goes to approval, which names these cells.
- */
 export type ApprovalPrecheckResult<TDetails> =
   | { refused: AgentToolResult<TDetails> }
   | { overwrites: OverwrittenCells }
@@ -99,13 +71,7 @@ export type ApprovalPrecheckResult<TDetails> =
   | null;
 
 export interface WorkbookExecutionPolicy {
-  /** Default: yolo */
   getExecutionMode?: () => Promise<ExecutionMode>;
-  /**
-   * Asked before the call waits for the workbook lock, for calls that
-   * `getToolApprovalRequirement` says need approval in the current mode.
-   * Return `true` to proceed, `false` to decline.
-   */
   requestToolApproval?: (request: ToolApprovalRequest) => Promise<boolean>;
 }
 
@@ -125,16 +91,9 @@ function makeContext(args: {
 function throwIfAborted(signal: AbortSignal | undefined, mutation = false): void {
   if (!signal?.aborted) return;
 
-  // A mutation stopped here never reached Excel; say so, so the agent knows.
   throw new Error(mutation ? "Stopped before running; nothing changed in the workbook." : "Aborted");
 }
 
-/**
- * A mutation tool that checks Stop itself and says in its result what was
- * written before it stopped (write_cells, fill_formula). Other mutation tools
- * run as one Excel batch; when Stop comes while one runs, the wrapper adds
- * that its change stands.
- */
 export interface StopReporting {
   reportsStop?: true;
 }
@@ -148,19 +107,8 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
   return { ...result, content: [{ ...first, text: `${first.text}\n\n${STOPPED_AFTER_CHANGE_NOTE}` }, ...rest] };
 }
 
-/**
- * After Stop, how long a tool call may take to finish by itself before the
- * wrapper gives up on it. A write that finishes reports precisely what it
- * wrote (and its backup), so it gets long enough for a slow Excel on the web
- * batch; a hung Excel still ends the turn after this.
- */
 export const STOP_GRACE_MS: Readonly<Record<"read" | "write", number>> = { read: 500, write: 10_000 };
 
-/**
- * Settle a tool call promptly after Stop, even when Excel never answers, so
- * the workbook lock is released and the turn can end. The abandoned call may
- * still complete in Excel; the error says so.
- */
 function settleOnStop<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
@@ -187,14 +135,6 @@ function settleOnStop<T>(
   });
 }
 
-/**
- * Mutations started earlier in this tool set that have not finished. A model can
- * issue a write and a verifying read in one batch; the batch's calls start in
- * order but run concurrently, so without this a read can see the value from
- * before the write. Reads wait for mutations already started; mutations do not
- * wait for reads. Registration happens before the first `await` in `execute`,
- * so the order of the batch decides who waits.
- */
 type PendingMutations = Set<Promise<void>>;
 
 function wrapTool<TParameters extends TSchema, TDetails>(
@@ -244,8 +184,6 @@ function wrapTool<TParameters extends TSchema, TDetails>(
 
     throwIfAborted(signal, mode !== "read");
 
-    // Ask before waiting for the lock, so a pending approval never holds
-    // up other tabs' writes.
     let requirement = getToolApprovalRequirement(tool.name, params);
     const executionMode = requirement === "none"
       ? "yolo"
@@ -306,8 +244,6 @@ function wrapTool<TParameters extends TSchema, TDetails>(
           console.warn("[pi] Workbook write observer failed:", getErrorMessage(error));
         }
         try {
-          // A tool that reports its own Stop result is not cut short (#792 N-4):
-          // its per-batch excelRun timeout bounds how long it takes.
           const work = tool.execute(toolCallId, params, signal, onUpdate);
           return await (tool.reportsStop ? work : settleOnStop(work, signal, "write"));
         } finally {

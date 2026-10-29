@@ -1,4 +1,3 @@
-// Component-logic contracts only; this suite does not claim native browser behavior.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -46,12 +45,9 @@ void test("concurrent approvals queue instead of declining each other", async ()
     const second = requestApproval({ title: "Write D2", confirmLabel: "Allow" }).then((ok) => outcomes.push(`D2:${ok}`));
     await flushAsync();
 
-    // The second request neither replaced nor declined the first.
     assert.deepEqual(outcomes, []);
     assert.equal(onScreenTitle(), "Write D1");
-    // Nothing behind the question can be used until it is answered.
     assert.equal((composer as HTMLElement).inert, true);
-    // Announcements still reach screen readers.
     assert.notEqual((announcer as HTMLElement).inert, true);
 
     clickButton("Decline");
@@ -184,7 +180,6 @@ void test("a question about a call the transcript shows is asked in its row, and
     const dialogAsk = requestApproval({ title: "Write D2", toolCallId: "call-2", confirmLabel: "Write" }).then((ok) => outcomes.push(`D2:${ok}`));
     await flushAsync();
 
-    // The shown call asks in the transcript; the other one asks in a dialog.
     assert.deepEqual(getInlineApprovals().map((approval) => approval.toolCallId), ["call-1"]);
     assert.equal(changes, 1);
     assert.equal(onScreenTitle(), "Write D2");
@@ -198,7 +193,6 @@ void test("a question about a call the transcript shows is asked in its row, and
     await Promise.all([inlineAsk, dialogAsk]);
     assert.deepEqual(outcomes, ["D1:true", "D2:false"]);
 
-    // A question still open when the transcript unregisters is re-asked in a dialog, not lost.
     const orphan = requestApproval({ title: "Write D3", toolCallId: "call-1", confirmLabel: "Write" }).then((ok) => outcomes.push(`D3:${ok}`));
     await flushAsync();
     assert.equal(getInlineApprovals().length, 1);
@@ -226,11 +220,9 @@ void test("an inline question is withdrawn when its turn stops, and turn consent
     await first;
     assert.deepEqual(outcomes, ["D1:true"]);
 
-    // Consent given in the row covers the rest of the run without asking again.
     const second = await requestApproval({ title: "Write D2", toolCallId: "call-2", confirmLabel: "Write", allowForTurn: true, signal: controller.signal });
     assert.equal(second, true);
 
-    // Stopping the run withdraws an open question.
     const third = requestApproval({ title: "Delete sheet", toolCallId: "call-3", confirmLabel: "Delete", signal: controller.signal }).then((ok) => outcomes.push(`D3:${ok}`));
     await flushAsync();
     assert.equal(getInlineApprovals().length, 1);

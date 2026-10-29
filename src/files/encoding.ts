@@ -1,7 +1,3 @@
-/**
- * Encoding helpers for workspace file content.
- */
-
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 

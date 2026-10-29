@@ -1,7 +1,3 @@
-/**
- * MIME/type helpers for workspace files.
- */
-
 import type { WorkspaceFileKind } from "./types.js";
 
 const TEXT_MIME_PREFIXES = ["text/"];

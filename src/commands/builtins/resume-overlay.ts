@@ -1,7 +1,3 @@
-/**
- * Resume-session overlay.
- */
-
 import type { SessionData, SessionMetadata } from "../../storage/local/types.js";
 import { getAppStorage } from "../../storage/local/app-storage.js";
 
@@ -101,7 +97,6 @@ function buildWorkbookFilterRow(opts: {
   return row;
 }
 
-/** What opening a session did, or null when it was refused (the callee shows why). */
 export type ResumeOpenResult = { outcome: "opened" | "replaced" | "focused"; title: string } | null;
 
 export async function showResumeDialog(opts: {
@@ -110,7 +105,6 @@ export async function showResumeDialog(opts: {
   onReopenRecentlyClosed: (item: ResumeRecentlyClosedItem) => Promise<boolean>;
 }): Promise<void> {
   const storage = getAppStorage();
-  // Blank sessions (saved when an empty tab closed) have nothing to resume.
   const allSessions = (await storage.sessions.getAllMetadata())
     .filter((session) => session.messageCount !== 0);
 
@@ -258,7 +252,6 @@ export async function showResumeDialog(opts: {
 
   renderLists();
 
-  // One open at a time: a double click must not resume the session twice.
   let opening = false;
 
   dialog.overlay.addEventListener("click", (event) => {
@@ -317,7 +310,6 @@ export async function showResumeDialog(opts: {
         }
 
         const opened = await opts.onOpenSession(sessionData);
-        // A refusal (e.g. the current tab is busy) keeps the picker open with its toast.
         if (!opened) return;
 
         closeOverlay();

@@ -1,28 +1,10 @@
-/**
- * Host-neutral workbook identity primitives.
- *
- * IMPORTANT: callers should persist only `workbookId` (the hash), never a raw
- * host document URL/path. Host adapters pass any raw identity source through
- * this module so the privacy-preserving semantics stay centralized.
- */
-
 import { t } from "../language/index.js";
 
 export interface WorkbookContext {
-  /**
-   * A stable, local-only identifier when available.
-   *
-   * Current host strategies:
-   * - Office: normalize the host document URL (drop query/hash) and return a SHA-256 hash
-   * - WPS: normalize ActiveWorkbook.FullName and return a SHA-256 hash with a WPS-specific prefix
-   * - otherwise return null (ephemeral/unknown)
-   */
   workbookId: string | null;
 
-  /** Best-effort workbook file name derived from the host document URL/path. */
   workbookName: string | null;
 
-  /** Where the identity came from (useful for debugging / future migration). */
   source: "document.url" | "wps.activeWorkbook.fullName" | "unknown";
 }
 
@@ -64,7 +46,6 @@ function getWorkbookNameFromUrl(url: string): string | null {
       if (name) return name;
     }
   } catch {
-    // Fall back to plain path parsing below.
   }
 
   const normalized = url.replace(/\\/g, "/");
@@ -110,26 +91,18 @@ function fnv1a32Hex(bytes: Uint8Array): string {
 async function sha256Hex(input: string): Promise<string> {
   const bytes = new TextEncoder().encode(input);
 
-  // WebCrypto SHA-256 (preferred)
   const subtle = globalThis.crypto?.subtle;
   if (subtle?.digest) {
     try {
       const buf = await subtle.digest("SHA-256", bytes);
       return bufferToHex(buf);
     } catch {
-      // fall through to FNV-1a
     }
   }
 
-  // Fallback: non-cryptographic but stable hash. Only used when WebCrypto is unavailable.
   return fnv1a32Hex(bytes);
 }
 
-/**
- * Best-effort workbook context from a host-provided document URL/path.
- *
- * IMPORTANT: callers should persist only `workbookId` (the hash), never the raw URL/path.
- */
 export async function getWorkbookContextFromDocumentUrl(url: string | null): Promise<WorkbookContext> {
   if (!url) {
     return createUnknownWorkbookContext();
@@ -144,13 +117,6 @@ export async function getWorkbookContextFromDocumentUrl(url: string | null): Pro
   };
 }
 
-/**
- * Best-effort workbook context from a WPS ActiveWorkbook.FullName path.
- *
- * IMPORTANT: callers should persist only `workbookId` (the hash), never the raw
- * local path. WPS paths intentionally use their own prefix so they cannot be
- * confused with Office document URL identities.
- */
 export async function getWorkbookContextFromWpsFullName(
   fullName: string | null,
   workbookName: string | null,

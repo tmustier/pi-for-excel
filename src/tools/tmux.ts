@@ -2,17 +2,6 @@ function isToolsTmuxPayloadShape(value: unknown): value is Record<string, unknow
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * tmux — Experimental local tmux bridge adapter.
- *
- * This tool stays registered for a stable tool list/prompt cache,
- * but execution is gated by:
- * - bridge URL override from /experimental tmux-bridge-url (or default https://localhost:3341)
- * - reachable bridge health endpoint
- *
- * The local bridge contract (v1) is a POST JSON request to /v1/tmux.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import { Type, type Static, type TSchema } from "typebox";
 import { StringEnum } from "./string-enum.js";
@@ -367,7 +356,6 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
       ? tokenValue.trim()
       : undefined;
   } catch {
-    // Fall back to default localhost URL when settings are unavailable.
   }
 
   try {

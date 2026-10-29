@@ -18,16 +18,9 @@ export interface TaskpaneProxySettings {
 }
 
 function parseProxyEnabled(value: unknown): boolean {
-  // Preserve the legacy persisted contract: any truthy value enabled proxying.
   return Boolean(value);
 }
 
-/**
- * Reads the taskpane language preference.
- *
- * English is the documented default when the setting is absent, malformed, or
- * cannot be read. Persisted values retain their existing string format.
- */
 export async function readTaskpaneLanguage(
   settings: SettingsReader,
 ): Promise<SupportedLanguage> {
@@ -39,14 +32,6 @@ export async function readTaskpaneLanguage(
   }
 }
 
-/**
- * Reads the taskpane proxy preferences.
- *
- * Missing or malformed values use documented defaults. Storage read failures
- * propagate so callers cannot mistake an unknown URL for an absent URL before
- * writing a default. The enabled flag preserves legacy JavaScript truthiness
- * for persisted non-boolean values.
- */
 export async function readTaskpaneProxySettings(
   settings: SettingsReader,
 ): Promise<TaskpaneProxySettings> {
@@ -75,16 +60,9 @@ export async function ensureDefaultProxyUrl(
 
     await settings.set(TASKPANE_PROXY_URL_SETTING_KEY, runtimeDefaultProxyUrl);
   } catch {
-    // A failed read is unknown state, not permission to replace the stored URL.
   }
 }
 
-/**
- * Validates and stores a proxy URL; an empty value means the default. Throws
- * the validation message without writing anything, so an unusable URL (such as
- * plain http:// from the HTTPS taskpane) is never saved where requests would
- * silently skip it. Returns the normalized URL that was stored.
- */
 export async function saveTaskpaneProxyUrl(settings: SettingsWriter, rawUrl: string): Promise<string> {
   const trimmed = rawUrl.trim();
   const normalized = validateOfficeProxyUrl(trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL);
@@ -92,7 +70,6 @@ export async function saveTaskpaneProxyUrl(settings: SettingsWriter, rawUrl: str
   return normalized;
 }
 
-/** A proxy on another machine sees prompts and credentials; the user is warned whenever one is in use. */
 export function needsRemoteProxyWarning(proxy: TaskpaneProxySettings): boolean {
   return proxy.enabled && proxy.url !== null && proxy.url.length > 0 && !isLoopbackProxyUrl(proxy.url);
 }

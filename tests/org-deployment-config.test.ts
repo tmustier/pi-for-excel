@@ -1,9 +1,3 @@
-/**
- * Tests for org/central-deployment build-time configuration:
- * - VITE_PI_DEFAULT_PROXY_URL → resolveDefaultProxyUrl()
- * - VITE_PI_ALLOWED_PROVIDERS → provider allowlist filtering
- */
-
 import test from "node:test";
 import assert from "node:assert/strict";
 

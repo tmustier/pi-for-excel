@@ -1,20 +1,3 @@
-/**
- * "Featured models" ordering for the model selector.
- *
- * Moved from the retired src/compat/model-selector-patch.ts (which used to
- * monkey-patch pi-web-ui's ModelSelector). Pure function over selector items:
- *
- * - current model at the very top
- * - then "featured" models (latest per provider, pattern-based)
- *   - Anthropic: latest Fable first (post-4.x flagship family), then latest
- *     Sonnet if its version >= latest Opus, then latest Opus
- *   - OpenAI (API + ChatGPT): latest general GPT when its version >= latest Codex,
- *     then latest Codex
- *   - Google API-key: latest gemini-*-pro*
- *   - Google OAuth (Gemini CLI / Antigravity): prefer stable Gemini before previews
- * - then the remaining models, sorted deterministically
- */
-
 import type { Api, Model } from "@earendil-works/pi-ai";
 
 import {
@@ -146,7 +129,6 @@ export function orderModelsForSelector(
       }
 
       if (bestFable) {
-        // Fable-only provider list — already featured above.
         continue;
       }
 
@@ -222,7 +204,6 @@ export function orderModelsForSelector(
       continue;
     }
 
-    // Generic fallback
     const best = pickBest(models);
     if (best) featured.push(best);
   }
@@ -237,17 +218,14 @@ export function orderModelsForSelector(
     out.push(m);
   };
 
-  // Current model first (if it's in the filtered list)
   for (const m of filtered) {
     if (isCurrent(m)) push(m);
   }
 
-  // Then latest-for-each-provider
   for (const m of featured) {
     push(m);
   }
 
-  // Then the remaining models
   const remaining = filtered.filter((m) => !used.has(keyOf(m)));
   remaining.sort((a, b) => compareModelRefs(a, b));
   for (const m of remaining) push(m);
@@ -255,12 +233,6 @@ export function orderModelsForSelector(
   return out;
 }
 
-/**
- * Score a query against a text using subsequence matching.
- * All query characters must appear in order in the text.
- * Higher score = tighter match (fewer gaps between matched characters).
- * Returns 0 if no match. Callers must lowercase both sides.
- */
 export function subsequenceScore(query: string, text: string): number {
   let qi = 0;
   let ti = 0;

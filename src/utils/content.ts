@@ -2,14 +2,6 @@ function isUtilsContentPayloadShape(value: unknown): value is Record<string, unk
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * Helpers for working with pi-ai content blocks.
- *
- * Note: `AgentMessage` supports custom message types, so many call sites
- * treat `message.content` as `unknown`. These utilities are defensive and
- * safe to use at those edges.
- */
-
 import type { TextContent, ToolCall } from "@earendil-works/pi-ai";
 
 
@@ -40,7 +32,6 @@ export function extractTextBlocks(content: unknown, separator = "\n"): string {
     .join(separator);
 }
 
-/** Convenience helper: extract text blocks and join without separators. */
 export function extractTextFromContent(content: unknown): string {
   return extractTextBlocks(content, "");
 }
@@ -61,7 +52,6 @@ export function summarizeContentForTranscript(
     .map((b) => {
       if (isTextBlock(b)) return b.text;
 
-      // pi-ai tool calls
       if (isToolCallBlock(b)) {
         const rawArgs = JSON.stringify(b.arguments);
         const snippet =
@@ -71,7 +61,6 @@ export function summarizeContentForTranscript(
         return `[toolCall: ${b.name}(${snippet})]`;
       }
 
-      // Backwards compatibility: Anthropic-style tool blocks
       if (isUtilsContentPayloadShape(b) && (b as { type?: unknown }).type === "tool_use") {
         const name = typeof (b as { name?: unknown }).name === "string" ? (b as { name: string }).name : "tool";
         const input = JSON.stringify((b as { input?: unknown }).input);

@@ -1,8 +1,6 @@
 /**
- * Store for LLM provider API keys (Anthropic, OpenAI, etc.).
- *
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
- * https://github.com/badlogic/pi-mono). See docs/ui-ownership.md.
+ * https://github.com/badlogic/pi-mono).
  */
 
 import { Store } from "./store.js";

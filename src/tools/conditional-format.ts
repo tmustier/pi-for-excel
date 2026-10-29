@@ -1,11 +1,3 @@
-/**
- * conditional_format — Add or clear conditional formatting rules.
- *
- * Supports:
- * - Custom formula rules
- * - Cell value rules (greater/less/equal/between)
- */
-
 import { runMutation } from "./mutation/run-mutation.js";
 import { recoveryTurn, type RecoveryAttribution } from "./recovery-metadata.js";
 import { Type, type Static } from "typebox";

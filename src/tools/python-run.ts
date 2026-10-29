@@ -2,14 +2,6 @@ function isToolsPythonRunPayloadShape(value: unknown): value is Record<string, u
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/**
- * python_run — Execute Python via native bridge (preferred) or Pyodide fallback.
- *
- * This tool stays registered for a stable tool list/prompt cache.
- * If no native bridge is reachable (configured override or default localhost URL),
- * it can run in-browser via Pyodide.
- */
-
 import type { AgentTool, AgentToolResult } from "@earendil-works/pi-agent-core";
 import type { SettingsStore } from "../storage/local/settings-store.js";
 import { Type, type Static, type TSchema } from "typebox";
@@ -35,17 +27,12 @@ const MAX_TIMEOUT_MS = 120_000;
 export const PYTHON_BRIDGE_TOKEN_SETTING_KEY = "python.bridge.token";
 export const PYODIDE_BACKEND_LABEL = "Pyodide (in-browser)";
 
-/**
- * Limits enforced by scripts/python-bridge-server.mjs (MAX_JSON_BODY_BYTES,
- * MAX_INPUT_JSON_LENGTH, MAX_OUTPUT_BYTES). Keep in sync.
- */
 export const PYTHON_BRIDGE_LIMITS = {
   requestBodyBytes: 512 * 1024,
   inputJsonChars: 200_000,
   outputBytes: 256 * 1024,
 } as const;
 
-/** fetch() rejected before the bridge answered, so no code ran there. */
 export class PythonBridgeUnreachableError extends Error {
   constructor(url: string, cause: unknown) {
     super(`Python bridge unreachable at ${url}: ${getErrorMessage(cause)}`);
@@ -120,9 +107,7 @@ export interface PythonRunToolDependencies {
     config: PythonBridgeConfig,
     signal: AbortSignal | undefined,
   ) => Promise<PythonBridgeResponse>;
-  /** Override Pyodide availability check (for testing). */
   isPyodideAvailable?: () => boolean;
-  /** Override Pyodide runtime call (for testing). */
   callPyodide?: (
     request: PythonBridgeRequest,
     signal: AbortSignal | undefined,
@@ -250,7 +235,6 @@ export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig
       ? tokenValue.trim()
       : undefined;
   } catch {
-    // Fall back to default localhost URL when settings are unavailable.
   }
 
   try {
@@ -322,7 +306,6 @@ export async function callDefaultPythonBridge(
     const parsedBody = tryParseBridgeJson(rawBody);
 
     if (!response.ok) {
-      // The bridge ran the code and it failed: report it like any Python failure.
       const failed = parsedBody === null ? null : parseBridgeResponse(parsedBody);
       if (failed && (failed.stderr !== undefined || failed.stdout !== undefined)) {
         throw new Error(formatPythonFailure(failed, `local Python (bridge at ${config.url})`));
@@ -443,11 +426,6 @@ function shouldAttachPythonBridgeSkillHint(message: string): boolean {
     || normalized.includes("econnrefused");
 }
 
-/**
- * Only an unreachable default bridge falls back to Pyodide. Any answer from the
- * bridge (including a Python error) means the code ran there, and a timeout means
- * it may still be running, so re-running it in Pyodide could run it twice.
- */
 export function shouldFallbackToPyodideAfterBridgeError(
   error: unknown,
   bridgeConfig: PythonBridgeConfig,
@@ -455,7 +433,6 @@ export function shouldFallbackToPyodideAfterBridgeError(
   return bridgeConfig.source === "default" && error instanceof PythonBridgeUnreachableError;
 }
 
-/** Failure text for a run that did not succeed: which backend, the exception, stderr and stdout. */
 export function formatPythonFailure(response: PythonBridgeResponse, backend: string): string {
   const stderr = response.stderr?.trim() ?? "";
   const error = response.error?.trim() ?? "";
@@ -522,7 +499,6 @@ export function createPythonRunTool(
         const bridgeConfig = await getBridgeConfig();
         const request = toBridgeRequest(params);
 
-        // Prefer native bridge when configured or available at default localhost URL.
         if (bridgeConfig) {
           try {
             const response = await callBridge(request, bridgeConfig, signal);
@@ -555,7 +531,6 @@ export function createPythonRunTool(
           }
         }
 
-        // Fall back to in-browser Pyodide
         const pyodideAvailable = checkPyodide
           ? checkPyodide()
           : await getDefaultPyodideAvailable();

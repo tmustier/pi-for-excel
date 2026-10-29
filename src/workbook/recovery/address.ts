@@ -1,5 +1,3 @@
-/** Address helpers shared by recovery modules. */
-
 export function localAddressPart(address: string): string {
   const trimmed = address.trim();
   const separatorIndex = trimmed.lastIndexOf("!");

@@ -356,9 +356,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
 
         for (const subscriptionId of agentEventHandlers.keys()) {
           requestHost("unsubscribe_agent_events", { subscriptionId })
-            .catch(() => {
-              // ignore
-            });
+            .catch(() => {});
         }
 
         agentEventHandlers.clear();
@@ -1055,9 +1053,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             return () => {
               agentEventHandlers.delete(subscriptionId);
               requestHost("unsubscribe_agent_events", { subscriptionId })
-                .catch(() => {
-                  // ignore unsubscribe failures
-                });
+                .catch(() => {});
             };
           },
         };

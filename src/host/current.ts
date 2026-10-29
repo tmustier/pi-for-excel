@@ -1,5 +1,3 @@
-/** Current host singleton for app code after boot resolution. */
-
 import { BrowserHost } from "./browser-host.js";
 import { detectSpreadsheetHost } from "./detection.js";
 import { OfficeHost } from "./office-host.js";

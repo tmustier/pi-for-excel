@@ -1,4 +1,3 @@
-/** Real activity labels; playful phrases only while the model is thinking. */
 import { html, LitElement } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 import { pickWhimsicalMessage } from "./whimsical-messages.js";
@@ -7,7 +6,6 @@ import { t } from "../language/index.js";
 @customElement("pi-working-indicator")
 export class WorkingIndicator extends LitElement {
   @property({ type: Boolean }) active = false;
-  /** A real activity label; absent only while thinking. */
   @property({ type: String }) primaryText?: string;
   @property({ type: String }) hintText?: string;
   @state() private _whimsical = "";

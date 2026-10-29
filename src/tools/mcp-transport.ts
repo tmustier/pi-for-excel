@@ -1,4 +1,3 @@
-/** Streamable HTTP transport shared by the MCP gateway and connection probe. */
 import { Type, type Static } from "typebox";
 import { Value } from "typebox/value";
 
@@ -43,7 +42,6 @@ const toolListResultSchema = Type.Object({
   tools: Type.Array(Type.Object({ name: Type.String() })),
 });
 
-/** Owned by one connection, never shared between chats or probes. */
 export interface McpSession {
   id?: string;
   protocolVersion?: string;
@@ -65,7 +63,6 @@ export function buildMcpRequestHeaders(args: {
   return headers;
 }
 
-/** Notifications and server requests (even with the same id) are not answers. */
 function selectResponse(payload: JsonValue, requestId: string): McpResponse | null {
   const messages = Array.isArray(payload) ? payload : [payload];
   for (const message of messages) {
@@ -74,7 +71,6 @@ function selectResponse(payload: JsonValue, requestId: string): McpResponse | nu
   return null;
 }
 
-/** Keeps line and CRLF state across byte chunks; dispatches only complete events. */
 class McpEventStream {
   private line = "";
   private skipLf = false;
@@ -107,7 +103,6 @@ class McpEventStream {
         try {
           payload = parseJson(data);
         } catch {
-          // Ignore non-JSON events; only a matching JSON-RPC response completes a POST.
           continue;
         }
         const response = selectResponse(payload, this.requestId);
@@ -120,7 +115,6 @@ class McpEventStream {
   }
 }
 
-/** Return at the matching response, even if the server keeps its SSE stream open. */
 export async function readMcpResponse(response: Response, requestId: string): Promise<McpResponse> {
   const contentType = response.headers.get("Content-Type")?.split(";")[0]?.trim().toLowerCase();
   if (contentType !== "text/event-stream") {
@@ -142,7 +136,6 @@ export async function readMcpResponse(response: Response, requestId: string): Pr
       if (done) throw new Error("MCP server sent an event stream without a JSON-RPC response to this request.");
     }
   } finally {
-    // Do not wait for a remote stream to close, or let cleanup replace its result/error.
     void reader.cancel().catch(() => {});
     reader.releaseLock();
   }

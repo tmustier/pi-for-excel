@@ -93,10 +93,6 @@ export async function loadConnectionStoreDocument(
   }
 }
 
-/**
- * Reads the connection document before a mutation. Unlike the display reader,
- * storage failures propagate so a write cannot replace unread sibling records.
- */
 export async function loadConnectionStoreDocumentForUpdate(
   settings: SettingsWriter,
 ): Promise<Record<string, StoredConnectionRecord>> {

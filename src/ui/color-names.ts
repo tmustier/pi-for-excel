@@ -1,14 +1,4 @@
-/**
- * Human-readable color names from hex codes.
- *
- * Uses nearest-match against a reference palette of common colors
- * (including Excel defaults). If the distance is within threshold,
- * returns a friendly name; otherwise returns the raw hex.
- */
-
-// Reference palette: [name, r, g, b]
 const PALETTE: ReadonlyArray<readonly [string, number, number, number]> = [
-  // Neutrals
   ["white", 255, 255, 255],
   ["black", 0, 0, 0],
   ["gray", 128, 128, 128],
@@ -16,7 +6,6 @@ const PALETTE: ReadonlyArray<readonly [string, number, number, number]> = [
   ["light gray", 192, 192, 192],
   ["silver", 211, 211, 211],
 
-  // Primary
   ["red", 255, 0, 0],
   ["dark red", 139, 0, 0],
   ["green", 0, 128, 0],
@@ -25,7 +14,6 @@ const PALETTE: ReadonlyArray<readonly [string, number, number, number]> = [
   ["dark blue", 0, 0, 139],
   ["navy", 0, 0, 128],
 
-  // Secondary
   ["yellow", 255, 255, 0],
   ["orange", 255, 165, 0],
   ["purple", 128, 0, 128],
@@ -34,21 +22,18 @@ const PALETTE: ReadonlyArray<readonly [string, number, number, number]> = [
   ["teal", 0, 128, 128],
   ["magenta", 255, 0, 255],
 
-  // Light variants
   ["light blue", 173, 216, 230],
   ["light green", 144, 238, 144],
   ["light yellow", 255, 255, 224],
   ["light pink", 255, 182, 193],
   ["light cyan", 224, 255, 255],
 
-  // Excel-common fills
   ["pale blue", 217, 225, 242],
   ["pale green", 226, 239, 218],
   ["pale yellow", 255, 242, 204],
   ["pale orange", 252, 228, 214],
   ["pale gray", 242, 242, 242],
 
-  // Earthy / accent
   ["beige", 245, 245, 220],
   ["ivory", 255, 255, 240],
   ["gold", 255, 215, 0],
@@ -81,13 +66,8 @@ function rgbDistance(
   return Math.sqrt(dr * dr + dg * dg + db * db);
 }
 
-/** Max RGB distance is ~441.  Threshold of 50 catches good near-matches. */
 const MATCH_THRESHOLD = 50;
 
-/**
- * Get a human-readable name for a hex color.
- * Returns null if no palette color is close enough.
- */
 export function hexToColorName(hex: string): string | null {
   const rgb = hexToRgb(hex);
   if (!rgb) return null;
@@ -106,18 +86,11 @@ export function hexToColorName(hex: string): string | null {
   return bestDist <= MATCH_THRESHOLD ? bestName : null;
 }
 
-/**
- * Format a hex color for display: "colorName" or the raw hex if no match.
- */
 export function formatColorLabel(hex: string): string {
   const name = hexToColorName(hex.toUpperCase());
   return name ?? hex;
 }
 
-/**
- * Replace `#RRGGBB` hex codes in text with human-readable color names.
- * Non-matching hex codes are kept as-is.
- */
 export function humanizeColorsInText(text: string): string {
   return text.replace(/#([0-9A-Fa-f]{6})\b/g, (match) => {
     const name = hexToColorName(match.toUpperCase());

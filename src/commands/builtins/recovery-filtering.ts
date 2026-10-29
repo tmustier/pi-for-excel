@@ -1,13 +1,5 @@
-/**
- * Pure filtering, search, and sort helpers for recovery overlay.
- */
-
 import { t } from "../../language/index.js";
 import type { RecoveryCheckpointSummary, RecoveryCheckpointToolName } from "./recovery-types.js";
-
-// ---------------------------------------------------------------------------
-// Tool filter
-// ---------------------------------------------------------------------------
 
 export type RecoveryToolFilter = "all" | RecoveryCheckpointToolName;
 
@@ -52,10 +44,6 @@ export function buildToolFilterOptions(
   return options;
 }
 
-// ---------------------------------------------------------------------------
-// Sort
-// ---------------------------------------------------------------------------
-
 export type RecoverySortOrder = "newest" | "oldest";
 
 function sortCheckpoints(
@@ -71,10 +59,6 @@ function sortCheckpoints(
   return sorted;
 }
 
-// ---------------------------------------------------------------------------
-// Search
-// ---------------------------------------------------------------------------
-
 function matchesSearch(
   checkpoint: RecoveryCheckpointSummary,
   query: string,
@@ -89,10 +73,6 @@ function matchesSearch(
     (TOOL_FILTER_LABELS[checkpoint.toolName]?.toLowerCase().includes(lower) ?? false)
   );
 }
-
-// ---------------------------------------------------------------------------
-// Combined pipeline
-// ---------------------------------------------------------------------------
 
 export interface RecoveryFilterState {
   search: string;
@@ -112,17 +92,14 @@ export function applyRecoveryFilters(
 ): RecoveryCheckpointSummary[] {
   let result = [...checkpoints];
 
-  // Tool filter
   if (state.toolFilter !== "all") {
     result = result.filter((c) => c.toolName === state.toolFilter);
   }
 
-  // Search
   const query = state.search.trim();
   if (query.length > 0) {
     result = result.filter((c) => matchesSearch(c, query));
   }
 
-  // Sort
   return sortCheckpoints(result, state.sortOrder);
 }

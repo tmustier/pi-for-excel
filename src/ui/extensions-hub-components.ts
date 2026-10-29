@@ -1,19 +1,7 @@
-/**
- * DOM helpers for the Extensions hub overlay components.
- *
- * Each function creates a small DOM subtree matching the CSS classes
- * in `extensions-hub.css`. They are intentionally thin — the overlay
- * tab builders compose them and wire event listeners.
- */
-
 import { setSafeInnerHTML } from "../utils/html.js";
 
-// ── Icon type (emoji string or pre-built SVG element) ───
-
-/** Accepts either an emoji string or a pre-built SVG/HTMLElement. */
 export type IconContent = string | Element;
 
-/** Set element content to either text or an SVG child node. */
 function applyIcon(el: HTMLElement, content: IconContent): void {
   if (typeof content === "string") {
     el.textContent = content;
@@ -22,11 +10,7 @@ function applyIcon(el: HTMLElement, content: IconContent): void {
   }
 }
 
-// ── Chevron SVG (shared across item cards) ──────────
-
 const CHEVRON_SVG = `<svg class="pi-item-card__chevron" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 4l4 4-4 4"/></svg>`;
-
-// ── Toggle switch ───────────────────────────────────
 
 export interface ToggleOptions {
   checked?: boolean;
@@ -34,10 +18,6 @@ export interface ToggleOptions {
   stopPropagation?: boolean;
 }
 
-/**
- * Creates an iOS-style toggle switch.
- * Uses the shared `.pi-toggle` CSS from toggle.css.
- */
 export function createToggle(opts: ToggleOptions = {}): {
   root: HTMLLabelElement;
   input: HTMLInputElement;
@@ -70,8 +50,6 @@ export function createToggle(opts: ToggleOptions = {}): {
   return { root: label, input };
 }
 
-// ── Toggle row ──────────────────────────────────────
-
 export interface ToggleRowOptions {
   label: string;
   sublabel?: string;
@@ -79,9 +57,6 @@ export interface ToggleRowOptions {
   onChange?: (checked: boolean) => void;
 }
 
-/**
- * Creates a label + toggle row.
- */
 export function createToggleRow(opts: ToggleRowOptions): {
   root: HTMLDivElement;
   input: HTMLInputElement;
@@ -112,8 +87,6 @@ export function createToggleRow(opts: ToggleRowOptions): {
   row.append(labels, toggle.root);
   return { root: row, input: toggle.input };
 }
-
-// ── Section header ──────────────────────────────────
 
 export interface SectionHeaderOptions {
   label: string;
@@ -150,8 +123,6 @@ export function createSectionHeader(opts: SectionHeaderOptions): HTMLDivElement 
   return header;
 }
 
-// ── Item card ───────────────────────────────────────
-
 export type ItemCardIconColor = "green" | "blue" | "purple" | "amber";
 
 export interface ItemCardOptions {
@@ -163,7 +134,6 @@ export interface ItemCardOptions {
   expandable?: boolean;
   expanded?: boolean;
   badges?: Array<{ text: string; tone: "ok" | "warn" | "muted" | "info" }>;
-  /** Content for the right side of the header (before chevron). */
   rightContent?: HTMLElement;
 }
 
@@ -174,15 +144,11 @@ export interface ItemCardResult {
   setExpanded: (expanded: boolean) => void;
 }
 
-/**
- * Creates an expandable item card.
- */
 export function createItemCard(opts: ItemCardOptions): ItemCardResult {
   const card = document.createElement("div");
   card.className = "pi-item-card";
   if (opts.expanded) card.setAttribute("data-expanded", "");
 
-  // Header
   const header = document.createElement("div");
   header.className = `pi-item-card__header${opts.expandable ? " pi-item-card__header--expandable" : ""}`;
 
@@ -214,7 +180,6 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
 
   header.append(iconEl, text);
 
-  // Right side
   const right = document.createElement("div");
   right.className = "pi-item-card__right";
 
@@ -234,24 +199,20 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
   if (opts.expandable) {
     const chevron = document.createElement("span");
     setSafeInnerHTML(chevron, CHEVRON_SVG, "trusted static chevron SVG constant");
-    // The SVG is the first child, extract it
     const svg = chevron.firstElementChild;
     if (svg) right.appendChild(svg);
   }
 
   header.appendChild(right);
 
-  // Body
   const body = document.createElement("div");
   body.className = "pi-item-card__body";
 
-  // Expand/collapse
   if (opts.expandable) {
     header.addEventListener("click", () => {
       const wasExpanded = card.hasAttribute("data-expanded");
       card.toggleAttribute("data-expanded");
       if (!wasExpanded) {
-        // Ensure the expanded body is visible, especially near the bottom of a scrollable overlay.
         requestAnimationFrame(() => {
           body.scrollIntoView({ block: "nearest", behavior: "smooth" });
         });
@@ -274,8 +235,6 @@ export function createItemCard(opts: ItemCardOptions): ItemCardResult {
     },
   };
 }
-
-// ── Config row (inside item card body) ──────────────
 
 export function createConfigRow(label: string, content: HTMLElement): HTMLDivElement {
   const row = document.createElement("div");
@@ -315,8 +274,6 @@ export function createConfigInput(opts: {
   return input;
 }
 
-// ── Callout ─────────────────────────────────────────
-
 export function createCallout(
   tone: "info" | "warn" | "success",
   calloutIcon: IconContent,
@@ -338,8 +295,6 @@ export function createCallout(
   return callout;
 }
 
-// ── Add form ────────────────────────────────────────
-
 export function createAddForm(): HTMLDivElement {
   const form = document.createElement("div");
   form.className = "pi-add-form";
@@ -359,8 +314,6 @@ export function createAddFormInput(placeholder: string): HTMLInputElement {
   return input;
 }
 
-// ── Empty inline ────────────────────────────────────
-
 export function createEmptyInline(emptyIcon: IconContent, text: string): HTMLDivElement {
   const el = document.createElement("div");
   el.className = "pi-empty-inline";
@@ -376,8 +329,6 @@ export function createEmptyInline(emptyIcon: IconContent, text: string): HTMLDiv
   el.append(iconEl, textEl);
   return el;
 }
-
-// ── Action buttons row ──────────────────────────────
 
 export function createActionsRow(...buttons: HTMLElement[]): HTMLDivElement {
   const row = document.createElement("div");

@@ -5,7 +5,6 @@ import {
 } from "./recovery-scope.js";
 
 interface BackupIdentityMonitorDependencies {
-  /** Identity backups are stored under now, or `null` when there is none. */
   resolveScope: () => Promise<RecoveryWorkbookScope | null>;
   rescopeBackups: (args: { fromWorkbookId: string; toWorkbookId: string; workbookLabel: string }) => Promise<number>;
 }
@@ -14,22 +13,6 @@ const DEFAULT_POLL_INTERVAL_MS = 4_000;
 
 const defaultScopeResolver = createRecoveryScopeResolver();
 
-/**
- * Keeps a never-saved workbook's backups with it through its first save.
- *
- * Saving does not expire backups:
- * Excel on the web and desktop AutoSave save every few seconds and report
- * the workbook as never dirty, so a "cleared on save" rule left nothing to
- * revert there. What saving can change is the identity backups are filed
- * under: a never-saved workbook's backups are scoped to a document token,
- * and its first save gives it a path identity. This monitor moves them to
- * the new identity at that transition. The rule is limited to token → path
- * transitions: a token only exists in the document-bound Office host, where
- * one taskpane serves one document, so the transition can only be that
- * document being saved. Hosts whose taskpane follows the active workbook
- * (WPS) never see a token, and a plain identity change there means the user
- * switched workbooks.
- */
 export class BackupIdentityMonitor {
   private readonly dependencies: BackupIdentityMonitorDependencies;
   private lastObservedWorkbookId: string | null = null;
@@ -59,7 +42,6 @@ export class BackupIdentityMonitor {
         workbookLabel: scope.workbookLabel,
       });
     }
-    // A failed move must be retried, not recorded as already followed.
     this.lastObservedWorkbookId = scope.workbookId;
   }
 }

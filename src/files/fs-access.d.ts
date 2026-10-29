@@ -1,10 +1,3 @@
-/**
- * Minimal File System Access API typings used by the files workspace.
- *
- * TypeScript's bundled DOM lib does not always include these interfaces,
- * so we declare the subset we need.
- */
-
 interface FileSystemHandlePermissionDescriptor {
   mode?: "read" | "readwrite";
 }

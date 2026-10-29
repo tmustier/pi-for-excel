@@ -1,7 +1,3 @@
-/**
- * Shared Agent Skill type definitions.
- */
-
 export type AgentSkillSourceKind = "bundled" | "external";
 
 export interface AgentSkillDefinition {

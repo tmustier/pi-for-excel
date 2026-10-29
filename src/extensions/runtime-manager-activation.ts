@@ -520,7 +520,6 @@ export function buildRuntimeManagerActivationBridge(
           message: authFailureMessage,
         });
       } catch {
-        // best-effort status update only
       }
 
       const latestSnapshot = await connectionManager.getSnapshot(normalizedConnectionId) ?? snapshot;

@@ -42,7 +42,6 @@ void test("a command row copies, translates its accessible state, and resets it"
 
   try {
     await page.evaluate(async () => {
-      // Vite resolves these browser modules; the assertions describe their checked source contracts.
       const language = await import("/src/language/index.ts") as typeof import("../../src/language/index.ts");
       const commandCopy = await import("/src/ui/command-copy.ts") as typeof import("../../src/ui/command-copy.ts");
       language.initLanguage("zh-CN");

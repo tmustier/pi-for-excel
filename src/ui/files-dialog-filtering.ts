@@ -134,12 +134,6 @@ function isSkillsFile(file: WorkspaceFileEntry): boolean {
   return file.path.toLowerCase().startsWith("skills/");
 }
 
-/**
- * Split files into root-level items and first-level subdirectory groups.
- *
- * `stripPrefix` is removed from each path before detecting the first `/`.
- * For example, stripping `"notes/"` from `"notes/index.md"` yields `"index.md"` → root.
- */
 function groupByFirstDirectory(
   files: readonly WorkspaceFileEntry[],
   stripPrefix: string,
@@ -173,11 +167,6 @@ function groupByFirstDirectory(
   return { rootFiles, folders };
 }
 
-/**
- * Group skill files by skill folder name.
- *
- * Handles both `skills/<name>/…` and `skills/external/<name>/…`.
- */
 function groupSkillFiles(files: readonly WorkspaceFileEntry[]): {
   rootFiles: WorkspaceFileEntry[];
   folders: FilesDialogFolderGroup[];
@@ -219,7 +208,6 @@ function groupSkillFiles(files: readonly WorkspaceFileEntry[]): {
   return { rootFiles, folders };
 }
 
-/** Total file count across root files and all folder groups. */
 export function sectionTotalCount(section: FilesDialogSection): number {
   return section.files.length + section.folders.reduce((sum, f) => sum + f.files.length, 0);
 }
@@ -234,7 +222,6 @@ export function buildFilesDialogSections(args: {
     filterText: args.filterText,
   });
 
-  // ── Classify ──
   const userFiles: WorkspaceFileEntry[] = [];
   const notesFiles: WorkspaceFileEntry[] = [];
   const skillsFiles: WorkspaceFileEntry[] = [];
@@ -257,7 +244,6 @@ export function buildFilesDialogSections(args: {
 
   const sections: FilesDialogSection[] = [];
 
-  // ── YOUR FILES ──
   if (userFiles.length > 0) {
     const { rootFiles, folders } = groupByFirstDirectory(userFiles, "");
     sections.push({
@@ -268,7 +254,6 @@ export function buildFilesDialogSections(args: {
     });
   }
 
-  // ── PI'S NOTES ──
   if (notesFiles.length > 0) {
     const { rootFiles, folders } = groupByFirstDirectory(notesFiles, "notes/");
     sections.push({
@@ -279,7 +264,6 @@ export function buildFilesDialogSections(args: {
     });
   }
 
-  // ── SKILLS ──
   if (skillsFiles.length > 0) {
     const { rootFiles, folders } = groupSkillFiles(skillsFiles);
     sections.push({
@@ -290,7 +274,6 @@ export function buildFilesDialogSections(args: {
     });
   }
 
-  // ── Connected folder ──
   if (connectedFiles.length > 0) {
     const { rootFiles, folders } = groupByFirstDirectory(connectedFiles, "");
     sections.push({
@@ -301,7 +284,6 @@ export function buildFilesDialogSections(args: {
     });
   }
 
-  // ── BUILT-IN DOCS ──
   if (builtinFiles.length > 0) {
     sections.push({
       key: BUILTIN_DOCS_SECTION_KEY,
@@ -334,7 +316,6 @@ export function resolveFilesDialogConnectFolderButtonState(
   }
 
   if (backendStatus?.nativeBlockedByFrame === true) {
-    // Show it disabled with the reason rather than letting it fail on click.
     return {
       hidden: false,
       disabled: true,

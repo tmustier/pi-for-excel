@@ -1,7 +1,3 @@
-/**
- * Shared browser-safe Google OAuth flow for Office taskpanes.
- */
-
 import type {
   OAuthCredentials,
   OAuthLoginCallbacks,
@@ -75,7 +71,6 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
       url.searchParams.get("state"),
     );
   } catch {
-    // not a URL
   }
 
   if (value.includes("#")) {

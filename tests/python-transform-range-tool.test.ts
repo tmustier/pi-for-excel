@@ -244,7 +244,6 @@ void test("python_transform_range writes through the checked write path and show
   await withFakeExcel(host, async () => {
     host.sheet("Py").set("A1", "source");
 
-    // A merged destination: Excel would keep only F1, so nothing is written.
     result_json = "[[\"m1\",\"m2\"],[\"m3\",\"m4\"]]";
     const merged = await tool.execute("tc-merged", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!F1" });
     assert.equal(merged.details?.blocked, true);
@@ -254,7 +253,6 @@ void test("python_transform_range writes through the checked write path and show
     assert.equal(host.sheet("Py").value("F1"), "");
     assert.equal(host.sheet("Py").value("F2"), "");
 
-    // A ragged result with a text code Excel converts.
     result_json = "[[\"00123\",2,3],[4]]";
     const ragged = await tool.execute("tc-ragged", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!R1" });
     const text = firstText(ragged);
@@ -266,7 +264,6 @@ void test("python_transform_range writes through the checked write path and show
     assert.match(text, /Py!R1: sent "00123", stored 123/u);
     assert.match(text, /Stdout:[\s\S]*hello stdout/u);
 
-    // Overwriting a formula with a constant is called out.
     host.sheet("Py").set("Z1", "=A1");
     result_json = "[[\"fixed\"]]";
     const overwrite = await tool.execute("tc-lost-formula", {
@@ -280,7 +277,6 @@ void test("python_transform_range writes through the checked write path and show
 void test("python_transform_range refuses input too large for a running bridge and says how many rows fit", async () => {
   const rows = Array.from({ length: 5000 }, () => ["x".repeat(98)]);
   const range = "Sheet1!A1:A5000";
-  // Each of the raw/displayed rows is 103 characters with its separator.
   const overhead = JSON.stringify({ range, values: [], text: [] }).length;
   const expectedFit = Math.floor((200_000 - overhead + 2) / 206);
 
@@ -312,7 +308,6 @@ void test("python_transform_range refuses input too large for a running bridge a
   assert.equal(bridgeCalls, 0);
   assert.equal(pyodideCalls, 0);
 
-  // No bridge answering at the default URL: Pyodide has no such limit and runs it.
   const viaPyodide = await makeTool(false).execute("tc-big-pyodide", { range, code: "result = [[1]]", output_start_cell: "C1" });
   assert.equal(viaPyodide.details?.blocked, false);
   assert.equal(bridgeCalls, 0);
@@ -329,14 +324,12 @@ void test("python_transform_range explains the bridge output limit with a row es
   });
 
   const result = await tool.execute("tc-big-out", { range: "Sheet1!A1:A2", code: "result = [[i] for i in range(50000)]" });
-  // The input "[[1],[2]]" is 9 bytes for 2 rows, about 5 bytes a row: 262,144 / 5 rows.
   assert.match(firstText(result), /fit about 52,428 per call/u);
   assert.equal(result.details?.blocked, false);
 });
 
 void test("python_transform_range answers Stop and unconfirmed chunks like write_cells", async () => {
   const host = new FakeExcelHost(["Py"]);
-  // Two rows over 1M characters each are written in two chunks.
   const big = "y".repeat(1_100_000);
   let result_json = "";
   let controller = new AbortController();
@@ -353,7 +346,6 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
   await withFakeExcel(host, async () => {
     host.sheet("Py").set("A1", "source");
 
-    // Stop while Python ran: nothing is written.
     abortDuringPython = true;
     result_json = "[[1,2],[3,4]]";
     const before = await tool.execute("tc-stop-before", { range: "Py!A1", code: "result = ...", output_start_cell: "Py!R1" }, controller.signal);
@@ -361,7 +353,6 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
     assert.equal(before.details?.stopped, true);
     assert.equal(host.sheet("Py").value("R1"), "");
 
-    // Stop after the first chunk landed: that chunk stands, the rest is not written.
     abortDuringPython = false;
     controller = new AbortController();
     result_json = JSON.stringify([[big], [big]]);
@@ -378,7 +369,6 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
     assert.equal(host.sheet("Py").value("U1"), big);
     assert.equal(host.sheet("Py").value("U2"), "");
 
-    // Excel never answered the second chunk: it may or may not have landed.
     host.context.sync = sync;
     controller = new AbortController();
     host.failWrite = { at: 3, error: new Error("Excel did not respond") };
@@ -390,7 +380,6 @@ void test("python_transform_range answers Stop and unconfirmed chunks like write
 
 void test("python_transform_range: after an Excel.run timeout mid-write, the abandoned run writes nothing more than the result reports", async () => {
   const host = new FakeExcelHost(["Big"]);
-  // ~300 characters a row: 15,000 rows are written in several chunks.
   const rows = Array.from({ length: 15_000 }, (_, index) => [`${String(index).padStart(6, "0")}${"x".repeat(294)}`]);
   const tool = createPythonTransformRangeTool({
     readInputRange: () => Promise.resolve({ sheetName: "Big", address: "Z1", values: [[1]], text: [["1"]] }),
@@ -399,7 +388,6 @@ void test("python_transform_range: after an Excel.run timeout mid-write, the aba
   });
 
   await withFakeExcel(host, async () => {
-    // As #792's excelRun does: race the whole Excel.run against a timeout. The run itself goes on.
     const fakeRun = Reflect.get(globalThis, "Excel") as { run: (callback: (context: unknown) => Promise<unknown>) => Promise<unknown> };
     Reflect.set(globalThis, "Excel", {
       run: (callback: (context: unknown) => Promise<unknown>) => Promise.race([
@@ -409,7 +397,6 @@ void test("python_transform_range: after an Excel.run timeout mid-write, the aba
         }, 30); }),
       ]),
     });
-    // The third sync (the second chunk) is held past the timeout, then lands.
     host.delaySync = { at: 3, ms: 80 };
     const result = await tool.execute("tc-timeout", { range: "Big!Z1", code: "result = ...", output_start_cell: "Big!A1" });
     const reported = firstText(result);
@@ -420,11 +407,9 @@ void test("python_transform_range: after an Excel.run timeout mid-write, the aba
     const written = /Partly written\*\* — Big!A1:A(\d+)/u.exec(reported);
     const uncertain = /rows (\d+)–(\d+) \(Big!A\d+:A\d+\) may or may not have been written/u.exec(reported);
     assert.ok(written?.[1] && uncertain?.[2], reported);
-    // Everything that landed, even after the result was returned, is within what the result allowed for.
     assert.ok(landed <= Number(uncertain[2]), `landed ${landed} rows; result: ${reported}`);
     assert.ok(landed >= Number(written[1]));
 
-    // A timeout while inspecting the target: nothing was sent, and nothing lands later.
     host.delaySync = { at: host.syncCount + 1, ms: 80 };
     const early = await tool.execute("tc-timeout-early", { range: "Big!Z1", code: "result = ...", output_start_cell: "Big!C1" });
     await new Promise((resolve) => { setTimeout(resolve, 200); });

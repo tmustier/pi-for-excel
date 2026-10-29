@@ -58,7 +58,6 @@ function parseAuthorizationInput(input: string): ParsedAuthorizationInput {
       url.searchParams.get("state"),
     );
   } catch {
-    // not a URL
   }
 
   if (value.includes("#")) {

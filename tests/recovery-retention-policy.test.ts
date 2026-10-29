@@ -88,7 +88,7 @@ void test("byte ceiling is inclusive; crossing it evicts globally oldest, with n
   await store.append(snapshot("b", 2, "book-b"));
   assert.deepEqual((await store.page()).entries.map((entry) => entry.id), ["b", "a"], "exactly at the ceiling keeps both");
   const newest = snapshot("c", 3, "book-b");
-  delete newest.turnId; // Smaller than a; evicting a alone is enough to fit.
+  delete newest.turnId;
   await store.append(newest);
   assert.deepEqual((await store.page()).entries.map((entry) => entry.id), ["c", "b"]);
   assert.equal(await store.read("a"), null, "the only backup of book-a is not protected");

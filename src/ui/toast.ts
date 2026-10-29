@@ -1,15 +1,3 @@
-/**
- * Toasts: short confirmations of something the user just did, with an
- * optional action (Undo). See src/ui/README.md, "Notifications".
- *
- * - One region, drawn above everything (overlays included), just above the
- *   composer dock so it never covers the tabs or banners.
- * - Up to three stack, newest at the bottom; an identical message restarts
- *   instead of stacking.
- * - Hovering or focusing a toast pauses its timer. Error toasts have a close
- *   button and are announced assertively.
- */
-
 import { t } from "../language/index.js";
 
 export type ToastVariant = "info" | "error";
@@ -17,15 +5,10 @@ export type ToastVariant = "info" | "error";
 export interface ToastOptions {
   duration?: number;
   variant?: ToastVariant;
-  /** A later toast with the same id replaces this one. */
   id?: string;
 }
 
 interface ActionToastOptions {
-  /**
-   * Lets the caller dismiss this toast later with `dismissToast(id)`. A later
-   * toast with the same id replaces this one.
-   */
   id?: string;
   message: string;
   actionLabel: string;
@@ -97,8 +80,6 @@ function renderToast(opts: {
 }): ToastEntry | null {
   const host = ensureRegion();
 
-  // A toast with the same id replaces the earlier one (e.g. "Compacting…"
-  // followed by its result), so progress toasts never outlive their task.
   if (opts.id !== undefined) dismissToast(opts.id);
 
   const duplicate = entries.find((entry) => entry.message === opts.message && !entry.hasAction);
@@ -159,7 +140,6 @@ function renderToast(opts: {
   host.appendChild(root);
   startTimer(entry);
 
-  // Drop the oldest toast without an action first; Undo stays as long as it can.
   while (entries.length > MAX_VISIBLE_TOASTS) {
     const victim = entries.find((candidate) => !candidate.hasAction) ?? entries[0];
     if (!victim) break;
@@ -183,16 +163,10 @@ export function showToast(message: string, durationOrOptions?: number | ToastOpt
 }
 
 export interface ActionToastHandle {
-  /** Hides the toast if it is still on screen. */
   dismiss: () => void;
-  /** True until the toast times out, is dismissed, or is pushed out of the stack. */
   isShowing: () => boolean;
 }
 
-/**
- * Shows a toast with an action button. The handle hides it once its action
- * no longer applies.
- */
 export function showActionToast(opts: ActionToastOptions): ActionToastHandle {
   if (typeof document === "undefined") return { dismiss: () => {}, isShowing: () => false };
   const entry = renderToast({
@@ -215,7 +189,6 @@ export function isActionToastVisible(): boolean {
   return entries.some((entry) => entry.hasAction);
 }
 
-/** Remove the toast shown with `id` (e.g. its Undo became stale). */
 export function dismissToast(id: string): void {
   for (const entry of entries.filter((candidate) => candidate.id === id)) {
     removeEntry(entry);

@@ -1,12 +1,3 @@
-/**
- * The workbook-change receipt of a turn: "Changed 45 cells", Undo, Review.
- *
- * Drawn as the footer of the turn's <turn-group>, or on its own when the
- * receipt has no group to sit under (a restored session whose tool calls
- * were archived). Actions dispatch `pi:turn-change-action` for the
- * taskpane to handle.
- */
-
 import { html, type TemplateResult } from "lit";
 
 import { t } from "../../language/index.js";

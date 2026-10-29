@@ -1,4 +1,3 @@
-/** Theme choice is synchronous so it applies before the first taskpane paint. */
 import {
   createSpreadsheetHost,
   detectSpreadsheetHost,
@@ -13,7 +12,7 @@ export function getThemeMode(): ThemeMode {
   try {
     const stored = localStorage.getItem(THEME_KEY);
     if (stored === "light" || stored === "dark") return stored;
-  } catch { /* Storage unavailable: follow Office. */ }
+  } catch {}
   return "office";
 }
 
@@ -29,15 +28,11 @@ export function installThemeModeSync(): () => void {
     const currentHost = getCurrentSpreadsheetHost();
     const host = currentHost.kind !== "office" && detectSpreadsheetHost() === "office"
       ? createSpreadsheetHost("office") : currentHost;
-    // Office on the web can report no usable theme. Do not substitute the OS
-    // preference: the workbook may still be light. Explicit Dark always works.
     const dark = mode === "dark" || (mode === "office" && host.resolveThemeDark() === true);
     document.documentElement.classList.toggle("dark", dark);
     document.documentElement.style.colorScheme = dark ? "dark" : "light";
   };
   apply();
-  // Excel has no OfficeThemeChanged event (that event is Outlook-only).
-  // Re-read the host's small theme snapshot to follow changes and late Office boot.
   const timer = window.setInterval(apply, 1000);
   document.addEventListener(THEME_CHANGED, apply);
   window.addEventListener("storage", apply);

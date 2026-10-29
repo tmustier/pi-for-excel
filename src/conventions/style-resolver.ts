@@ -1,7 +1,3 @@
-/**
- * style-resolver — compose named styles + overrides into a flat ResolvedCellStyle.
- */
-
 import type { CellStyle, NumberFormatConventions, ResolvedCellStyle, ResolvedConventions } from "./types.js";
 import { DEFAULT_CONVENTION_CONFIG, DEFAULT_CONVENTIONS, getBuiltinStyles } from "./defaults.js";
 import { buildFormatString } from "./format-builder.js";

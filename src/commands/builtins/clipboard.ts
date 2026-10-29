@@ -1,7 +1,3 @@
-/**
- * Builtin clipboard commands.
- */
-
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 
 import type { SlashCommand } from "../types.js";

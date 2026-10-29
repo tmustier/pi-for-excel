@@ -1,7 +1,3 @@
-/**
- * Browser-safe Google OAuth providers (Gemini CLI + Antigravity).
- */
-
 import type { OAuthLoginCallbacks } from "@earendil-works/pi-ai";
 
 import {
@@ -347,7 +343,6 @@ async function discoverAntigravityProject(
         return projectId;
       }
     } catch {
-      // Try next endpoint.
     }
   }
 

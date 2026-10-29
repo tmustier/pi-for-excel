@@ -1,13 +1,3 @@
-/**
- * Runtime extension manager.
- *
- * Responsibilities:
- * - load persisted extension registry
- * - activate/deactivate extensions with failure isolation
- * - track extension-owned commands and tools for clean unload
- * - expose extension tool list so runtimes can refresh Agent toolsets
- */
-
 import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
 import { normalizeContext } from "@earendil-works/pi-ai";
 import { t } from "../language/index.js";
@@ -119,7 +109,6 @@ function withExtensionToolDescription(tool: AnyAgentTool, entry: StoredExtension
 }
 
 function assertToolExecuteFunction(tool: AnyAgentTool, entry: StoredExtensionEntry): void {
-  // Extension JavaScript can bypass AgentTool's compile-time contract; validate at registration.
   const boundary = tool as AnyAgentTool & ExtensionToolExecutionBoundary;
   if (typeof boundary.execute === "function") {
     return;
@@ -283,7 +272,6 @@ export class ExtensionRuntimeManager {
       return;
     }
 
-    // Finish or skip the migration before loading can replace an unreadable registry.
     if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
       const installedIds = await readIntactStoredExtensionIds(this.settings);
       if (installedIds) {
@@ -403,10 +391,6 @@ export class ExtensionRuntimeManager {
     });
   }
 
-  /**
-   * Install pasted/generated code. `grantCapabilities` are granted on top of
-   * the untrusted defaults; callers must have shown them to the user.
-   */
   async installFromCode(
     name: string,
     code: string,
@@ -973,8 +957,6 @@ export class ExtensionRuntimeManager {
 
     try {
       if (state.runtimeMode === "sandbox-iframe") {
-        // The sandbox imports module specifiers itself, so apply the same
-        // source policy (remote URL opt-in) the host loader applies.
         if (entry.source.kind === "module") {
           assertExtensionModuleSourceAllowed(entry.source.specifier);
         }

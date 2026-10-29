@@ -8,10 +8,6 @@ import { createInMemorySettingsStore, persistedSnapshots } from "./fixtures/reco
 
 const UNSAVED: WorkbookContext = { workbookId: null, workbookName: null, source: "unknown" };
 
-/**
- * A document that can hold one token. `persists: false` models a host whose
- * settings save fails: `ensure()` then resolves null and stores nothing.
- */
 function createDocument(options: { token?: string | null; persists?: boolean } = {}) {
   let token = options.token ?? null;
   const persists = options.persists ?? true;
@@ -114,7 +110,6 @@ void test("a saved copy that carries the same document token does not inherit un
   const snapshot = await unsavedLog.append(write);
   assert.ok(snapshot);
 
-  // Save As copies the document settings, so the copy has the same token but a canonical identity.
   const savedCopy = createLog({
     settings,
     document: document.identity,

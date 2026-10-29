@@ -1,19 +1,3 @@
-#!/usr/bin/env node
-
-/**
- * Real-host adversarial smoke for sandbox extension model providers.
- *
- * Prerequisites:
- * - Excel has the dev add-in loaded from https://localhost:3141.
- * - The tokened background verification bridge is connected on port 3157.
- * - The local CORS proxy is running on https://localhost:3003 with localhost
- *   explicitly allowlisted as a target.
- *
- * The script starts two instrumented HTTPS model gateways, installs pasted
- * extension code into the real sandbox iframe runtime, and drives the same
- * manager/connection/model-selector/chat paths used by the taskpane UI.
- */
-
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import https from "node:https";
@@ -67,7 +51,6 @@ async function existingCaBuffers() {
     try {
       buffers.push(await readFile(candidate));
     } catch {
-      // Continue to the next trust source.
     }
   }
   if (buffers.length === 0) throw new Error("No CA/certificate file is available for local HTTPS.");
@@ -246,7 +229,6 @@ class InstrumentedGateway {
           model = parsed.model;
         }
       } catch {
-        // The mock reports a deterministic 400 below if needed.
       }
       this.requests.push({ kind: "inference", authorization, authorized, model });
       if (!authorized) {
@@ -803,7 +785,6 @@ async function runScenario() {
           }
         }
       } catch {
-        // Preserve the original scenario error; cleanup is best-effort.
       }
     }
     await Promise.all([gatewayA.close(), gatewayB.close()]);

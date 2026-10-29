@@ -1,5 +1,3 @@
-#!/usr/bin/env node
-
 import { spawnSync } from "node:child_process";
 
 const manifestPath = process.argv[2] ?? "manifest.xml";

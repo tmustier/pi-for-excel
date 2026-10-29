@@ -1,7 +1,3 @@
-/**
- * Custom gateway page — OpenAI-compatible corporate/local gateways.
- */
-
 import { t } from "../../../language/index.js";
 import { requestConfirmationDialog } from "../../../ui/confirm-dialog.js";
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
@@ -24,7 +20,6 @@ export function createGatewayPage(): SettingsShellPage {
         includeHeading: false,
       });
 
-      // A half-filled gateway is not dropped silently on Back or close.
       ctx.setBeforeLeave(async () => {
         if (!hasUnsavedChanges()) return true;
         return requestConfirmationDialog({
