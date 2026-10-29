@@ -294,6 +294,7 @@ export function createActionQueue(opts: {
           const retried = autoCompactEnabled && await recoverFromContextOverflow({
             agent,
             runCompact: () => runCompactWithIndicator("", signal),
+            explicitRetry: retry,
           });
           if (retried && !signal.aborted) await retryTransientFailure(signal);
 

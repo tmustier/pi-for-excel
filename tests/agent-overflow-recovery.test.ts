@@ -98,6 +98,31 @@ void test("an overflow after compact-and-retry stays in the transcript until the
   queue.shutdown();
 });
 
+void test("an explicit Retry after an overflow-after-recovery compacts again for the same prompt", async () => {
+  const overflow = () => fauxAssistantMessage("", { stopReason: "error", errorMessage: LITELLM_OVERFLOW });
+  const runtime = createHarness([overflow(), overflow(), overflow(), fauxAssistantMessage("recovered")]);
+  let compactRuns = 0;
+  const queue = createQueue(runtime.agent, () => {
+    compactRuns += 1;
+    runtime.agent.state.messages = [user(`compacted history ${compactRuns}`, 10 + compactRuns)];
+    return Promise.resolve();
+  });
+
+  queue.enqueuePrompt("analyze workbook");
+  await waitForIdle(queue);
+  assert.equal(runtime.requests.length, 2);
+  assert.equal(compactRuns, 1);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /ContextWindowExceededError/u);
+
+  assert.equal(queue.retry(), true);
+  await waitForIdle(queue);
+
+  assert.equal(runtime.requests.length, 4);
+  assert.equal(compactRuns, 2);
+  assert.match(JSON.stringify(runtime.agent.state.messages.at(-1)), /recovered/u);
+  queue.shutdown();
+});
+
 void test("non-overflow, non-transient model errors do not compact or retry the agent request", async () => {
   const runtime = createHarness([
     fauxAssistantMessage("", { stopReason: "error", errorMessage: "400 invalid tool schema" }),

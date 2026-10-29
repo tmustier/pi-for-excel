@@ -33,12 +33,13 @@ const recoveredPrompts = new WeakMap<Agent, AgentMessage | null>();
 export async function recoverFromContextOverflow(args: {
   agent: Agent;
   runCompact: () => Promise<void>;
+  explicitRetry?: boolean;
 }): Promise<boolean> {
-  const { agent, runCompact } = args;
+  const { agent, runCompact, explicitRetry = false } = args;
 
   const failure = findTrailingContextOverflowError(agent.state);
   if (!failure) return false;
-  if (recoveredPrompts.get(agent) === latestPrompt(agent.state.messages)) return false;
+  if (!explicitRetry && recoveredPrompts.get(agent) === latestPrompt(agent.state.messages)) return false;
 
   announce(t("announce.retrying"));
 
