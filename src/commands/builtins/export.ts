@@ -4,7 +4,6 @@ function isCommandsBuiltinsExportPayloadShape(value: unknown): value is Record<s
 
 import {
   getCurrentSystemMessage,
-  normalizeContext,
   type Api,
   type Model,
   type StopReason,
@@ -30,6 +29,7 @@ import type { PiSidebar } from "../../ui/pi-sidebar.js";
 import { getWorkbookChangeAuditLog } from "../../audit/workbook-change-audit.js";
 import { getWorkbookContext } from "../../workbook/context.js";
 import { effectiveKeepRecentTokens, effectiveReserveTokens } from "../../compaction/defaults.js";
+import { completeWithAgentConfig, MissingApiKeyError } from "../../models/agent-completion.js";
 import {
   buildCompactionMemoryFocusInstruction,
   collectCompactionMemoryCues,
@@ -555,12 +555,6 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
     return;
   }
 
-  const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
-  if (!apiKey) {
-    showToast(t("export.toast.compact.no_api_key", { provider: model.provider }), { id: COMPACT_TOAST_ID });
-    return;
-  }
-
   const contextWindow = model.contextWindow || 200000;
 
   const reserveTokens = effectiveReserveTokens(contextWindow);
@@ -657,31 +651,26 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
       ...(customInstructions !== undefined ? { customInstructions } : {}),
     });
 
-    const request = async () => {
-      const stream = await agent.streamFunction(
-        model,
-        normalizeContext({
-          systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: [{ type: "text", text: promptText }],
-              timestamp: Date.now(),
-            },
-          ],
-        }),
-        {
-          apiKey,
-          ...(agent.sessionId !== undefined ? { sessionId: agent.sessionId } : {}),
-          maxTokens,
-          ...(signal ? { signal } : {}),
-          reasoning: "high",
-        },
-      );
-
-      return stream.result();
-    };
-    const result = await untilStopped(request(), signal);
+    const request = completeWithAgentConfig(
+      agent,
+      model,
+      {
+        systemPrompt: SUMMARIZATION_SYSTEM_PROMPT,
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: promptText }],
+            timestamp: Date.now(),
+          },
+        ],
+      },
+      {
+        maxTokens,
+        ...(signal ? { signal } : {}),
+        reasoning: "high",
+      },
+    );
+    const result = await untilStopped(request, signal);
 
     if (result.stopReason === "aborted" || signal?.aborted) {
       throw new CompactionStoppedError();
@@ -771,6 +760,10 @@ export async function runCompactCommand(agent: Agent, args: string, signal?: Abo
   } catch (e) {
     if (e instanceof CompactionStoppedError) {
       showToast(t("export.toast.compact.stopped"), { id: COMPACT_TOAST_ID });
+      return;
+    }
+    if (e instanceof MissingApiKeyError) {
+      showToast(t("export.toast.compact.no_api_key", { provider: e.provider }), { id: COMPACT_TOAST_ID });
       return;
     }
     const msg = getErrorMessage(e);

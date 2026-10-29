@@ -120,6 +120,7 @@ function createEnvironment() {
         tools: [],
       },
       streamFn: (model, context, options) => models.streamSimple(model, context, options),
+      getApiKey: () => "lifecycle-test-key",
     });
     const persistence = await setupSessionPersistence({
       agent,

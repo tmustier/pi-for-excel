@@ -1,8 +1,7 @@
 import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
-import { normalizeContext } from "@earendil-works/pi-ai";
-import { t } from "../language/index.js";
 
 import type { ConnectionManager } from "../connections/manager.js";
+import { completeWithAgentConfig } from "../models/agent-completion.js";
 import {
   createExtensionAPI,
   dismissLegacyWidgetOwnedBy,
@@ -464,23 +463,18 @@ export class ExtensionRuntimeManager {
       ...(request.model !== undefined ? { requestedModel: request.model } : {}),
     });
 
-    const apiKey = agent.getApiKey ? await agent.getApiKey(model.provider) : undefined;
-    if (!apiKey) {
-      throw new Error(t("runtime.error.noApiKey", { provider: model.provider }));
-    }
-
     if (!Array.isArray(request.messages)) {
       throw new Error("llm.complete requires a messages array.");
     }
 
-    const stream = await agent.streamFunction(
+    const result = await completeWithAgentConfig(
+      agent,
       model,
-      normalizeContext({
+      {
         ...(request.systemPrompt !== undefined ? { systemPrompt: request.systemPrompt } : {}),
         messages: parseLlmMessages(request.messages, model),
-      }),
+      },
       {
-        apiKey,
         sessionId: createExtensionLlmCompletionSessionId({
           agentSessionId: agent.sessionId,
           extensionId: entry.id,
@@ -488,8 +482,6 @@ export class ExtensionRuntimeManager {
         ...(request.maxTokens !== undefined ? { maxTokens: request.maxTokens } : {}),
       },
     );
-
-    const result = await stream.result();
     if (result.stopReason === "error" || result.stopReason === "aborted") {
       throw new Error(result.errorMessage ?? "LLM completion failed.");
     }

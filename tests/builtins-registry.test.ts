@@ -128,15 +128,17 @@ void test("command-layer contract: workspace commands complete, preserve failure
     commandRegistry.register({ name: "unrelated", description: "Restore saved conversations", source: "builtin", execute: () => {} });
     registerBuiltins(context);
 
-    const menuNames = commandRegistry.list("").map((command) => command.name);
+    const menuNames = commandRegistry.menu("").map((command) => command.name);
     assert.equal(menuNames[0], "new");
     for (const hidden of ["debug", "experimental", "tools", "plugins", "skills", "share-session", "resume-here"]) {
       assert.equal(menuNames.includes(hidden), false, `${hidden} must not crowd discovery`);
     }
-    assert.equal(commandRegistry.list("res")[0]?.name, "resume");
-    assert.deepEqual(commandRegistry.list("name Quarterly budget"), []);
-    assert.equal(commandRegistry.list("debug")[0]?.name, "debug");
-    assert.equal(commandRegistry.list("exper").some((command) => command.name === "experimental"), false);
+    assert.equal(commandRegistry.menu("res")[0]?.name, "resume");
+    assert.deepEqual(commandRegistry.menu("name Quarterly budget"), []);
+    assert.equal(commandRegistry.menu("debug")[0]?.name, "debug");
+    assert.equal(commandRegistry.menu("exper").some((command) => command.name === "experimental"), false);
+    assert.equal(commandRegistry.hiddenAlias("tools")?.name, "tools");
+    assert.equal(commandRegistry.hiddenAlias("tool"), undefined);
     for (const removed of ["share-session", "resume-here"]) assert.equal(commandRegistry.get(removed), undefined);
 
     for (const name of ["extensions", "plugins", "tools", "skills", "files"]) {

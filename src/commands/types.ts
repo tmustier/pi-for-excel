@@ -26,13 +26,19 @@ class CommandRegistry {
     return this.commands.get(name);
   }
 
-  list(filter?: string): SlashCommand[] {
-    const all = Array.from(this.commands.values());
-    if (filter === undefined) return all;
+  list(): SlashCommand[] {
+    return Array.from(this.commands.values());
+  }
+
+  hiddenAlias(typed: string): SlashCommand | undefined {
+    const command = this.commands.get(typed.toLowerCase());
+    return command?.menuVisibility === "hidden" ? command : undefined;
+  }
+
+  menu(filter: string): SlashCommand[] {
     if (/\s/.test(filter)) return [];
     const q = filter.toLowerCase();
-    if (this.commands.get(q)?.menuVisibility === "hidden") return [];
-    const matches = all.filter(
+    const matches = this.list().filter(
       (c) => c.menuVisibility !== "hidden"
         && (c.menuVisibility !== "exact" || c.name.toLowerCase() === q)
         && (c.name.toLowerCase().includes(q) || c.description.toLowerCase().includes(q)),
