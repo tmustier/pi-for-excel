@@ -1,3 +1,5 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
+
 function isSkillsActivationStorePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -107,31 +109,35 @@ export interface SetSkillEnabledResult {
   changed: boolean;
 }
 
+const mutateActivationSerially = createConcurrencyLimit(1);
+
 export async function setSkillEnabledInSettings(args: {
   settings: SkillActivationMutableSettingsStore;
   name: string;
   enabled: boolean;
 }): Promise<SetSkillEnabledResult> {
-  const normalizedName = normalizeSkillName(args.name);
-  const existingNames = parseStoredDisabledSkillNames(await args.settings.get(SKILL_ACTIVATION_STORAGE_KEY));
-  const nextDisabled = new Set(existingNames);
+  return mutateActivationSerially(async () => {
+    const normalizedName = normalizeSkillName(args.name);
+    const existingNames = parseStoredDisabledSkillNames(await args.settings.get(SKILL_ACTIVATION_STORAGE_KEY));
+    const nextDisabled = new Set(existingNames);
 
-  if (args.enabled) {
-    nextDisabled.delete(normalizedName);
-  } else {
-    nextDisabled.add(normalizedName);
-  }
+    if (args.enabled) {
+      nextDisabled.delete(normalizedName);
+    } else {
+      nextDisabled.add(normalizedName);
+    }
 
-  const nextNames = Array.from(nextDisabled).sort((left, right) => left.localeCompare(right));
-  const changed = !arrayShallowEqual(existingNames, nextNames);
+    const nextNames = Array.from(nextDisabled).sort((left, right) => left.localeCompare(right));
+    const changed = !arrayShallowEqual(existingNames, nextNames);
 
-  if (changed) {
-    await args.settings.set(SKILL_ACTIVATION_STORAGE_KEY, buildStoredDocument(nextNames));
-  }
+    if (changed) {
+      await args.settings.set(SKILL_ACTIVATION_STORAGE_KEY, buildStoredDocument(nextNames));
+    }
 
-  return {
-    name: normalizedName,
-    enabled: args.enabled,
-    changed,
-  };
+    return {
+      name: normalizedName,
+      enabled: args.enabled,
+      changed,
+    };
+  });
 }

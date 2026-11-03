@@ -63,25 +63,25 @@ export function createOfficeDocumentUrlReader(
     timeoutMs: overrides.timeoutMs ?? DEFAULT_LIVE_URL_TIMEOUT_MS,
   };
   let lastLiveUrl: string | null = null;
-
-  const readLiveWithTimeout = (): Promise<string | null> => new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(null), source.timeoutMs);
-    source.readLiveUrl().then(
-      (url) => {
-        clearTimeout(timer);
-        resolve(url);
-      },
-      () => {
-        clearTimeout(timer);
-        resolve(null);
-      },
-    );
-  });
+  let generation = 0;
 
   return {
     async read(): Promise<string | null> {
-      const live = nonEmpty(await readLiveWithTimeout());
-      if (live) {
+      const currentGeneration = ++generation;
+      const live = nonEmpty(await new Promise<string | null>((resolve) => {
+        const timer = setTimeout(() => resolve(null), source.timeoutMs);
+        source.readLiveUrl().then(
+          (url) => {
+            clearTimeout(timer);
+            resolve(url);
+          },
+          () => {
+            clearTimeout(timer);
+            resolve(null);
+          },
+        );
+      }));
+      if (live && currentGeneration === generation) {
         lastLiveUrl = live;
         return live;
       }

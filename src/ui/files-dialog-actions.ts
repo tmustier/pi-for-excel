@@ -273,18 +273,19 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       }
 
       options.onMutationStateChange(true);
-      await options.workspace.renameFile(options.file.path, nextPath, {
-        audit: options.auditContext,
-        locationKind: options.fileRef.locationKind,
-      });
+      try {
+        await options.workspace.renameFile(options.file.path, nextPath, {
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
 
-      showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
-
-      await options.onAfterRename(nextPath, options.fileRef.locationKind);
+        showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
+        await options.onAfterRename(nextPath, options.fileRef.locationKind);
+      } finally {
+        options.onMutationStateChange(false);
+      }
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
-    }).finally(() => {
-      options.onMutationStateChange(false);
     });
   });
 
@@ -311,18 +312,19 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
       }
 
       options.onMutationStateChange(true);
-      await options.workspace.deleteFile(options.file.path, {
-        audit: options.auditContext,
-        locationKind: options.fileRef.locationKind,
-      });
+      try {
+        await options.workspace.deleteFile(options.file.path, {
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
 
-      showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
-
-      await options.onAfterDelete();
+        showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
+        await options.onAfterDelete();
+      } finally {
+        options.onMutationStateChange(false);
+      }
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
-    }).finally(() => {
-      options.onMutationStateChange(false);
     });
   });
 

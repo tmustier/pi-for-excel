@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { createExecutionModeController } from "../src/execution/controller.ts";
+import { deferred } from "./fixtures/workbook-deferred.ts";
 
 function sharedStore() {
   const values = new Map<string, unknown>();
@@ -42,4 +43,100 @@ void test("two taskpanes never run in different execution modes", async () => {
 
   await paneB.setMode("yolo");
   assert.equal(await paneA.readMode(), "yolo");
+});
+
+void test("setting the cached mode still persists after another pane changed storage", async () => {
+  const settings = sharedStore();
+  const pane = await createExecutionModeController({ settings, channel: null });
+  await settings.set("execution.mode.v1", "safe");
+  await pane.setMode("yolo");
+  assert.equal(await settings.get("execution.mode.v1"), "yolo", "explicit mode must override stale storage");
+});
+
+void test("an older read cannot publish over a newer setMode", async () => {
+  const staleRead = deferred<string>();
+  const readStarted = deferred<void>();
+  let reads = 0;
+  let stored = "yolo";
+  const pane = await createExecutionModeController({
+    settings: {
+      get: () => {
+        reads += 1;
+        if (reads === 2) { readStarted.resolve(); return staleRead.promise; }
+        return Promise.resolve(stored);
+      },
+      set: (_key, value) => { stored = String(value); return Promise.resolve(); },
+    },
+    channel: null,
+  });
+  const read = pane.readMode();
+  await readStarted.promise;
+  const write = pane.setMode("safe");
+  staleRead.resolve("yolo");
+  await Promise.all([read, write]);
+  assert.equal(pane.getMode(), "safe", "older read must not restore stale mode");
+  assert.equal(stored, "safe");
+});
+
+void test("overlapping mode writes persist in invocation order", async () => {
+  const firstWrite = deferred<void>();
+  const writeStarted = deferred<void>();
+  let stored = "yolo";
+  let writes = 0;
+  const pane = await createExecutionModeController({
+    settings: {
+      get: () => Promise.resolve(stored),
+      set: async (_key, value) => {
+        writes += 1;
+        if (writes === 1) { writeStarted.resolve(); await firstWrite.promise; }
+        stored = String(value);
+      },
+    },
+    channel: null,
+  });
+  const first = pane.setMode("safe");
+  await writeStarted.promise;
+  const last = pane.setMode("yolo");
+  firstWrite.resolve();
+  await Promise.all([first, last]);
+  assert.equal(stored, "yolo", "latest invocation must win in storage");
+  assert.equal(pane.getMode(), "yolo");
+});
+
+void test("a failed queued mode read does not hide a committed write", async () => {
+  const writeStarted = deferred<void>();
+  const finishWrite = deferred<void>();
+  let stored = "yolo";
+  let reads = 0;
+  const pane = await createExecutionModeController({
+    settings: {
+      get: () => ++reads === 1 ? Promise.resolve(stored) : Promise.reject(new Error("read failed")),
+      set: async (_key, value) => {
+        writeStarted.resolve();
+        await finishWrite.promise;
+        stored = String(value);
+      },
+    },
+    channel: null,
+  });
+  const write = pane.setMode("safe");
+  await writeStarted.promise;
+  const read = assert.rejects(pane.readMode(), /read failed/u);
+  finishWrite.resolve();
+  await Promise.all([write, read]);
+  assert.equal(stored, "safe");
+  assert.equal(pane.getMode(), "safe", "a later failure must not suppress a committed mode");
+});
+
+void test("a queued mode read does not suppress notification of a committed write", async () => {
+  const settings = sharedStore();
+  const [channelA, channelB] = channelPair();
+  const first = await createExecutionModeController({ settings, channel: channelA });
+  const other = await createExecutionModeController({ settings, channel: channelB });
+  const write = first.setMode("safe");
+  const read = first.readMode();
+  await Promise.all([write, read]);
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(other.getMode(), "safe");
 });

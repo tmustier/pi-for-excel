@@ -214,6 +214,13 @@ export async function buildCustomGatewaySection(
   const listHost = document.createElement("div");
   listHost.className = "pi-settings-gateway-list";
 
+  let mutation: "idle" | "saving" | "deleting" = "idle";
+  const setMutation = (next: typeof mutation): void => {
+    mutation = next;
+    for (const control of section.querySelectorAll<HTMLInputElement | HTMLButtonElement>("input, button")) {
+      control.disabled = next !== "idle";
+    }
+  };
   let editingGatewayId: string | null = null;
   let gateways: OpenAiGatewayConfig[] = [];
 
@@ -255,6 +262,7 @@ export async function buildCustomGatewaySection(
   };
 
   const startEditing = (gateway: OpenAiGatewayConfig): void => {
+    if (mutation !== "idle") return;
     editingGatewayId = gateway.id;
     nameInput.value = gateway.displayName;
     endpointInput.value = gateway.endpointUrl;
@@ -287,6 +295,8 @@ export async function buildCustomGatewaySection(
         gateway,
         onEdit: startEditing,
         onDelete: (targetGateway) => {
+          if (mutation !== "idle") return;
+          setMutation("deleting");
           void (async () => {
             try {
               const confirmed = await requestConfirmationDialog({
@@ -313,6 +323,8 @@ export async function buildCustomGatewaySection(
             } catch (error) {
               const message = error instanceof Error ? error.message : String(error);
               showToast(t("custom-gateway.toast.deleteFailed", { message }));
+            } finally {
+              setMutation("idle");
             }
           })();
         },
@@ -321,14 +333,15 @@ export async function buildCustomGatewaySection(
   };
 
   cancelButton.addEventListener("click", () => {
-    resetForm();
+    if (mutation === "idle") resetForm();
   });
 
   saveButton.addEventListener("click", () => {
+    if (mutation !== "idle") return;
+    const savingGatewayId = editingGatewayId;
+    setMutation("saving");
     void (async () => {
       setError(null);
-      saveButton.disabled = true;
-      cancelButton.disabled = true;
 
       try {
         const rawContextWindow = contextWindowInput.value.trim();
@@ -341,7 +354,7 @@ export async function buildCustomGatewaySection(
           : undefined;
 
         const saved = await saveOpenAiGatewayConfig(getAppStorage().customProviders, {
-          ...(editingGatewayId ? { id: editingGatewayId } : {}),
+          ...(savingGatewayId ? { id: savingGatewayId } : {}),
           displayName: nameInput.value,
           endpointUrl: endpointInput.value,
           modelId: modelInput.value,
@@ -355,7 +368,7 @@ export async function buildCustomGatewaySection(
         renderList();
         options.onProvidersChanged();
         showToast(
-          editingGatewayId
+          savingGatewayId
             ? t("custom-gateway.updatedGateway", { name: saved.displayName })
             : t("custom-gateway.savedGateway", { name: saved.displayName }),
         );
@@ -365,8 +378,7 @@ export async function buildCustomGatewaySection(
         const message = error instanceof Error ? error.message : String(error);
         setError(message);
       } finally {
-        saveButton.disabled = false;
-        cancelButton.disabled = false;
+        setMutation("idle");
       }
     })();
   });

@@ -90,7 +90,11 @@ function runImageWorker(
     worker.onmessage = (event: MessageEvent<ImageWorkerResponse>) => finish(event.data);
     worker.onerror = () => finish({ ok: false, reason: "decode" });
     signal?.addEventListener("abort", abort, { once: true });
-    worker.postMessage(request);
+    try {
+      worker.postMessage(request);
+    } catch {
+      finish({ ok: false, reason: "decode" });
+    }
   });
 }
 

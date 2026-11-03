@@ -83,6 +83,32 @@ void test("Shift+Tab moves focus; Ctrl+Alt+T cycles thinking only in the compose
   });
 });
 
+void test("a deferred composer focus yields to focus moved before it runs, but not to a dropped focus", async () => {
+  await withTaskpane({ width: 420, height: 720 }, async (page) => {
+    await page.getByRole("button", { name: "Browse files", exact: true }).waitFor();
+    const focused = await page.evaluate(async () => {
+      const nextFrames = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const browse = document.querySelector(".pi-input-btn--attach");
+      const textarea = document.querySelector("pi-input textarea");
+      if (!(browse instanceof HTMLButtonElement) || !(textarea instanceof HTMLTextAreaElement)) return null;
+
+      browse.blur();
+      textarea.blur();
+      await nextFrames();
+      document.dispatchEvent(new CustomEvent("pi:request-input-focus"));
+      browse.focus();
+      await nextFrames();
+      const moved = document.activeElement === browse;
+
+      document.dispatchEvent(new CustomEvent("pi:request-input-focus"));
+      browse.blur();
+      await nextFrames();
+      return { moved, dropped: document.activeElement === textarea };
+    });
+    assert.deepEqual(focused, { moved: true, dropped: true });
+  });
+});
+
 void test("arrow keys inside a status popover do not switch tabs", async () => {
   await withTaskpane({ width: 420, height: 720 }, async (page) => {
     await page.getByRole("button", { name: "New tab" }).click();

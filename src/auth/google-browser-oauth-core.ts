@@ -123,9 +123,11 @@ async function exchangeAuthorizationCode(
   config: GoogleOAuthFlowConfig,
   code: string,
   verifier: string,
+  signal?: AbortSignal,
 ): Promise<GoogleTokenPayload> {
   const response = await fetch(GOOGLE_TOKEN_URL, {
     method: "POST",
+    signal: signal ?? null,
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -182,9 +184,10 @@ async function refreshAccessToken(
   return payload;
 }
 
-async function getUserEmail(accessToken: string): Promise<string | undefined> {
+async function getUserEmail(accessToken: string, signal?: AbortSignal): Promise<string | undefined> {
   try {
     const response = await fetch("https://www.googleapis.com/oauth2/v1/userinfo?alt=json", {
+      signal: signal ?? null,
       headers: {
         Authorization: `Bearer ${accessToken}`,
       },
@@ -230,6 +233,7 @@ async function loginGoogleOAuth(
   authUrl.searchParams.set("access_type", "offline");
   authUrl.searchParams.set("prompt", "consent");
 
+  callbacks.signal?.throwIfAborted();
   callbacks.onAuth({
     url: authUrl.toString(),
     instructions:
@@ -247,6 +251,7 @@ async function loginGoogleOAuth(
     placeholder: `${config.redirectUri}?code=...&state=...`,
   });
 
+  callbacks.signal?.throwIfAborted();
   const parsed = parseAuthorizationInput(input);
   if (parsed.state && parsed.state !== state) {
     throw new Error("Google login failed: OAuth state mismatch");
@@ -257,12 +262,17 @@ async function loginGoogleOAuth(
   }
 
   callbacks.onProgress?.("Exchanging authorization code for tokens…");
-  const tokens = await exchangeAuthorizationCode(config, parsed.code, verifier);
+  callbacks.signal?.throwIfAborted();
+  const tokens = await exchangeAuthorizationCode(config, parsed.code, verifier, callbacks.signal);
+  callbacks.signal?.throwIfAborted();
 
   callbacks.onProgress?.("Fetching account details…");
-  const email = await getUserEmail(tokens.accessToken);
+  callbacks.signal?.throwIfAborted();
+  const email = await getUserEmail(tokens.accessToken, callbacks.signal);
+  callbacks.signal?.throwIfAborted();
 
   const projectId = await config.discoverProject(tokens.accessToken, callbacks);
+  callbacks.signal?.throwIfAborted();
 
   const credentials: OAuthCredentials = {
     refresh: tokens.refreshToken,

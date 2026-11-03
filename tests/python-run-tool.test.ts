@@ -55,6 +55,7 @@ void test("python_run sends v1 bridge payload and renders stdout/result", async 
   let capturedConfig: PythonBridgeConfig | null = null;
 
   const tool = createPythonRunTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
       token: "secret-token",
@@ -103,6 +104,7 @@ void test("python_run sends v1 bridge payload and renders stdout/result", async 
 
 void test("python_run bridge errors are surfaced", async () => {
   const tool = createPythonRunTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: true }),
     callBridge: () => Promise.reject(new Error("bridge unavailable")),
   });
@@ -154,6 +156,7 @@ void test("python_run falls back to Pyodide only when the default bridge is unre
     globalThis.fetch = testCase.fetch;
     let pyodideCalls = 0;
     const tool = createPythonRunTool({
+      getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
       getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
       isPyodideAvailable: () => true,
       callPyodide: () => {
@@ -172,6 +175,7 @@ void test("python_run falls back to Pyodide only when the default bridge is unre
 
 void test("python_run handles explicit bridge-level rejection payloads", async () => {
   const tool = createPythonRunTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: true }),
     callBridge: () => Promise.resolve({
       ok: false,

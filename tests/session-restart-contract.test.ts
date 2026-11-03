@@ -191,7 +191,10 @@ async function promptAndWaitForSave(runtime: RuntimeHarness, prompt: string): Pr
 
   for (let attempt = 0; attempt < 50; attempt += 1) {
     const saved = await runtime.sessions.loadSession(sessionId);
-    if (saved?.messages.length === 2) return sessionId;
+    if (saved?.messages.length === 2) {
+      await runtime.controller.saveSession();
+      return sessionId;
+    }
     await new Promise<void>((resolve) => setTimeout(resolve, 1));
   }
 

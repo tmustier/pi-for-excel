@@ -90,9 +90,8 @@ export function createActionQueue(opts: {
   const { agent, tab, queueDisplay, autoCompactEnabled } = opts;
 
   const actions: QueuedAction[] = [];
-  let running = false;
-  let retryRequested = false;
-  let closed = false;
+  let lifecycle: "idle" | "running" | "closed" = "idle";
+  const isClosed = () => lifecycle === "closed";
   let stopController = new AbortController();
 
   const syncDisplay = () => {
@@ -104,7 +103,7 @@ export function createActionQueue(opts: {
     );
   };
 
-  const isBusy = () => running || agent.state.isStreaming;
+  const isBusy = () => lifecycle === "running";
 
   const runCompactWithIndicator = async (args: string, signal: AbortSignal) => {
     tab.setActivity({ label: t("action-queue.compacting"), hint: t("action-queue.compactingHint") });
@@ -116,7 +115,7 @@ export function createActionQueue(opts: {
   };
 
   agent.prepareNextTurn = async (signal) => {
-    if (closed) return undefined;
+    if (isClosed()) return undefined;
     return maybeAutoCompactBeforeContinuation({
       agent,
       enabled: autoCompactEnabled,
@@ -178,7 +177,7 @@ export function createActionQueue(opts: {
   };
 
   const shutdown = () => {
-    closed = true;
+    lifecycle = "closed";
     stopController.abort();
     delete agent.prepareNextTurn;
     actions.length = 0;
@@ -221,7 +220,7 @@ export function createActionQueue(opts: {
         tab.setActivity(null);
       }
 
-      if (closed) return;
+      if (isClosed()) return;
       prepareRetry();
       await agent.continue();
     }
@@ -234,24 +233,62 @@ export function createActionQueue(opts: {
     opts.onLeftUnsent?.(leftovers.length);
   }
 
-  async function process(): Promise<void> {
-    if (running || closed) return;
-    running = true;
+  async function runTurn(input: { kind: "retry" } | { kind: "prompt"; text: string }, signal: AbortSignal): Promise<void> {
+    try {
+      if (input.kind === "retry") {
+        prepareRetry();
+        await agent.continue();
+      } else {
+        await agent.prompt(input.text);
+      }
+      if (isClosed() || signal.aborted) return;
+
+      await retryTransientFailure(signal);
+      if (isClosed() || signal.aborted) return;
+
+      const retried = autoCompactEnabled && await recoverFromContextOverflow({
+        agent,
+        runCompact: () => runCompactWithIndicator("", signal),
+        explicitRetry: input.kind === "retry",
+      });
+      if (retried && !signal.aborted) await retryTransientFailure(signal);
+
+      returnLeftovers();
+      opts.onTurnSettled?.({
+        overflowAfterRecovery: retried && findTrailingContextOverflowError(agent.state) !== null,
+      });
+    } finally {
+      if (!isClosed()) returnLeftovers();
+    }
+  }
+
+  function nextSignal(): AbortSignal {
+    if (stopController.signal.aborted) stopController = new AbortController();
+    return stopController.signal;
+  }
+
+  async function process(startWithRetry: boolean): Promise<void> {
+    if (lifecycle !== "idle") return;
+    lifecycle = "running";
     tab.setBusy(true);
 
     try {
-      while (!closed && (actions.length > 0 || retryRequested)) {
+      let retryPending = startWithRetry;
+      while (!isClosed()) {
         await agent.waitForIdle();
-        if (closed) break;
+        if (isClosed()) break;
+
+        if (retryPending) {
+          retryPending = false;
+          await runTurn({ kind: "retry" }, nextSignal());
+          continue;
+        }
 
         const next = actions[0];
-        const retry = retryRequested;
-        retryRequested = false;
-        if (!next && !retry) break;
-        if (stopController.signal.aborted) stopController = new AbortController();
-        const signal = stopController.signal;
+        if (!next) break;
+        const signal = nextSignal();
 
-        if (next?.type === "command") {
+        if (next.type === "command") {
           actions.shift();
           syncDisplay();
           try {
@@ -268,46 +305,21 @@ export function createActionQueue(opts: {
           continue;
         }
 
-        if (next?.type === "prompt") await maybeAutoCompactBeforePrompt({
+        await maybeAutoCompactBeforePrompt({
           agent,
           nextUserText: next.text,
           enabled: autoCompactEnabled,
           runCompact: () => runCompactWithIndicator("", signal),
         });
-        if (closed) break;
-        if (!retry && actions[0] !== next) continue;
+        if (isClosed()) break;
+        if (actions[0] !== next) continue;
 
         actions.shift();
         syncDisplay();
-        try {
-          if (retry) {
-            prepareRetry();
-            await agent.continue();
-          } else if (next?.type === "prompt") {
-            await agent.prompt(next.text);
-          }
-          if (closed || signal.aborted) continue;
-
-          await retryTransientFailure(signal);
-          if (closed || signal.aborted) continue;
-
-          const retried = autoCompactEnabled && await recoverFromContextOverflow({
-            agent,
-            runCompact: () => runCompactWithIndicator("", signal),
-            explicitRetry: retry,
-          });
-          if (retried && !signal.aborted) await retryTransientFailure(signal);
-
-          returnLeftovers();
-          opts.onTurnSettled?.({
-            overflowAfterRecovery: retried && findTrailingContextOverflowError(agent.state) !== null,
-          });
-        } finally {
-          if (!closed) returnLeftovers();
-        }
+        await runTurn({ kind: "prompt", text: next.text }, signal);
       }
     } finally {
-      running = false;
+      if (lifecycle === "running") lifecycle = "idle";
       syncDisplay();
       tab.setActivity(null);
       tab.setBusy(false);
@@ -315,35 +327,33 @@ export function createActionQueue(opts: {
   }
 
   const enqueuePrompt = (text: string) => {
-    if (closed) return;
+    if (isClosed()) return;
 
     const trimmed = text.trim();
     if (!trimmed) return;
 
     actions.push({ type: "prompt", text: trimmed });
     syncDisplay();
-    void process();
+    void process(false);
   };
 
   const enqueueCommand = (name: string, args: string) => {
-    if (closed) return;
+    if (isClosed()) return;
 
     const cmdName = name.trim();
     if (!cmdName) return;
 
     actions.push({ type: "command", name: cmdName, args: args.trim() });
     syncDisplay();
-    void process();
+    void process(false);
   };
 
   return {
     enqueuePrompt,
     enqueueCommand,
     retry: () => {
-      const failure = lastAssistant(agent.state.messages);
-      if (closed || isBusy() || failure?.stopReason !== "error") return false;
-      retryRequested = true;
-      void process();
+      if (lifecycle !== "idle" || lastAssistant(agent.state.messages)?.stopReason !== "error") return false;
+      void process(true);
       return true;
     },
     editLast: () => {

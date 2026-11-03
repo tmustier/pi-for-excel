@@ -22,7 +22,6 @@ export function bindRuntimeSidebar(opts: {
     }
     const activity = runtime.tab.activity;
     sidebar.setBusyIndicator(activity?.label ?? null, activity?.hint ?? null);
-    sidebar.tabBusy = activity !== null || runtime.tab.busy;
     renderError(runtime.tab.error);
   };
 

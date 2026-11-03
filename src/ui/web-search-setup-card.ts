@@ -337,6 +337,7 @@ export function mountSearchSetupCard(container: HTMLElement, details: WebSearchD
       footer.append(dismissBtn);
       card.append(bodyEl, footer);
     } catch {
+      delete container.dataset.mounted;
       card.remove();
     }
   })();

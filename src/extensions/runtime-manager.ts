@@ -1,3 +1,5 @@
+import { createConcurrencyLimit, type ConcurrencyLimit } from "../utils/concurrency.js";
+
 import type { Agent, AgentEvent, AgentTool } from "@earendil-works/pi-agent-core";
 
 import type { ConnectionManager } from "../connections/manager.js";
@@ -143,6 +145,14 @@ interface LoadedExtensionState {
   inlineBlobUrl: string | null;
 }
 
+type ExtensionLifecycle =
+  | { kind: "disabled" }
+  | { kind: "activating"; instance: LoadedExtensionState }
+  | { kind: "refreshing"; instance: LoadedExtensionState }
+  | { kind: "active"; instance: LoadedExtensionState }
+  | { kind: "deactivating"; instance: LoadedExtensionState }
+  | { kind: "failed"; error: string; instance: LoadedExtensionState | null };
+
 export interface ExtensionRuntimeStatus {
   id: string;
   name: string;
@@ -191,14 +201,14 @@ export class ExtensionRuntimeManager {
   private readonly showToastMessage: typeof showToast;
 
   private readonly listeners = new Set<ManagerListener>();
-  private readonly activeStates = new Map<string, LoadedExtensionState>();
+  private readonly lifecycles = new Map<string, ExtensionLifecycle>();
+  private readonly lifecycleQueues = new Map<string, ConcurrencyLimit>();
   private readonly extensionTools = new Map<string, AnyAgentTool>();
-  private readonly toolOwners = new Map<string, string>();
-  private readonly commandOwners = new Map<string, string>();
-  private readonly lastErrors = new Map<string, string>();
+  private readonly toolOwners = new Map<string, LoadedExtensionState>();
+  private readonly commandOwners = new Map<string, LoadedExtensionState>();
 
   private entries: StoredExtensionEntry[] = [];
-  private initialized = false;
+  private initialization: Promise<void> | null = null;
   private extensionToolRevision = 0;
 
   constructor(options: ExtensionRuntimeManagerOptions) {
@@ -226,7 +236,8 @@ export class ExtensionRuntimeManager {
     const sandboxHostFallbackEnabled = isExperimentalFeatureEnabled("extension_sandbox_runtime");
 
     return this.entries.map((entry) => {
-      const state = this.activeStates.get(entry.id);
+      const lifecycle = this.lifecycles.get(entry.id);
+      const state = lifecycle?.kind === "active" ? lifecycle.instance : undefined;
       const grantedCapabilities = listGrantedExtensionCapabilities(entry.permissions);
       const runtimeMode = state
         ? state.runtimeMode
@@ -249,7 +260,7 @@ export class ExtensionRuntimeManager {
         commandNames: state ? Array.from(state.commandNames).sort() : [],
         toolNames: state ? Array.from(state.toolNames).sort() : [],
         modelProviderIds: state ? Array.from(state.modelProviderIds).sort() : [],
-        lastError: this.lastErrors.get(entry.id) ?? null,
+        lastError: lifecycle?.kind === "failed" ? lifecycle.error : null,
       };
     });
   }
@@ -266,70 +277,73 @@ export class ExtensionRuntimeManager {
     this.extensionToolRevision += 1;
   }
 
-  async initialize(): Promise<void> {
-    if (this.initialized) {
-      return;
-    }
-
-    if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
-      const installedIds = await readIntactStoredExtensionIds(this.settings);
-      if (installedIds) {
-        await this.connectionManager.deleteStoredRecords((connectionId) =>
-          connectionId.startsWith("ext.")
-          && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+  initialize(): Promise<void> {
+    this.initialization ??= (async () => {
+      if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
+        const installedIds = await readIntactStoredExtensionIds(this.settings);
+        if (installedIds) {
+          await this.connectionManager.deleteStoredRecords((connectionId) =>
+            connectionId.startsWith("ext.")
+            && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+        }
+        await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
       }
-      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
-    }
-    this.entries = await loadStoredExtensions(this.settings);
+      this.entries = await loadStoredExtensions(this.settings);
 
-    for (const entry of this.entries) {
-      if (!entry.enabled) {
-        continue;
+      for (const entry of this.entries) {
+        if (entry.enabled) {
+          await this.runLifecycle(entry.id, () => this.tryActivateEntry(entry));
+        }
       }
 
-      await this.tryActivateEntry(entry);
-    }
-
-    this.initialized = true;
-    this.notify();
+      this.notify();
+    })().catch((error: unknown) => {
+      this.initialization = null;
+      throw error;
+    });
+    return this.initialization;
   }
 
   async reloadExtension(entryId: string): Promise<void> {
-    const entry = this.getEntryById(entryId);
-    if (!entry) {
-      throw new Error("Extension not found");
-    }
+    return this.runLifecycle(entryId, async () => {
+      const entry = this.getEntryById(entryId);
+      if (!entry) {
+        throw new Error("Extension not found");
+      }
 
-    await this.deactivateEntry(entry.id);
+      await this.deactivateEntry(entry.id);
 
-    if (entry.enabled) {
-      await this.tryActivateEntry(entry);
-    }
+      if (entry.enabled) {
+        await this.tryActivateEntry(entry);
+      }
 
-    this.notify();
+      this.notify();
+    });
   }
 
   async setExtensionEnabled(entryId: string, enabled: boolean): Promise<void> {
-    const entry = this.getEntryById(entryId);
-    if (!entry) {
-      throw new Error("Extension not found");
-    }
+    return this.runLifecycle(entryId, async () => {
+      const entry = this.getEntryById(entryId);
+      if (!entry) {
+        throw new Error("Extension not found");
+      }
 
-    if (entry.enabled === enabled) {
-      return;
-    }
+      if (entry.enabled === enabled) {
+        return;
+      }
 
-    entry.enabled = enabled;
-    entry.updatedAt = new Date().toISOString();
-    await this.persistEntries();
+      entry.enabled = enabled;
+      entry.updatedAt = new Date().toISOString();
+      await this.persistEntries();
 
-    if (enabled) {
-      await this.tryActivateEntry(entry);
-    } else {
-      await this.deactivateEntry(entry.id);
-    }
+      if (enabled) {
+        await this.tryActivateEntry(entry);
+      } else {
+        await this.deactivateEntry(entry.id);
+      }
 
-    this.notify();
+      this.notify();
+    });
   }
 
   async setExtensionCapability(
@@ -337,45 +351,48 @@ export class ExtensionRuntimeManager {
     capability: ExtensionCapability,
     allowed: boolean,
   ): Promise<void> {
-    const entry = this.getEntryById(entryId);
-    if (!entry) {
-      throw new Error("Extension not found");
-    }
+    return this.runLifecycle(entryId, async () => {
+      const entry = this.getEntryById(entryId);
+      if (!entry) {
+        throw new Error("Extension not found");
+      }
 
-    const existing = isExtensionCapabilityAllowed(entry.permissions, capability);
-    if (existing === allowed) {
-      return;
-    }
+      const existing = isExtensionCapabilityAllowed(entry.permissions, capability);
+      if (existing === allowed) {
+        return;
+      }
 
-    entry.permissions = setExtensionCapabilityAllowed(entry.permissions, capability, allowed);
-    entry.updatedAt = new Date().toISOString();
-    await this.persistEntries();
+      entry.permissions = setExtensionCapabilityAllowed(entry.permissions, capability, allowed);
+      entry.updatedAt = new Date().toISOString();
+      await this.persistEntries();
 
-    if (entry.enabled) {
-      await this.reloadExtension(entry.id);
-      return;
-    }
+      if (entry.enabled) {
+        await this.deactivateEntry(entry.id);
+        await this.tryActivateEntry(entry);
+      }
 
-    this.notify();
+      this.notify();
+    });
   }
 
   async uninstallExtension(entryId: string): Promise<void> {
-    const entryIndex = this.entries.findIndex((entry) => entry.id === entryId);
-    if (entryIndex < 0) {
-      throw new Error("Extension not found");
-    }
+    return this.runLifecycle(entryId, async () => {
+      if (!this.getEntryById(entryId)) {
+        throw new Error("Extension not found");
+      }
 
-    await this.deactivateEntry(entryId);
-    this.connectionManager.unregisterDefinitionsByOwner(entryId);
-    await this.connectionManager.deleteStoredRecords(
-      (connectionId) => isExtensionOwnedId(entryId, connectionId),
-    );
-    await clearExtensionStorage(this.settings, entryId);
-    this.entries.splice(entryIndex, 1);
-    this.lastErrors.delete(entryId);
+      await this.deactivateEntry(entryId);
+      this.connectionManager.unregisterDefinitionsByOwner(entryId);
+      await this.connectionManager.deleteStoredRecords(
+        (connectionId) => isExtensionOwnedId(entryId, connectionId),
+      );
+      await clearExtensionStorage(this.settings, entryId);
+      this.entries = this.entries.filter((entry) => entry.id !== entryId);
+      this.lifecycles.delete(entryId);
 
-    await this.persistEntries();
-    this.notify();
+      await this.persistEntries();
+      this.notify();
+    });
   }
 
   async installFromUrl(name: string, url: string): Promise<string> {
@@ -418,6 +435,15 @@ export class ExtensionRuntimeManager {
         specifier: normalizedSpecifier,
       },
     });
+  }
+
+  private runLifecycle<T>(entryId: string, task: () => Promise<T>): Promise<T> {
+    let queue = this.lifecycleQueues.get(entryId);
+    if (!queue) {
+      queue = createConcurrencyLimit(1);
+      this.lifecycleQueues.set(entryId, queue);
+    }
+    return queue(task);
   }
 
   private notify(): void {
@@ -620,18 +646,20 @@ export class ExtensionRuntimeManager {
     this.entries.push(entry);
     await this.persistEntries();
 
-    await this.tryActivateEntry(entry);
+    await this.runLifecycle(entry.id, () => this.tryActivateEntry(entry));
     this.notify();
     return id;
   }
 
   private async tryActivateEntry(entry: StoredExtensionEntry): Promise<void> {
+    if (!entry.enabled || this.getEntryById(entry.id) !== entry) return;
     try {
       await this.activateEntry(entry);
-      this.lastErrors.delete(entry.id);
     } catch (error) {
       const message = getRuntimeManagerErrorMessage(error);
-      this.lastErrors.set(entry.id, message);
+      const lifecycle = this.lifecycles.get(entry.id);
+      const instance = lifecycle && "instance" in lifecycle ? lifecycle.instance : null;
+      this.lifecycles.set(entry.id, { kind: "failed", error: message, instance });
       console.warn(`[pi] Failed to load extension "${entry.name}": ${message}`);
     }
   }
@@ -651,9 +679,22 @@ export class ExtensionRuntimeManager {
       inlineBlobUrl: null,
     };
 
-    let activationPhase = true;
-    let toolsChangedDuringActivation = false;
-    let modelsChangedDuringActivation = false;
+    this.lifecycles.set(entry.id, { kind: "activating", instance: state });
+    const changedRegistries = new Set<"tools" | "models">();
+    const isActivating = (): boolean => this.lifecycles.get(entry.id)?.kind === "activating";
+    const assertInstanceCurrent = (): void => {
+      const lifecycle = this.lifecycles.get(entry.id);
+      if (!lifecycle || !("instance" in lifecycle) || lifecycle.instance !== state) {
+        throw new Error("Extension instance is no longer active.");
+      }
+    };
+    const assertRegistrationAllowed = (): void => {
+      assertInstanceCurrent();
+      const lifecycle = this.lifecycles.get(entry.id);
+      if (lifecycle?.kind === "deactivating" || lifecycle?.kind === "failed") {
+        throw new Error("Extension instance is deactivating.");
+      }
+    };
     const pendingToolConnectionChecks = new Map<string, readonly string[]>();
     const pendingModelProviderChecks = new Map<string, ExtensionModelProviderDefinition>();
 
@@ -668,12 +709,6 @@ export class ExtensionRuntimeManager {
           const message = getRuntimeManagerErrorMessage(error);
           throw new Error(`Tool "${toolName}" requires an invalid connection "${connectionId}": ${message}`);
         }
-      }
-    };
-
-    const validatePendingToolConnectionChecks = (): void => {
-      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks.entries()) {
-        assertToolConnectionOwnership(toolName, requiredConnectionIds);
       }
     };
 
@@ -714,12 +749,6 @@ export class ExtensionRuntimeManager {
       }
     };
 
-    const validatePendingModelProviderChecks = (): void => {
-      for (const definition of pendingModelProviderChecks.values()) {
-        assertModelProviderConnection(definition);
-      }
-    };
-
     const refreshToolsForDynamicChange = (): void => {
       void this.refreshRuntimeTools().catch((error: unknown) => {
         console.warn(`[pi] Failed to refresh tools after extension tool update: ${getRuntimeManagerErrorMessage(error)}`);
@@ -727,6 +756,7 @@ export class ExtensionRuntimeManager {
     };
 
     const registerCommand = (name: string, cmd: ExtensionCommand) => {
+      assertRegistrationAllowed();
       const existing = commandRegistry.get(name);
       if (existing) {
         throw new Error(`Command /${name} is already registered (${existing.source})`);
@@ -740,17 +770,18 @@ export class ExtensionRuntimeManager {
         busyAllowed: cmd.busyAllowed ?? true,
       });
 
-      this.commandOwners.set(name, entry.id);
+      this.commandOwners.set(name, state);
       state.commandNames.add(name);
     };
 
     const registerTool = (tool: AnyAgentTool) => {
+      assertRegistrationAllowed();
       if (this.reservedToolNames.has(tool.name)) {
         throw new Error(`Tool name "${tool.name}" conflicts with a built-in tool`);
       }
 
       const existingOwner = this.toolOwners.get(tool.name);
-      if (existingOwner && existingOwner !== entry.id) {
+      if (existingOwner && existingOwner !== state) {
         throw new Error(`Tool name "${tool.name}" is already registered by another extension`);
       }
 
@@ -761,7 +792,7 @@ export class ExtensionRuntimeManager {
       assertToolExecuteFunction(tool, entry);
 
       const requiredConnectionIds = getToolRequiredConnectionIds(tool);
-      if (activationPhase) {
+      if (isActivating()) {
         pendingToolConnectionChecks.set(tool.name, requiredConnectionIds);
       } else {
         assertToolConnectionOwnership(tool.name, requiredConnectionIds);
@@ -785,19 +816,20 @@ export class ExtensionRuntimeManager {
           : {}),
       };
 
-      this.toolOwners.set(wrappedTool.name, entry.id);
+      this.toolOwners.set(wrappedTool.name, state);
       this.extensionTools.set(wrappedTool.name, wrappedTool);
       this.bumpExtensionToolRevision();
       state.toolNames.add(wrappedTool.name);
 
-      if (activationPhase) {
-        toolsChangedDuringActivation = true;
+      if (isActivating()) {
+        changedRegistries.add("tools");
       } else {
         refreshToolsForDynamicChange();
       }
     };
 
     const unregisterTool = (toolName: string): void => {
+      assertInstanceCurrent();
       const normalizedName = toolName.trim();
       if (normalizedName.length === 0) {
         throw new Error("Tool name cannot be empty");
@@ -808,7 +840,7 @@ export class ExtensionRuntimeManager {
       }
 
       const owner = this.toolOwners.get(normalizedName);
-      if (owner !== entry.id) {
+      if (owner !== state) {
         throw new Error(`Tool name "${normalizedName}" is not owned by this extension`);
       }
 
@@ -820,7 +852,7 @@ export class ExtensionRuntimeManager {
       }
       pendingToolConnectionChecks.delete(normalizedName);
 
-      if (!activationPhase) {
+      if (!isActivating()) {
         refreshToolsForDynamicChange();
       }
     };
@@ -832,6 +864,7 @@ export class ExtensionRuntimeManager {
     };
 
     const registerModelProvider = (rawDefinition: ExtensionModelProviderDefinition): string => {
+      assertRegistrationAllowed();
       const providerId = qualifyExtensionProviderId(entry.id, rawDefinition.id);
       if (state.modelProviderIds.has(providerId)) {
         throw new Error(`Model provider "${providerId}" is registered multiple times by this extension.`);
@@ -846,7 +879,7 @@ export class ExtensionRuntimeManager {
         ...(connection !== undefined ? { connection } : {}),
       };
 
-      if (activationPhase) {
+      if (isActivating()) {
         pendingModelProviderChecks.set(providerId, definition);
       } else {
         assertModelProviderConnection(definition);
@@ -872,8 +905,8 @@ export class ExtensionRuntimeManager {
       this.modelRuntime.registerExtensionProvider(entry.id, registration);
       state.modelProviderIds.add(providerId);
 
-      if (activationPhase) {
-        modelsChangedDuringActivation = true;
+      if (isActivating()) {
+        changedRegistries.add("models");
       } else {
         refreshModelsForDynamicChange();
       }
@@ -881,6 +914,7 @@ export class ExtensionRuntimeManager {
     };
 
     const unregisterModelProvider = (rawProviderId: string): void => {
+      assertInstanceCurrent();
       const providerId = qualifyExtensionProviderId(entry.id, rawProviderId);
       if (!state.modelProviderIds.has(providerId)) {
         throw new Error(`Model provider "${providerId}" is not registered by this extension.`);
@@ -890,16 +924,20 @@ export class ExtensionRuntimeManager {
       pendingModelProviderChecks.delete(providerId);
       void this.modelRuntime.unregisterExtensionProvider(entry.id, providerId)
         .then(() => {
-          if (!activationPhase) refreshModelsForDynamicChange();
+          if (!isActivating()) refreshModelsForDynamicChange();
         })
         .catch((error: unknown) => {
           console.warn(`[pi] Failed to unregister extension model provider: ${getRuntimeManagerErrorMessage(error)}`);
         });
     };
 
-    const refreshModelProviders = (): Promise<void> => this.refreshRuntimeModels();
+    const refreshModelProviders = (): Promise<void> => {
+      assertRegistrationAllowed();
+      return this.refreshRuntimeModels();
+    };
 
     const subscribeAgentEvents = (handler: (ev: AgentEvent) => void): (() => void) => {
+      assertRegistrationAllowed();
       const unsubscribe = this.getRequiredActiveAgent().subscribe(handler);
       state.eventUnsubscribers.add(unsubscribe);
 
@@ -907,13 +945,17 @@ export class ExtensionRuntimeManager {
         if (!state.eventUnsubscribers.has(unsubscribe)) {
           return;
         }
-        state.eventUnsubscribers.delete(unsubscribe);
         unsubscribe();
+        state.eventUnsubscribers.delete(unsubscribe);
       };
     };
 
-    const isCapabilityEnabled = (capability: ExtensionCapability): boolean =>
-      isExtensionCapabilityAllowed(entry.permissions, capability);
+    const isCapabilityEnabled = (capability: ExtensionCapability): boolean => {
+      const lifecycle = this.lifecycles.get(entry.id);
+      return lifecycle !== undefined && lifecycle.kind !== "failed"
+        && "instance" in lifecycle && lifecycle.instance === state
+        && isExtensionCapabilityAllowed(entry.permissions, capability);
+    };
 
     const formatCapabilityError = (capability: ExtensionCapability): string => {
       const capabilityLabel = describeExtensionCapability(capability);
@@ -926,6 +968,7 @@ export class ExtensionRuntimeManager {
     const widgetApiV2Enabled = isExperimentalFeatureEnabled("extension_widget_v2");
     const activationBridge = buildRuntimeManagerActivationBridge({
       entry,
+      assertRegistrationAllowed,
       settings: this.settings,
       connectionManager: this.connectionManager,
       getRequiredActiveAgent: () => this.getRequiredActiveAgent(),
@@ -994,21 +1037,25 @@ export class ExtensionRuntimeManager {
         state.handle = await this.loadExtensionFromSource(api, loadSource);
       }
 
-      validatePendingToolConnectionChecks();
-      validatePendingModelProviderChecks();
+      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks) {
+        assertToolConnectionOwnership(toolName, requiredConnectionIds);
+      }
+      for (const definition of pendingModelProviderChecks.values()) {
+        assertModelProviderConnection(definition);
+      }
       pendingToolConnectionChecks.clear();
       pendingModelProviderChecks.clear();
 
-      activationPhase = false;
-      this.activeStates.set(entry.id, state);
-
-      if (toolsChangedDuringActivation) {
+      this.lifecycles.set(entry.id, { kind: "refreshing", instance: state });
+      if (changedRegistries.has("tools")) {
         await this.refreshRuntimeTools();
       }
-      if (modelsChangedDuringActivation) {
+      if (changedRegistries.has("models")) {
         await this.refreshRuntimeModels();
       }
+      this.lifecycles.set(entry.id, { kind: "active", instance: state });
     } catch (error) {
+      this.lifecycles.set(entry.id, { kind: "deactivating", instance: state });
       try {
         await this.cleanupState(state);
       } catch (cleanupError) {
@@ -1022,13 +1069,17 @@ export class ExtensionRuntimeManager {
   }
 
   private async deactivateEntry(entryId: string): Promise<void> {
-    const state = this.activeStates.get(entryId);
-    if (!state) {
-      return;
+    const lifecycle = this.lifecycles.get(entryId);
+    const instance = lifecycle && "instance" in lifecycle ? lifecycle.instance : null;
+    if (!instance) return;
+    this.lifecycles.set(entryId, { kind: "deactivating", instance });
+    try {
+      await this.cleanupState(instance);
+      this.lifecycles.set(entryId, { kind: "disabled" });
+    } catch (error) {
+      this.lifecycles.set(entryId, { kind: "failed", error: getRuntimeManagerErrorMessage(error), instance });
+      throw error;
     }
-
-    this.activeStates.delete(entryId);
-    await this.cleanupState(state);
   }
 
   private async cleanupState(state: LoadedExtensionState): Promise<void> {
@@ -1037,6 +1088,7 @@ export class ExtensionRuntimeManager {
     if (state.handle) {
       try {
         await state.handle.deactivate();
+        state.handle = null;
       } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
@@ -1052,15 +1104,15 @@ export class ExtensionRuntimeManager {
     for (const unsubscribe of state.eventUnsubscribers) {
       try {
         unsubscribe();
+        state.eventUnsubscribers.delete(unsubscribe);
       } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
     }
-    state.eventUnsubscribers.clear();
 
     for (const commandName of state.commandNames) {
       const owner = this.commandOwners.get(commandName);
-      if (owner === state.entryId) {
+      if (owner === state) {
         commandRegistry.unregister(commandName);
         this.commandOwners.delete(commandName);
       }
@@ -1070,7 +1122,7 @@ export class ExtensionRuntimeManager {
     let toolsChanged = false;
     for (const toolName of state.toolNames) {
       const owner = this.toolOwners.get(toolName);
-      if (owner !== state.entryId) {
+      if (owner !== state) {
         continue;
       }
 

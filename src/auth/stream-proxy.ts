@@ -464,10 +464,9 @@ function withPayloadHook(
   return { onPayload };
 }
 
-interface CodexBridgeCapabilityCacheEntry {
-  checkedAt: number;
-  supported: boolean;
-}
+type CodexBridgeCapabilityCacheEntry =
+  | { kind: "probing" }
+  | { kind: "ready"; checkedAt: number; supported: boolean };
 
 const CODEX_BRIDGE_SUPPORTED_TTL_MS = 60_000;
 const CODEX_BRIDGE_UNAVAILABLE_TTL_MS = 3_000;
@@ -505,15 +504,17 @@ export function resolveCodexWebSocketBridgeSessionId(sessionId?: string): string
 async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<boolean> {
   const normalized = normalizeProxyUrl(proxyUrl);
   const cached = codexBridgeCapabilityCache.get(normalized);
-  const cacheTtlMs = cached?.supported
-    ? CODEX_BRIDGE_SUPPORTED_TTL_MS
-    : CODEX_BRIDGE_UNAVAILABLE_TTL_MS;
-  if (cached && Date.now() - cached.checkedAt < cacheTtlMs) {
-    return cached.supported;
+  if (cached?.kind === "ready") {
+    const cacheTtlMs = cached.supported ? CODEX_BRIDGE_SUPPORTED_TTL_MS : CODEX_BRIDGE_UNAVAILABLE_TTL_MS;
+    if (Date.now() - cached.checkedAt < cacheTtlMs) return cached.supported;
   }
 
+  const probe: CodexBridgeCapabilityCacheEntry = { kind: "probing" };
+  codexBridgeCapabilityCache.set(normalized, probe);
   const supported = await probeCodexWebSocketBridge(normalized);
-  codexBridgeCapabilityCache.set(normalized, { checkedAt: Date.now(), supported });
+  if (codexBridgeCapabilityCache.get(normalized) === probe) {
+    codexBridgeCapabilityCache.set(normalized, { kind: "ready", checkedAt: Date.now(), supported });
+  }
   return supported;
 }
 

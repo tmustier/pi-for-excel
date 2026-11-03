@@ -1,4 +1,4 @@
-import { mapWithConcurrency } from "../utils/concurrency.js";
+import { createAsyncCoalescer, mapWithConcurrency } from "../utils/concurrency.js";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
@@ -9,8 +9,7 @@ import type { SessionData } from "../storage/local/types.js";
 import { countVisibleSessionMessages, type SessionPersistenceController } from "./sessions.js";
 import { resolveTabTitle } from "./session-title.js";
 import type { TabState } from "./tab-state.js";
-
-export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
+import type { SessionLockState } from "../workbook/coordinator.js";
 
 export type RuntimeRunOutcome = "finished" | "failed";
 
@@ -30,7 +29,7 @@ export interface SessionRuntime {
   queueDisplay: QueueDisplay;
   tab: TabState;
   persistence: SessionPersistenceController;
-  lockState: RuntimeLockState;
+  lockState: SessionLockState;
   refreshCapabilities: () => Promise<void>;
   dispose: () => void;
 }
@@ -50,7 +49,7 @@ export interface RuntimeTabSnapshot {
   isActive: boolean;
   isStreaming: boolean;
   isBusy: boolean;
-  lockState: RuntimeLockState;
+  lockState: SessionLockState;
   attention: RuntimeAttention;
 }
 
@@ -68,10 +67,6 @@ export type OpenSessionTarget =
   | { kind: "resume" };
 
 export type OpenSessionResult = { outcome: "opened" | "replaced" | "focused"; runtime: SessionRuntime };
-
-export function isRuntimeBusy(runtime: Pick<SessionRuntime, "agent" | "actionQueue">): boolean {
-  return runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
-}
 
 function isValidTabNumber(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 1;
@@ -98,9 +93,12 @@ export class SessionRuntimeManager {
 
   private activeRuntimeId: string | null = null;
   private nextDefaultTabNumber = 1;
-  private refreshPromise: Promise<void> | null = null;
-  private refreshRequested = false;
-  private refreshPassRunning = false;
+  private readonly refreshAllCapabilities = createAsyncCoalescer(async () => {
+    await mapWithConcurrency(this.listRuntimes(), 4, (runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
+      this.warnCapabilityRefresh(error);
+    }));
+    this.emit();
+  });
 
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
@@ -141,12 +139,10 @@ export class SessionRuntimeManager {
     const unsubscribePersistence = runtime.persistence.subscribe(() => {
       this.emit();
     });
-    const isTabBusy = () => runtime.tab.busy || runtime.tab.activity !== null;
-    let wasBusy = isTabBusy();
+    let wasBusy = runtime.tab.busy;
     const unsubscribeTab = runtime.tab.subscribe(() => {
-      const busy = isTabBusy();
-      if (busy === wasBusy) return;
-      wasBusy = busy;
+      if (runtime.tab.busy === wasBusy) return;
+      wasBusy = runtime.tab.busy;
       this.emit();
     });
     this.runtimeListeners.set(runtime.runtimeId, { unsubscribeAgent, unsubscribePersistence, unsubscribeTab });
@@ -184,7 +180,7 @@ export class SessionRuntimeManager {
 
     if (target.kind === "resume") {
       const runtime = this.getActiveRuntime();
-      if (runtime && !isRuntimeBusy(runtime) && countVisibleSessionMessages(runtime.agent.state.messages) === 0) {
+      if (runtime && !runtime.actionQueue.isBusy() && countVisibleSessionMessages(runtime.agent.state.messages) === 0) {
         await runtime.persistence.applyLoadedSession(sessionData);
         this.switchRuntime(runtime.runtimeId);
         return { outcome: "replaced", runtime };
@@ -266,7 +262,7 @@ export class SessionRuntimeManager {
     return true;
   }
 
-  setRuntimeLockState(runtimeId: string, lockState: RuntimeLockState): void {
+  setRuntimeLockState(runtimeId: string, lockState: SessionLockState): void {
     const runtime = this.runtimes.get(runtimeId);
     if (!runtime || runtime.lockState === lockState) return;
 
@@ -288,7 +284,7 @@ export class SessionRuntimeManager {
       return { outcome: "unchanged" };
     }
 
-    const busy = isRuntimeBusy(runtime);
+    const busy = runtime.actionQueue.isBusy();
     const thinkingLevel = clampThinkingLevel(args.nextModel, runtime.agent.state.thinkingLevel);
     runtime.agent.state.model = args.nextModel;
     runtime.agent.state.thinkingLevel = thinkingLevel;
@@ -298,12 +294,7 @@ export class SessionRuntimeManager {
   }
 
   refreshCapabilities(): Promise<void> {
-    this.refreshRequested = true;
-    if (this.refreshPromise) return this.refreshPromise;
-
-    const pass = this.runCapabilityRefreshes();
-    if (this.refreshPassRunning) this.refreshPromise = pass;
-    return pass;
+    return this.refreshAllCapabilities();
   }
 
   findRuntimeBySessionId(sessionId: string): SessionRuntime | null {
@@ -355,7 +346,7 @@ export class SessionRuntimeManager {
         }),
         isActive: runtime.runtimeId === this.activeRuntimeId,
         isStreaming: runtime.agent.state.isStreaming,
-        isBusy: isRuntimeBusy(runtime),
+        isBusy: runtime.actionQueue.isBusy(),
         lockState: runtime.lockState,
         attention: this.attention.get(runtime.runtimeId) ?? "none",
       };
@@ -370,29 +361,10 @@ export class SessionRuntimeManager {
     };
   }
 
-  private async runCapabilityRefreshes(): Promise<void> {
-    this.refreshPassRunning = true;
-    try {
-      while (this.refreshRequested) {
-        this.refreshRequested = false;
-        const runtimes = this.listRuntimes();
-
-        await mapWithConcurrency(runtimes, 4, (runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
-          this.warnCapabilityRefresh(error);
-        }));
-      }
-    } finally {
-      this.refreshPromise = null;
-      this.refreshPassRunning = false;
-    }
-
-    this.emit();
-  }
-
   private emit(): void {
     const settled = new Map<string, RuntimeRunOutcome>();
     for (const runtime of this.runtimes.values()) {
-      const busy = isRuntimeBusy(runtime);
+      const busy = runtime.actionQueue.isBusy();
       const wasBusy = this.wasBusy.get(runtime.runtimeId) ?? false;
       this.wasBusy.set(runtime.runtimeId, busy);
       if (busy) {

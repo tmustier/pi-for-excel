@@ -12,6 +12,8 @@ export function createProvidersPage(): SettingsShellPage {
     title: () => t("settings.page.providers"),
     subtitle: () => t("settings.section.providers.hint"),
     render: async (ctx) => {
+      const lifetime = new AbortController();
+      ctx.addCleanup(() => lifetime.abort());
       const providerList = document.createElement("div");
       providerList.className = "pi-welcome-providers pi-provider-picker-list pi-settings-provider-list";
 
@@ -33,6 +35,7 @@ export function createProvidersPage(): SettingsShellPage {
       for (const provider of VISIBLE_PROVIDERS) {
         const row = buildProviderRow(provider, {
           isActive: configuredSet.has(provider.id),
+          signal: lifetime.signal,
           expandedRef,
           onConnected: (_row: HTMLElement, _id: string, label: string) => {
             document.dispatchEvent(new CustomEvent("pi:providers-changed"));

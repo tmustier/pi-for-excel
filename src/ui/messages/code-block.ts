@@ -36,6 +36,7 @@ export class CodeBlock extends LitElement {
   @state() private _copied = false;
 
   private _copyResetTimer: number | undefined;
+  private _copyGeneration = 0;
 
   protected override createRenderRoot(): HTMLElement | DocumentFragment {
     return this;
@@ -48,6 +49,8 @@ export class CodeBlock extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._copyGeneration += 1;
+    this._copied = false;
     if (this._copyResetTimer !== undefined) {
       window.clearTimeout(this._copyResetTimer);
       this._copyResetTimer = undefined;
@@ -64,10 +67,11 @@ export class CodeBlock extends LitElement {
   }
 
   private _copy(): void {
+    const generation = ++this._copyGeneration;
     const code = this._decodedCode();
     void copyText(code)
       .then((outcome) => {
-        if (outcome !== "copied") return;
+        if (outcome !== "copied" || generation !== this._copyGeneration) return;
         this._copied = true;
         if (this._copyResetTimer !== undefined) {
           window.clearTimeout(this._copyResetTimer);

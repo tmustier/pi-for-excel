@@ -321,3 +321,41 @@ void test("shutdown uninstalls the mid-turn prepareNextTurn hook", () => {
   queue.shutdown();
   assert.equal(agent.prepareNextTurn, undefined);
 });
+
+void test("a prompt queued while a retry waits for the agent still runs after the retry", async () => {
+  const model = createSmallContextModel();
+  const agent = new TestAgent(model);
+  agent.state.messages = [
+    createUserMessage("first", 1),
+    {
+      role: "assistant",
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: EMPTY_USAGE,
+      stopReason: "error",
+      errorMessage: "upstream unavailable",
+      timestamp: 2,
+    },
+  ];
+  const idle = createDeferred();
+  agent.onWaitForIdle = () => idle.promise;
+  const queue = createActionQueue({
+    agent,
+    autoCompactEnabled: false,
+    runCompact: async () => {},
+    tab: createTabState(),
+    queueDisplay: { setActionQueue: () => {}, drainQueuedMessages: () => [], removeQueuedMessage: () => {}, setRowHandlers: () => {}, lastEditableRow: () => null },
+  });
+
+  assert.equal(queue.retry(), true);
+  queue.enqueuePrompt("second");
+  agent.onWaitForIdle = undefined;
+  idle.resolve();
+
+  await waitForCondition(() => !queue.isBusy());
+  assert.equal(agent.continueCalls, 1);
+  assert.deepEqual(agent.promptCalls, ["second"]);
+  queue.shutdown();
+});

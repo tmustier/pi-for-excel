@@ -9,20 +9,13 @@ import type { SettingsReader } from "../storage/local/settings-store.js";
 
 export let originalFetch: typeof window.fetch;
 
-type ProxySettingsCache = {
-  checkedAt: number;
-  enabled: boolean;
-  url?: string;
-};
+type ProxySettingsCache =
+  | { kind: "empty" }
+  | { kind: "reading"; result: Promise<string | undefined> }
+  | { kind: "ready"; checkedAt: number; url: string | undefined };
 
-const proxyCache: ProxySettingsCache = {
-  checkedAt: 0,
-  enabled: false,
-};
-
-function parseProxyEnabled(value: unknown): boolean {
-  return Boolean(value);
-}
+let proxyCache: ProxySettingsCache = { kind: "empty" };
+let installed = false;
 
 export async function readCorsProxySettings(
   settings: SettingsReader,
@@ -33,7 +26,7 @@ export async function readCorsProxySettings(
       settings.get("proxy.url"),
     ]);
     return {
-      enabled: parseProxyEnabled(enabled),
+      enabled: Boolean(enabled),
       url: typeof url === "string" ? url.trim() : "",
     };
   } catch {
@@ -41,39 +34,34 @@ export async function readCorsProxySettings(
   }
 }
 
-async function getEnabledProxyUrl(
-  injectedSettings?: SettingsReader,
-): Promise<string | undefined> {
-  const now = Date.now();
-  if (now - proxyCache.checkedAt < 3000) {
-    return proxyCache.enabled ? proxyCache.url : undefined;
+function getEnabledProxyUrl(injectedSettings?: SettingsReader): Promise<string | undefined> {
+  if (proxyCache.kind === "reading") return proxyCache.result;
+  if (proxyCache.kind === "ready" && Date.now() - proxyCache.checkedAt < 3000) {
+    return Promise.resolve(proxyCache.url);
   }
 
-  proxyCache.checkedAt = now;
-
-  let settings = injectedSettings;
-  if (!settings) {
-    try {
-      settings = getAppStorage().settings;
-    } catch {
-      proxyCache.enabled = false;
-      delete proxyCache.url;
-      return undefined;
+  const result = (async () => {
+    let settings = injectedSettings;
+    if (!settings) {
+      try {
+        settings = getAppStorage().settings;
+      } catch {
+        return undefined;
+      }
     }
-  }
-
-  const stored = await readCorsProxySettings(settings);
-  proxyCache.enabled = stored.enabled;
-  if (!proxyCache.enabled) {
-    delete proxyCache.url;
-    return undefined;
-  }
-
-  const candidateUrl = stored.url.length > 0 ? stored.url : DEFAULT_PROXY_URL;
-
-  const validated = validateOfficeProxyUrl(candidateUrl);
-  proxyCache.url = validated;
-  return validated;
+    const stored = await readCorsProxySettings(settings);
+    return stored.enabled
+      ? validateOfficeProxyUrl(stored.url || DEFAULT_PROXY_URL)
+      : undefined;
+  })().then((url) => {
+    proxyCache = { kind: "ready", checkedAt: Date.now(), url };
+    return url;
+  }, (error: unknown) => {
+    proxyCache = { kind: "empty" };
+    throw error;
+  });
+  proxyCache = { kind: "reading", result };
+  return result;
 }
 
 function looksLikeOAuthOrTokenEndpoint(url: string): boolean {
@@ -113,6 +101,8 @@ function stripAnthropicBrowserHeader(init?: RequestInit): RequestInit | undefine
 }
 
 export function installFetchInterceptor(settings?: SettingsReader): void {
+  if (installed) return;
+  installed = true;
   originalFetch = window.fetch.bind(window);
 
   window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
@@ -126,7 +116,7 @@ export function installFetchInterceptor(settings?: SettingsReader): void {
       return originalFetch(input, init);
     }
 
-    if (import.meta.env.DEV) {
+    if (import.meta.env?.DEV) {
       const rewritten = rewriteDevProxyUrl(url);
       if (!rewritten) return originalFetch(input, init);
 

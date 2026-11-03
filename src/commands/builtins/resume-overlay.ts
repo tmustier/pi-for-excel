@@ -139,6 +139,8 @@ export async function showResumeDialog(opts: {
     cardClassName: "pi-welcome-card pi-overlay-card pi-overlay-card--m pi-resume-dialog",
   });
 
+  let disposed = false;
+  dialog.addCleanup(() => { disposed = true; });
   const closeOverlay = dialog.close;
 
   const { header } = createOverlayHeader({
@@ -257,7 +259,7 @@ export async function showResumeDialog(opts: {
     if (!(target instanceof HTMLElement)) return;
 
     const item = target.closest<HTMLButtonElement>(".pi-resume-item");
-    if (!item) return;
+    if (!item || item.disabled || disposed) return;
 
     const id = item.dataset.id;
     if (!id) return;
@@ -282,6 +284,7 @@ export async function showResumeDialog(opts: {
           }
 
           const reopened = await opts.onReopenRecentlyClosed(recentEntry);
+          if (disposed) return;
           if (reopened) closeOverlay();
           else renderLists();
           return;
@@ -289,6 +292,7 @@ export async function showResumeDialog(opts: {
 
         if (workbookId) {
           const linkedWorkbookId = await getSessionWorkbookId(storage.settings, id);
+          if (disposed) return;
           if (linkedWorkbookId && linkedWorkbookId !== workbookId) {
             const proceed = await requestConfirmationDialog({
               title: t("resume.confirm.anotherWorkbookTitle"),
@@ -297,11 +301,12 @@ export async function showResumeDialog(opts: {
               cancelLabel: t("confirm.cancel"),
               restoreFocusOnClose: false,
             });
-            if (!proceed) return;
+            if (!proceed || disposed) return;
           }
         }
 
         const sessionData = await storage.sessions.loadSession(id);
+        if (disposed) return;
         if (!sessionData) {
           showToast(t("resume.sessionNotFound"));
           closeOverlay();
@@ -309,7 +314,7 @@ export async function showResumeDialog(opts: {
         }
 
         const opened = await opts.onOpenSession(sessionData);
-        if (!opened) return;
+        if (!opened || disposed) return;
 
         closeOverlay();
         if (opened.outcome === "focused") {
@@ -319,6 +324,8 @@ export async function showResumeDialog(opts: {
         showToast(opened.outcome === "replaced"
           ? t("resume.toast.resumedCurrent", { title: opened.title })
           : t("resume.toast.resumedNew", { title: opened.title }));
+      } catch {
+        if (!disposed) showToast(t("init.couldNotReopenSession"));
       } finally {
         for (const button of items) button.disabled = false;
         dialog.card.removeAttribute("aria-busy");

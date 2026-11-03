@@ -23,7 +23,6 @@ import {
   TMUX_TOOL_NAME,
   type ExperimentalToolGateDependencies,
   type OfficeJsExecuteApprovalRequest,
-  type PythonBridgeApprovalRequest,
   type PythonBridgeGateReason,
   type TmuxBridgeGateReason,
 } from "./types.js";
@@ -196,12 +195,6 @@ export function buildPythonBridgeApprovalMessage(
   return `${title}\n\nTool: ${toolName}\nBridge: ${bridgeUrl}`;
 }
 
-function defaultRequestPythonBridgeApproval(
-  _request: PythonBridgeApprovalRequest,
-): Promise<boolean> {
-  return Promise.resolve(true);
-}
-
 export function buildOfficeJsExecuteApprovalMessage(
   request: OfficeJsExecuteApprovalRequest,
 ): string {
@@ -335,10 +328,12 @@ function wrapDirectWorkbookJsToolWithHardGate(
   };
 }
 
+const pendingBridgeApprovals = new Map<string, Promise<void>>();
+
 function createPythonBridgeApprover(
   dependencies: ExperimentalToolGateDependencies,
 ): (toolName: string, bridgeUrl: string, params: unknown, signal: AbortSignal | undefined) => Promise<void> {
-  const requestApproval = dependencies.requestPythonBridgeApproval ?? defaultRequestPythonBridgeApproval;
+  const requestApproval = dependencies.requestPythonBridgeApproval ?? (() => Promise.resolve(false));
   const getApprovedBridgeUrl =
     dependencies.getApprovedPythonBridgeUrl
     ?? defaultGetApprovedPythonBridgeUrl;
@@ -347,23 +342,28 @@ function createPythonBridgeApprover(
     ?? defaultSetApprovedPythonBridgeUrl;
 
   return async (toolName: string, bridgeUrl: string, params: unknown, signal: AbortSignal | undefined): Promise<void> => {
-    const cachedApprovalUrl = await getApprovedBridgeUrl();
-    if (cachedApprovalUrl === bridgeUrl) {
-      return;
-    }
+    let approval = pendingBridgeApprovals.get(bridgeUrl);
+    if (!approval) {
+      approval = (async (): Promise<void> => {
+        if (await getApprovedBridgeUrl() === bridgeUrl) return;
 
-    const approved = await requestApproval({
-      toolName,
-      bridgeUrl,
-      params,
-      ...(signal ? { signal } : {}),
-    });
+        const approved = await requestApproval({
+          toolName,
+          bridgeUrl,
+          params,
+          ...(signal ? { signal } : {}),
+        });
+        throwIfAborted(signal);
+        if (!approved) {
+          throw new Error("Python/LibreOffice execution cancelled by user.");
+        }
+
+        await setApprovedBridgeUrl(bridgeUrl);
+      })().finally(() => { pendingBridgeApprovals.delete(bridgeUrl); });
+      pendingBridgeApprovals.set(bridgeUrl, approval);
+    }
+    await approval;
     throwIfAborted(signal);
-    if (!approved) {
-      throw new Error("Python/LibreOffice execution cancelled by user.");
-    }
-
-    await setApprovedBridgeUrl(bridgeUrl);
   };
 }
 

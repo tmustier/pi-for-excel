@@ -165,7 +165,7 @@ function serializeError(error: unknown): JsonRecord {
 }
 
 function isRuntimeBusy(runtime: SessionRuntime | null): boolean {
-  return runtime ? runtime.agent.state.isStreaming || runtime.actionQueue.isBusy() : false;
+  return runtime?.actionQueue.isBusy() ?? false;
 }
 
 function latestAssistantSummary(runtime: SessionRuntime): JsonRecord | null {

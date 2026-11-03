@@ -1,3 +1,5 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
+
 import {
   loadConnectionStoreDocument,
   loadConnectionStoreDocumentForUpdate,
@@ -24,20 +26,6 @@ type ConnectionManagerListener = () => void;
 const CONNECTION_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,95}$/;
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const HTTP_ALLOWED_HOST_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
-
-const ALL_CONNECTION_STATUSES: readonly ConnectionStatus[] = [
-  "connected",
-  "missing",
-  "invalid",
-  "error",
-];
-
-const STATUS_TRANSITIONS: Readonly<Record<ConnectionStatus, readonly ConnectionStatus[]>> = {
-  connected: ALL_CONNECTION_STATUSES,
-  missing: ALL_CONNECTION_STATUSES,
-  invalid: ALL_CONNECTION_STATUSES,
-  error: ALL_CONNECTION_STATUSES,
-};
 
 function normalizeNonEmpty(input: string, field: string): string {
   const trimmed = input.trim();
@@ -173,13 +161,6 @@ function buildDefaultSetupHint(title: string): string {
   return `Open /tools → Connections → ${title}`;
 }
 
-function assertStatusTransition(from: ConnectionStatus, to: ConnectionStatus): void {
-  const allowed = STATUS_TRANSITIONS[from];
-  if (!allowed.includes(to)) {
-    throw new Error(`Invalid connection status transition: ${from} → ${to}`);
-  }
-}
-
 function hasRequiredSecrets(definition: ConnectionDefinition, secrets: Record<string, string> | undefined): boolean {
   const currentSecrets = secrets ?? {};
 
@@ -308,34 +289,41 @@ function toPublicConnectionDefinition(
   return publicDefinition;
 }
 
+const mutateDocumentSerially = createConcurrencyLimit(1);
+
 async function mutateConnectionRecord(args: {
   settings: SettingsWriter;
   connectionId: string;
   mutator: (record: StoredConnectionRecord | undefined) => StoredConnectionRecord | null;
 }): Promise<boolean> {
-  const items = await loadConnectionStoreDocumentForUpdate(args.settings);
-  const previous = items[args.connectionId];
-  const next = args.mutator(previous);
+  return mutateDocumentSerially(async () => {
+    const items = await loadConnectionStoreDocumentForUpdate(args.settings);
+    const previous = items[args.connectionId];
+    const next = args.mutator(previous);
 
-  if (!next) {
-    if (!(args.connectionId in items)) {
+    if (!next) {
+      if (!(args.connectionId in items)) {
+        return false;
+      }
+
+      delete items[args.connectionId];
+      await saveConnectionStoreDocument(args.settings, items);
+      return true;
+    }
+
+    next.credentialRevision = JSON.stringify(previous?.secrets ?? {}) === JSON.stringify(next.secrets ?? {})
+      ? previous?.credentialRevision ?? crypto.randomUUID()
+      : crypto.randomUUID();
+    const previousSerialized = JSON.stringify(previous ?? null);
+    const nextSerialized = JSON.stringify(next);
+    if (previousSerialized === nextSerialized) {
       return false;
     }
 
-    delete items[args.connectionId];
+    items[args.connectionId] = next;
     await saveConnectionStoreDocument(args.settings, items);
     return true;
-  }
-
-  const previousSerialized = JSON.stringify(previous ?? null);
-  const nextSerialized = JSON.stringify(next);
-  if (previousSerialized === nextSerialized) {
-    return false;
-  }
-
-  items[args.connectionId] = next;
-  await saveConnectionStoreDocument(args.settings, items);
-  return true;
+  });
 }
 
 export class ConnectionManager {
@@ -417,15 +405,18 @@ export class ConnectionManager {
   }
 
   async deleteStoredRecords(shouldDelete: (connectionId: string) => boolean): Promise<void> {
-    const items = await loadConnectionStoreDocumentForUpdate(this.settings);
-    const doomed = Object.keys(items).filter(shouldDelete);
-    if (doomed.length === 0) return;
+    const changed = await mutateDocumentSerially(async () => {
+      const items = await loadConnectionStoreDocumentForUpdate(this.settings);
+      const doomed = Object.keys(items).filter(shouldDelete);
+      if (doomed.length === 0) return false;
 
-    for (const connectionId of doomed) {
-      delete items[connectionId];
-    }
-    await saveConnectionStoreDocument(this.settings, items);
-    this.notify();
+      for (const connectionId of doomed) {
+        delete items[connectionId];
+      }
+      await saveConnectionStoreDocument(this.settings, items);
+      return true;
+    });
+    if (changed) this.notify();
   }
 
   hasDefinition(connectionId: string): boolean {
@@ -592,16 +583,11 @@ export class ConnectionManager {
     const changed = await mutateConnectionRecord({
       settings: this.settings,
       connectionId: definition.id,
-      mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, nextStatus);
-
-        return buildStoredConnectionRecord({
-          status: nextStatus,
-          secrets: normalizedSecrets,
-          ...(requiredPresent ? { lastValidatedAt: now } : {}),
-        });
-      },
+      mutator: () => buildStoredConnectionRecord({
+        status: nextStatus,
+        secrets: normalizedSecrets,
+        ...(requiredPresent ? { lastValidatedAt: now } : {}),
+      }),
     });
 
     if (changed) {
@@ -616,15 +602,10 @@ export class ConnectionManager {
     const changed = await mutateConnectionRecord({
       settings: this.settings,
       connectionId: definition.id,
-      mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "missing");
-
-        return buildStoredConnectionRecord({
-          status: "missing",
-          secrets: {},
-        });
-      },
+      mutator: () => buildStoredConnectionRecord({
+        status: "missing",
+        secrets: {},
+      }),
     });
 
     if (changed) {
@@ -640,17 +621,13 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-
         if (!hasRequiredSecrets(definition, record?.secrets)) {
-          assertStatusTransition(previousStatus, "missing");
           return buildStoredConnectionRecord({
             status: "missing",
             ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
           });
         }
 
-        assertStatusTransition(previousStatus, "connected");
         return buildStoredConnectionRecord({
           status: "connected",
           ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
@@ -673,9 +650,6 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "invalid");
-
         const redactedReason = redactSecretsInMessage(trimmedReason, record?.secrets);
 
         return buildStoredConnectionRecord({
@@ -692,7 +666,7 @@ export class ConnectionManager {
     }
   }
 
-  async markRuntimeAuthFailure(connectionId: string, failure: ConnectionRuntimeAuthFailure): Promise<void> {
+  async markRuntimeAuthFailure(connectionId: string, failure: ConnectionRuntimeAuthFailure, credentialRevision?: string): Promise<void> {
     const definition = this.getRequiredDefinition(connectionId);
     const message = normalizeNonEmpty(failure.message, "failure message");
 
@@ -700,8 +674,7 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "error");
+        if (credentialRevision !== undefined && credentialRevision !== (record?.credentialRevision ?? "")) return record ?? null;
 
         const redactedMessage = redactSecretsInMessage(message, record?.secrets);
 
@@ -736,6 +709,7 @@ export class ConnectionManager {
       const lastError = status === "invalid" || status === "error" ? record?.lastError : undefined;
       return {
         connectionId: definition.id,
+        credentialRevision: record?.credentialRevision ?? "",
         title: definition.title,
         capability: definition.capability,
         status,

@@ -67,6 +67,7 @@ function buildBridge(args: {
 
   return buildRuntimeManagerActivationBridge({
     entry: args.entry,
+    assertRegistrationAllowed: () => {},
     settings: args.settings,
     connectionManager: args.connectionManager,
     getRequiredActiveAgent,
@@ -262,4 +263,41 @@ void test("connection-aware http fetch marks auth failures and throws structured
 
   const state = await connectionManager.getState("ext.auth.api");
   assert.equal(state?.status, "error");
+});
+
+void test("a late extension HTTP auth failure cannot invalidate replacement credentials", async () => {
+  const settings = new MemorySettingsStore();
+  const entry = createEntry("ext.auth");
+  const connectionManager = new ConnectionManager({ settings });
+  connectionManager.registerDefinition(entry.id, {
+    id: "ext.auth.api",
+    title: "Auth API",
+    capability: "query auth records",
+    authKind: "api_key",
+    secretFields: [{ id: "apiKey", label: "API key", required: true }],
+    httpAuth: {
+      placement: "header", headerName: "Authorization", valueTemplate: "Bearer {apiKey}",
+      allowedHosts: ["api.auth.com"],
+    },
+  });
+  await connectionManager.setSecrets(entry.id, "ext.auth.api", { apiKey: "old-fixture" });
+  let requestStarted = (): void => {};
+  const started = new Promise<void>((resolve) => { requestStarted = resolve; });
+  let releaseRequest = (): void => {};
+  const requestGate = new Promise<void>((resolve) => { releaseRequest = resolve; });
+  const bridge = buildBridge({
+    entry, settings, connectionManager,
+    runExtensionHttpFetch: async (_url, options) => {
+      assert.equal(options?.headers?.Authorization, "Bearer old-fixture");
+      requestStarted();
+      await requestGate;
+      return { status: 401, statusText: "Unauthorized", headers: {}, body: "unauthorized" };
+    },
+  });
+  const pending = bridge.host.httpFetch("https://api.auth.com/v1/data", { connection: "api" });
+  await started;
+  await connectionManager.setSecrets(entry.id, "ext.auth.api", { apiKey: "replacement-fixture" });
+  releaseRequest();
+  await assert.rejects(pending, /failed authentication/i);
+  assert.equal((await connectionManager.getState("ext.auth.api"))?.status, "connected");
 });

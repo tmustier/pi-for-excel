@@ -186,7 +186,10 @@ function selectIndex(index: number): void {
     const isSelected = item.dataset.index === String(index);
     item.classList.toggle("selected", isSelected);
     item.setAttribute("aria-selected", isSelected ? "true" : "false");
-    if (isSelected) item.scrollIntoView({ block: "nearest" });
+    if (isSelected) {
+      item.scrollIntoView({ block: "nearest" });
+      getCommandTextarea()?.setAttribute("aria-activedescendant", item.id);
+    }
   }
 }
 

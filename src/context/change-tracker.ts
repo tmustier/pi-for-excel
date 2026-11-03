@@ -119,10 +119,16 @@ export interface ChangeTrackerOptions {
   getPiWriteAddresses?: (toolCallIds: readonly string[]) => Promise<ReadonlyMap<string, readonly string[]>>;
 }
 
+type ChangeTrackerRegistrationState =
+  | { kind: "not-started" }
+  | { kind: "starting"; promise: Promise<void> }
+  | { kind: "started" }
+  | { kind: "failed"; cleanup: () => Promise<void> };
+
 export class ChangeTracker {
   private log: LoggedChange[] = [];
   private seq = 0;
-  private started = false;
+  private registration: ChangeTrackerRegistrationState = { kind: "not-started" };
   private readonly sheetNames = new Map<string, string>();
   private readonly writes: PiWrite[] = [];
   private readonly onStructureChange: () => void;
@@ -133,42 +139,57 @@ export class ChangeTracker {
     this.getPiWriteAddresses = options.getPiWriteAddresses ?? (() => Promise.resolve(new Map()));
   }
 
-  async start(): Promise<void> {
-    if (this.started) return;
-    this.started = true;
+  start(): Promise<void> {
+    if (this.registration.kind === "started") return Promise.resolve();
+    if (this.registration.kind === "starting") return this.registration.promise;
+    const previousCleanup = this.registration.kind === "failed" ? this.registration.cleanup : undefined;
+    const promise = Promise.resolve().then(async () => {
+      let cleanup = previousCleanup ?? (() => Promise.resolve());
+      const controller = new AbortController();
+      try {
+        await previousCleanup?.();
+        await excelRun(async (context) => {
+          const sheets = context.workbook.worksheets;
+          sheets.load("items/id,items/name");
+          await context.sync();
+          if (controller.signal.aborted) return;
+          for (const sheet of sheets.items) this.sheetNames.set(sheet.id, sheet.name);
 
-    try {
-      await excelRun(async (context) => {
-        const sheets = context.workbook.worksheets;
-        sheets.load("items/id,items/name");
-        await context.sync();
-        for (const sheet of sheets.items) this.sheetNames.set(sheet.id, sheet.name);
-
-        sheets.onChanged.add((event) => this.handleChanged(event));
-        sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId));
-        sheets.onDeleted.add(() => this.structureChanged());
-        await context.sync();
-      });
-    } catch (error) {
-      this.started = false;
-      console.warn("[change-tracker] Failed to register workbook listeners:", getErrorMessage(error));
-      return;
-    }
-
-    try {
-      await excelRun(async (context) => {
-        const sheets = context.workbook.worksheets;
-        sheets.onNameChanged.add((event) => {
-          this.sheetNames.set(event.worksheetId, event.nameAfter);
-          return this.structureChanged();
+          const registrations: Array<{ remove: () => void }> = [];
+          cleanup = () => Excel.run(context, async (cleanupContext) => {
+            for (const registration of registrations) registration.remove();
+            await cleanupContext.sync();
+          });
+          registrations.push(sheets.onChanged.add((event) => this.handleChanged(event)));
+          registrations.push(sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId)));
+          registrations.push(sheets.onDeleted.add(() => this.structureChanged()));
+          await context.sync();
         });
-        sheets.onMoved.add(() => this.structureChanged());
-        sheets.onVisibilityChanged.add(() => this.structureChanged());
-        await context.sync();
-      });
-    } catch (error) {
-      console.warn("[change-tracker] Sheet rename/move/visibility events unavailable:", getErrorMessage(error));
-    }
+      } catch (error) {
+        controller.abort();
+        console.warn("[change-tracker] Failed to register workbook listeners:", getErrorMessage(error));
+        this.registration = { kind: "failed", cleanup };
+        return;
+      }
+
+      try {
+        await excelRun(async (context) => {
+          const sheets = context.workbook.worksheets;
+          sheets.onNameChanged.add((event) => {
+            this.sheetNames.set(event.worksheetId, event.nameAfter);
+            return this.structureChanged();
+          });
+          sheets.onMoved.add(() => this.structureChanged());
+          sheets.onVisibilityChanged.add(() => this.structureChanged());
+          await context.sync();
+        });
+      } catch (error) {
+        console.warn("[change-tracker] Sheet rename/move/visibility events unavailable:", getErrorMessage(error));
+      }
+      this.registration = { kind: "started" };
+    });
+    this.registration = { kind: "starting", promise };
+    return promise;
   }
 
   notePiWrite(window: PiWriteWindow, origin: PiWriteOrigin): void {

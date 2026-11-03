@@ -69,6 +69,12 @@ class MemoryCatalogs implements ModelsStore {
   }
 }
 
+function deferred<T = void>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve: (value: T) => void = () => {};
+  const promise = new Promise<T>((fulfill) => { resolve = fulfill; });
+  return { promise, resolve };
+}
+
 void test("Office streaming preserves OpenRouter's registry transport without unsupported effort updates", async (t) => {
   const originalDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
   Object.defineProperty(globalThis, "document", { configurable: true, value: new EventTarget() });
@@ -1262,3 +1268,186 @@ function waitForOwner(
     });
   });
 }
+
+void test("extension teardown cannot unconfigure a replacement provider", async () => {
+  const deleting = deferred<void>();
+  const release = deferred<void>();
+  const catalogs = new MemoryCatalogs();
+  catalogs.delete = async (providerId) => {
+    deleting.resolve();
+    await release.promise;
+    catalogs.entries.delete(providerId);
+  };
+  const runtime = createRuntime({ catalogs });
+  const registration: BrowserProviderRegistration = {
+    id: "replacement-provider",
+    name: "Replacement",
+    api: "openai-completions",
+    baseUrl: "https://current.example/v1",
+    models: [{ id: "baseline" }],
+    resolveApiKey: () => Promise.resolve("synthetic-key"),
+  };
+  runtime.registerExtensionProvider("owner", registration);
+  const removal = runtime.unregisterExtensionProvider("owner", registration.id);
+  await deleting.promise;
+  runtime.registerExtensionProvider("owner", registration);
+  release.resolve();
+  await removal;
+  const baseline = runtime.models.getModel(registration.id, "baseline");
+  assert.ok(baseline);
+  catalogs.entries.set(registration.id, { models: [{
+    ...baseline, id: "cached", baseUrl: "https://obsolete.example/v1", headers: { "x-stale": "unsafe" },
+  }] });
+  await runtime.refresh({ allowNetwork: false });
+  assert.equal(runtime.models.getModel(registration.id, "cached")?.baseUrl, registration.baseUrl);
+  assert.equal(runtime.models.getModel(registration.id, "cached")?.headers, undefined);
+});
+
+void test("invalid custom-provider sync leaves the prior registry and ownership intact", async () => {
+  const runtime = createRuntime();
+  const first = gatewayProvider({ providerId: "first-custom", connectDirectly: true });
+  const invalid = gatewayProvider({ providerId: "invalid-custom", baseUrl: "not-a-url" });
+  await assert.rejects(runtime.syncCustomProviders([first, invalid]), /valid http/);
+  assert.equal(runtime.models.getProvider("first-custom"), undefined);
+  assert.equal(runtime.providerRoute("first-custom"), undefined);
+  await runtime.syncCustomProviders([first]);
+  await runtime.syncCustomProviders([]);
+  assert.equal(runtime.models.getProvider("first-custom"), undefined);
+});
+
+for (const providerId of ["openai", "extension-owned"]) {
+  void test(`custom-provider sync rejects a normalized id owned by ${providerId}`, async () => {
+    const runtime = createRuntime();
+    runtime.registerExtensionProvider("owner", {
+      id: "extension-owned", name: "Extension", api: "openai-completions",
+      baseUrl: "https://extension.example/v1", models: [{ id: "baseline" }],
+      resolveApiKey: () => Promise.resolve(undefined),
+    });
+    const original = runtime.models.getProvider(providerId);
+    await assert.rejects(runtime.syncCustomProviders([
+      gatewayProvider(),
+      gatewayProvider({ providerId: ` ${providerId} ` }),
+    ]), /conflicts with/);
+    assert.equal(runtime.models.getProvider(providerId), original);
+    assert.equal(runtime.models.getProvider("Gateway · Acme"), undefined);
+    assert.equal(runtime.providerRoute("Gateway · Acme"), undefined);
+  });
+}
+
+void test("catalogue deletion failure does not leave custom-provider ownership behind", async () => {
+  const catalogs = new MemoryCatalogs();
+  catalogs.delete = () => Promise.reject(new Error("catalogue deletion failed"));
+  const runtime = createRuntime({ catalogs });
+  await runtime.syncCustomProviders([
+    gatewayProvider({ providerId: "first-custom", connectDirectly: true }),
+    gatewayProvider({ providerId: "second-custom" }),
+  ]);
+  await assert.rejects(runtime.syncCustomProviders([]), /catalogue deletion failed/);
+  for (const id of ["first-custom", "second-custom"]) {
+    assert.equal(runtime.models.getProvider(id), undefined);
+    assert.equal(runtime.providerRoute(id), undefined);
+    runtime.registerExtensionProvider("new-owner", {
+      id, name: id, api: "openai-completions", baseUrl: "https://current.example/v1",
+      models: [{ id: "baseline" }], resolveApiKey: () => Promise.resolve(undefined),
+    });
+    assert.equal(runtime.isExtensionProvider(id), true);
+  }
+});
+
+void test("configured refresh requested as the previous pass ends is not stranded", async () => {
+  const runtime = createRuntime();
+  let configured: readonly CustomProvider[] = [];
+  const owner = new ModelRefreshOwner({
+    modelRuntime: runtime,
+    loadCustomProviders: () => Promise.resolve(configured),
+    getRuntimes: () => [],
+  });
+  let followUp = Promise.resolve();
+  owner.subscribe((snapshot) => {
+    if (snapshot.revision !== 1) return;
+    queueMicrotask(() => queueMicrotask(() => queueMicrotask(() => {
+      configured = [gatewayProvider()];
+      followUp = owner.refreshConfiguredProviders(false);
+    })));
+  });
+  await owner.restoreCached();
+  await followUp;
+  assert.ok(runtime.models.getProvider("Gateway · Acme"), "the ending pass must not strand the configured refresh");
+});
+
+void test("late credential refresh rejection is reported without an unhandled rejection", async () => {
+  const credentials = deferred<void>();
+  const warned = deferred<string>();
+  let loads = 0;
+  const owner = new ModelRefreshOwner({
+    modelRuntime: createRuntime(),
+    loadCustomProviders: () => {
+      loads += 1;
+      return loads === 1 ? Promise.resolve([]) : Promise.reject(new Error("late configuration read failed"));
+    },
+    getRuntimes: () => [],
+    warn: (message) => warned.resolve(message),
+  });
+  await owner.startup(credentials.promise, 0);
+  await owner.refresh(false);
+  credentials.resolve();
+  assert.match(await warned.promise, /Late credential model refresh failed/);
+  await owner.refresh(false);
+});
+
+void test("bulk extension teardown removes only registrations present when it starts", async () => {
+  const deleting = deferred<void>();
+  const release = deferred<void>();
+  const catalogs = new MemoryCatalogs();
+  catalogs.delete = async (providerId) => {
+    if (providerId === "first-provider") {
+      deleting.resolve();
+      await release.promise;
+    }
+    catalogs.entries.delete(providerId);
+  };
+  const runtime = createRuntime({ catalogs });
+  const registration: BrowserProviderRegistration = {
+    id: "first-provider", name: "Bulk teardown", api: "openai-completions",
+    baseUrl: "https://current.example/v1", models: [{ id: "baseline" }],
+    resolveApiKey: () => Promise.resolve(undefined),
+  };
+  runtime.registerExtensionProvider("owner", registration);
+  runtime.registerExtensionProvider("owner", { ...registration, id: "second-provider" });
+  const removal = runtime.unregisterExtensionProviders("owner");
+  await deleting.promise;
+  runtime.registerExtensionProvider("owner", { ...registration, id: "second-provider" });
+  release.resolve();
+  await removal;
+  assert.equal(runtime.isExtensionProvider("second-provider"), true, "bulk teardown must not remove the replacement");
+  assert.ok(runtime.models.getProvider("second-provider"));
+});
+
+void test("a replacement provider persists discovery after the prior catalogue deletion", async () => {
+  const deleting = deferred<void>();
+  const release = deferred<void>();
+  const catalogs = new MemoryCatalogs();
+  catalogs.delete = async (providerId) => {
+    deleting.resolve();
+    await release.promise;
+    catalogs.entries.delete(providerId);
+  };
+  const runtime = createRuntime({
+    catalogs,
+    fetchFn: () => Promise.resolve(Response.json({ data: [{ id: "replacement-discovery" }] })),
+  });
+  const registration: BrowserProviderRegistration = {
+    id: "replacement-provider", name: "Replacement", api: "openai-completions",
+    baseUrl: "https://current.example/v1", models: [{ id: "baseline" }],
+    resolveApiKey: () => Promise.resolve("synthetic-key"),
+  };
+  runtime.registerExtensionProvider("owner", registration);
+  const removal = runtime.unregisterExtensionProvider("owner", registration.id);
+  await deleting.promise;
+  runtime.registerExtensionProvider("owner", registration);
+  const refresh = runtime.refresh({ allowNetwork: true, providers: [registration.id] });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  release.resolve();
+  await Promise.all([removal, refresh]);
+  assert.deepEqual(catalogs.entries.get(registration.id)?.models.map((model) => model.id), ["replacement-discovery"]);
+});

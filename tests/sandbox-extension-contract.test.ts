@@ -17,6 +17,7 @@ import {
 
 interface SandboxHarness {
   port: MessagePort;
+  deactivate(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -131,6 +132,7 @@ async function openSandbox(
 
   return {
     port,
+    deactivate: () => handle.deactivate(),
     close: async () => {
       const onDeactivate = (event: MessageEvent<unknown>) => {
         const request = event.data;
@@ -348,6 +350,101 @@ void test("a sandbox extension can register and invoke a connection-qualified to
     await invocation;
     assert.deepEqual(result.content, [{ type: "text", text: "Acme found" }]);
   } finally {
+    await harness.close();
+  }
+});
+
+void test("sandbox disposal rejects incoming operations and concurrent callers wait for teardown", async () => {
+  let registrations = 0;
+  const harness = await openSandbox({ registerCommand: () => { registrations += 1; } });
+  let reply = (): void => {};
+  const teardownStarted = new Promise<void>((resolve) => {
+    harness.port.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const request = event.data;
+      if (!isSandboxEnvelope(request) || request.kind !== "request" || request.method !== "deactivate") return;
+      reply = () => harness.port.postMessage({
+        channel: SANDBOX_CHANNEL, instanceId: "ext.sandbox.contract", direction: "sandbox_to_host",
+        kind: "response", requestId: request.requestId, ok: true, result: null,
+      });
+      resolve();
+    });
+  });
+  let stopping = Promise.resolve();
+  try {
+    const first = harness.deactivate();
+    stopping = first;
+    const second = harness.deactivate();
+    let secondFinished = false;
+    void second.then(() => { secondFinished = true; });
+    await teardownStarted;
+    const late = await sendRequest(harness, "register_command", { commandId: "late", name: "late", description: "Late" });
+    assert.equal(late.ok, false, "disposal must reject new sandbox requests");
+    assert.equal(registrations, 0);
+    assert.equal(secondFinished, false, "concurrent deactivation must wait for teardown completion");
+    reply();
+    await Promise.all([first, second]);
+  } finally {
+    reply();
+    await stopping;
+    await harness.close();
+  }
+});
+
+void test("a sandbox postMessage failure releases its request timer", async (t) => {
+  const registered: { tool: AgentTool<TSchema, unknown> | null } = { tool: null };
+  const harness = await openSandbox({ registerTool: (tool) => { registered.tool = tool; } });
+  const nativeSetTimeout = globalThis.setTimeout;
+  const nativeClearTimeout = globalThis.clearTimeout;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  t.mock.method(globalThis, "setTimeout", (callback: () => void, milliseconds?: number) => {
+    const timer = nativeSetTimeout(callback, milliseconds);
+    timers.add(timer);
+    return timer;
+  });
+  t.mock.method(globalThis, "clearTimeout", (timer: ReturnType<typeof setTimeout>) => {
+    timers.delete(timer);
+    nativeClearTimeout(timer);
+  });
+  try {
+    await sendRequest(harness, "register_tool", {
+      toolId: "clone", name: "clone", parameters: { type: "object", properties: {} },
+    });
+    assert.ok(registered.tool);
+    await assert.rejects(registered.tool.execute("clone", { uncloneable: () => {} }), /clone/i);
+    assert.equal(timers.size, 0, "failed postMessage must clear the pending request timeout");
+  } finally {
+    await harness.close();
+    for (const timer of timers) nativeClearTimeout(timer);
+    t.mock.restoreAll();
+  }
+});
+
+void test("concurrent sandbox deactivation callers share teardown completion", async () => {
+  const harness = await openSandbox();
+  let reply = (): void => {};
+  const started = new Promise<void>((resolve) => {
+    harness.port.addEventListener("message", (event: MessageEvent<unknown>) => {
+      const request = event.data;
+      if (!isSandboxEnvelope(request) || request.kind !== "request" || request.method !== "deactivate") return;
+      reply = () => harness.port.postMessage({
+        channel: SANDBOX_CHANNEL, instanceId: "ext.sandbox.contract", direction: "sandbox_to_host",
+        kind: "response", requestId: request.requestId, ok: true, result: null,
+      });
+      resolve();
+    });
+  });
+  const first = harness.deactivate();
+  try {
+    const second = harness.deactivate();
+    let secondFinished = false;
+    void second.then(() => { secondFinished = true; });
+    await started;
+    assert.equal(secondFinished, false, "concurrent sandbox teardown must not complete before the sandbox replies");
+    reply();
+    await Promise.all([first, second]);
+  } finally {
+    reply();
+    await first;
     await harness.close();
   }
 });

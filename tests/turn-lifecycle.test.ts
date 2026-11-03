@@ -293,6 +293,29 @@ void test("editing the last waiting steer takes only that one back; the earlier 
   tab.queue.shutdown();
 });
 
+void test("a failed turn keeps its summary when bookkeeping messages follow the failure", () => {
+  const failure = fauxAssistantMessage("", { stopReason: "error", errorMessage: "Bad request: unsupported parameter" });
+  const context = {
+    isContextOverflow: false,
+    overflowAfterRecovery: false,
+    missingCredentialsFor: null,
+    online: true,
+    proxyUrl: null,
+    defaultProxyUrl: "https://localhost:3003",
+    proxyBlockedByBrowser: false,
+  };
+  const systemPrompt: AgentMessage = { role: "system", content: "", timestamp: 1 };
+  const turnChanges: AgentMessage = { role: "turnChanges", turnId: "turn", timestamp: 2, outcome: "failed", changes: [] };
+  assert.equal(
+    describeTurnFailure({ ...context, messages: [failure, systemPrompt, turnChanges] }),
+    "Pi couldn’t finish this response. Try again or choose another model.",
+  );
+  assert.equal(
+    describeTurnFailure({ ...context, messages: [failure, systemPrompt, { role: "user", content: "next", timestamp: 3 }] }),
+    null,
+  );
+});
+
 void test("inline error summaries explain recovery without repeating provider details", () => {
   const failed = (errorMessage: string): AgentMessage[] => [
     fauxAssistantMessage("", { stopReason: "error", errorMessage }),

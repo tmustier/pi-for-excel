@@ -745,7 +745,7 @@ export class WorkbookRecoveryLog {
 
     if (!result.inverseSnapshotId) {
       try {
-        await this.delete(snapshot.id);
+        await (await this.dependencies.getStore())?.delete(snapshot.id, scope.workbookId);
       } catch (error) {
         console.warn("[pi] Used backup could not be removed.", error);
       }

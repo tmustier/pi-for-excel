@@ -85,41 +85,32 @@ export function createLoadedExtensionHandle(
   cleanups: readonly ExtensionCleanup[],
   moduleDeactivate: ExtensionDeactivator | null,
 ): LoadedExtensionHandle {
-  let deactivated = false;
+  let teardown: Promise<void> | null = null;
+  let remaining = [...cleanups].reverse();
+  if (moduleDeactivate) remaining.push(moduleDeactivate);
 
   return {
-    deactivate: async () => {
-      if (deactivated) {
-        return;
-      }
-      deactivated = true;
-
-      const failures: string[] = [];
-
-      for (let i = cleanups.length - 1; i >= 0; i -= 1) {
-        const cleanup = cleanups[i];
-        if (!cleanup) {
-          continue;
+    deactivate: () => {
+      teardown ??= (async () => {
+        const failures: string[] = [];
+        const retry: ExtensionCleanup[] = [];
+        for (const cleanup of remaining) {
+          try {
+            await cleanup();
+          } catch (error) {
+            retry.push(cleanup);
+            failures.push(toErrorMessage(error));
+          }
         }
-
-        try {
-          await cleanup();
-        } catch (error) {
-          failures.push(toErrorMessage(error));
+        remaining = retry;
+        if (failures.length > 0) {
+          throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
         }
-      }
-
-      if (moduleDeactivate) {
-        try {
-          await moduleDeactivate();
-        } catch (error) {
-          failures.push(toErrorMessage(error));
-        }
-      }
-
-      if (failures.length > 0) {
-        throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
-      }
+      })().catch((error: unknown) => {
+        teardown = null;
+        throw error;
+      });
+      return teardown;
     },
   };
 }

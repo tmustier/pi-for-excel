@@ -156,3 +156,15 @@ void test("a failed refresh of an expired token reports the login expired instea
   assert.equal(await refresher.ensureFresh("anthropic"), "expired");
   assert.equal((settings.values.get("oauth.anthropic") as OAuthCredentials).refresh, "refresh-0");
 });
+
+void test("a stale grant is not reported logged out when credential deletion fails", async () => {
+  const settings = new MemorySettings();
+  settings.values.set("oauth.openai-codex", { access: "old", refresh: "old", expires: NOW - 1 });
+  const keys = new MemoryKeys();
+  keys.delete = () => Promise.reject(new Error("credential store unavailable"));
+  const fake = fakeProvider({ fail: new Error("OpenAI login needs to be refreshed for current Codex scopes") });
+  const refresher = createOAuthRefresher({
+    settings, providerKeys: keys, getOAuthProvider: () => fake.provider, now: () => NOW, warn: () => {},
+  });
+  assert.equal(await refresher.ensureFresh("openai-codex"), "failed");
+});

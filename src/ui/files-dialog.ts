@@ -511,7 +511,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   let allFiles: WorkspaceFileEntry[] = [];
   let currentView: "list" | "detail" = "list";
   let detailFileRef: FilesDialogFileRef | null = null;
-  let ownMutationPending = false;
+  let ownMutationsPending = 0;
+  let disposed = false;
+  let workspaceRefreshVersion = 0;
   let filterText = "";
   let activePreviewObjectUrl: string | null = null;
   let detailRenderVersion = 0;
@@ -531,11 +533,13 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const refreshWorkspaceState = async (): Promise<void> => {
+    const version = ++workspaceRefreshVersion;
     const [backend, files] = await Promise.all([
       workspace.getBackendStatus(),
       workspace.listFiles(),
     ]);
 
+    if (disposed || version !== workspaceRefreshVersion) return;
     backendStatus = backend;
     allFiles = files;
   };
@@ -559,31 +563,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     detailRenderVersion += 1;
     revokePreviewObjectUrl();
     setView("list");
-  };
-
-  const createDetailActions = (file: WorkspaceFileEntry): HTMLDivElement => {
-    const fileRef = toFileRef(file);
-
-    return createFilesDialogDetailActions({
-      file,
-      fileRef,
-      workspace,
-      auditContext: DIALOG_AUDIT_CONTEXT,
-      onMutationStateChange: (pending) => { ownMutationPending = pending; },
-      onAfterRename: async (nextPath, locationKind) => {
-        await refreshWorkspaceState();
-        renderListView();
-        await showDetailView({
-          path: nextPath,
-          locationKind,
-        });
-      },
-      onAfterDelete: async () => {
-        await refreshWorkspaceState();
-        renderListView();
-        showListView();
-      },
-    });
   };
 
   const buildDetailPreview = async (file: WorkspaceFileEntry): Promise<DetailPreviewResult> => {
@@ -671,6 +650,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const renderDetailView = async (fileRef: FilesDialogFileRef): Promise<void> => {
+    if (disposed) return;
     const file = findFileByRef(fileRef);
     if (!file) {
       showListView();
@@ -738,7 +718,28 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       previewTruncated: previewResult.previewTruncated,
     });
 
-    nodes.push(previewResult.element, createDetailActions(file));
+    const isCurrentDetail = (): boolean => !disposed && renderVersion === detailRenderVersion && currentView === "detail";
+    nodes.push(previewResult.element, createFilesDialogDetailActions({
+      file,
+      fileRef,
+      workspace,
+      auditContext: DIALOG_AUDIT_CONTEXT,
+      onMutationStateChange: (pending) => { ownMutationsPending += pending ? 1 : -1; },
+      onAfterRename: async (nextPath, locationKind) => {
+        await refreshWorkspaceState();
+        renderListView();
+        if (!isCurrentDetail()) return;
+        await showDetailView({
+          path: nextPath,
+          locationKind,
+        });
+      },
+      onAfterDelete: async () => {
+        await refreshWorkspaceState();
+        renderListView();
+        if (isCurrentDetail()) showListView();
+      },
+    }));
     detailBody.replaceChildren(...nodes);
   };
 
@@ -983,7 +984,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const onWorkspaceChanged: EventListener = (event) => {
-    if (ownMutationPending) return;
+    if (ownMutationsPending > 0) return;
     const detail: unknown = event instanceof CustomEvent ? event.detail : null;
     if (typeof detail === "object" && detail !== null && "reason" in detail && detail.reason === "audit") return;
     void (async () => {
@@ -1010,6 +1011,9 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   dialog.addCleanup(() => {
+    disposed = true;
+    detailRenderVersion += 1;
+    workspaceRefreshVersion += 1;
     document.removeEventListener(FILES_WORKSPACE_CHANGED_EVENT, onWorkspaceChanged);
     revokePreviewObjectUrl();
   });

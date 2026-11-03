@@ -102,33 +102,6 @@ export function isLikelyCorsErrorMessage(msg: string): boolean {
   return false;
 }
 
-export function createAsyncCoalescer(task: () => Promise<void>): () => Promise<void> {
-  let inFlight: Promise<void> | null = null;
-  let rerunRequested = false;
-
-  const run = async (): Promise<void> => {
-    do {
-      rerunRequested = false;
-      await task();
-    } while (rerunRequested);
-  };
-
-  return async (): Promise<void> => {
-    if (inFlight) {
-      rerunRequested = true;
-      await inFlight;
-      return;
-    }
-
-    inFlight = run();
-    try {
-      await inFlight;
-    } finally {
-      inFlight = null;
-    }
-  };
-}
-
 export async function awaitCredentialRestoreForStartup(
   task: Promise<void>,
   timeoutMs: number,

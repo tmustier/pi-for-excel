@@ -25,6 +25,7 @@ function createPageMutationHelper(args: {
   deps: ExtensionsHubDependencies;
   isDisposed: () => boolean;
   refresh: () => Promise<void>;
+  keepBusyDuringRefresh?: boolean;
 }): PageMutationHelper {
   let busy = false;
 
@@ -41,9 +42,13 @@ function createPageMutationHelper(args: {
       } catch (err) {
         showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
       } finally {
-        busy = false;
-        if (!args.isDisposed()) {
-          await args.refresh();
+        if (!args.keepBusyDuringRefresh) busy = false;
+        try {
+          if (!args.isDisposed()) await args.refresh();
+        } catch (err) {
+          if (!args.isDisposed()) showToast(t("extensions-hub.toast.error", { error: err instanceof Error ? err.message : String(err) }));
+        } finally {
+          busy = false;
         }
       }
     },
@@ -93,6 +98,12 @@ export function createConnectionsPage(): SettingsShellPage {
           deps,
           isBusy: helper.isBusy,
           runMutation: helper.runMutation,
+          canCommit: () => {
+            if (lifecycle.isDisposed()) return false;
+            if (!hasActiveSecretInput()) return true;
+            refreshController.requestRefresh();
+            return false;
+          },
         });
       };
 
@@ -100,11 +111,14 @@ export function createConnectionsPage(): SettingsShellPage {
         deps,
         isDisposed: lifecycle.isDisposed,
         refresh,
+        keepBusyDuringRefresh: true,
       });
 
       const hasActiveSecretInput = (): boolean => {
         const active = document.activeElement;
-        return active instanceof HTMLInputElement && container.contains(active);
+        return active instanceof HTMLInputElement
+          && active.type !== "checkbox" && active.type !== "radio"
+          && container.contains(active);
       };
 
       const refreshController = createDeferredConnectionsRefreshController({

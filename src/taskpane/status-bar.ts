@@ -15,13 +15,13 @@ import {
   STATUS_CONTEXT_WARNING_ATTR,
   STATUS_CONTEXT_WARNING_SEVERITY_ATTR,
 } from "./status-context.js";
-import type { RuntimeLockState } from "./session-runtime-manager.js";
+import type { SessionLockState } from "../workbook/coordinator.js";
 import { closeStatusPopover } from "./status-popovers.js";
 import { getThinkingLevelLabel } from "./thinking-display.js";
 import { formatThinkingShortcut } from "../utils/platform.js";
 
 export type ActiveAgentProvider = () => Agent | null;
-export type ActiveLockStateProvider = () => RuntimeLockState;
+export type ActiveLockStateProvider = () => SessionLockState;
 export type ActiveExecutionModeProvider = () => ExecutionMode;
 
 function adjustContextTooltipAlignment(statusBar: HTMLElement): void {
@@ -70,7 +70,7 @@ function ambiguousProviderTag(provider: string): string | null {
 
 function renderStatusBar(
   agent: Agent | null,
-  lockState: RuntimeLockState,
+  lockState: SessionLockState,
   executionMode: ExecutionMode,
   autoCompactionEnabled: boolean,
 ): void {

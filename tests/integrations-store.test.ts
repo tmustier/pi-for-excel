@@ -272,3 +272,12 @@ void test("workbook-level disable persists across new sessions", async () => {
 
   assert.deepEqual(resolved, []);
 });
+
+void test("concurrent integration toggles preserve both session updates", async () => {
+  const settings = new MemorySettingsStore();
+  await Promise.all(KNOWN_INTEGRATIONS.map((integrationId) => setIntegrationEnabledInScope({
+    settings, scope: "session", identifier: "concurrent", integrationId,
+    enabled: true, knownIntegrationIds: KNOWN_INTEGRATIONS,
+  })));
+  assert.deepEqual(await getSessionIntegrationIds(settings, "concurrent", KNOWN_INTEGRATIONS), [...KNOWN_INTEGRATIONS]);
+});

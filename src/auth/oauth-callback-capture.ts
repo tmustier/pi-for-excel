@@ -1,18 +1,27 @@
-import { getAppStorage } from "../storage/local/app-storage.js";
+import { Type, type Static } from "typebox";
+import { Value } from "typebox/value";
 
+import { getAppStorage } from "../storage/local/app-storage.js";
 import {
   isLoopbackProxyUrl,
   resolveConfiguredProxyUrl,
   validateOfficeProxyUrl,
 } from "./proxy-validation.js";
 
-export interface OAuthCallbackCapture {
-  providerId: string;
-  code: string;
-  state: string;
-  url: string;
-  receivedAt: number;
-}
+const callbackCaptureSchema = Type.Object({
+  status: Type.Literal("ready"),
+  providerId: Type.String(),
+  code: Type.String(),
+  state: Type.String(),
+  url: Type.String(),
+  receivedAt: Type.Number(),
+});
+const callbackResponseSchema = Type.Union([
+  callbackCaptureSchema,
+  Type.Object({ status: Type.Literal("pending") }),
+]);
+
+export type OAuthCallbackCapture = Omit<Static<typeof callbackCaptureSchema>, "status">;
 
 interface PollOptions {
   providerId: string;
@@ -25,136 +34,72 @@ interface PollOptions {
 const DEFAULT_TIMEOUT_MS = 2 * 60 * 1000;
 const DEFAULT_INTERVAL_MS = 750;
 
-function isAuthOauthCallbackCapturePayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function isOAuthCallbackCapture(value: unknown): value is OAuthCallbackCapture {
-  return (
-    isAuthOauthCallbackCapturePayloadShape(value) &&
-    value.status === "ready" &&
-    typeof value.providerId === "string" &&
-    typeof value.code === "string" &&
-    typeof value.state === "string" &&
-    typeof value.url === "string" &&
-    typeof value.receivedAt === "number"
-  );
-}
-
-function createAbortError(): Error {
-  const error = new Error("OAuth callback polling aborted");
-  error.name = "AbortError";
-  return error;
-}
-
-function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) {
-    throw createAbortError();
-  }
-}
-
-function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(createAbortError());
-      return;
-    }
-
-    let settled = false;
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-
-    const clear = (onAbort: () => void): void => {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-        timeoutId = undefined;
-      }
-      signal?.removeEventListener("abort", onAbort);
-    };
-
-    const onAbort = (): void => {
-      if (settled) return;
-      settled = true;
-      clear(onAbort);
-      reject(createAbortError());
-    };
-
-    const finish = (): void => {
-      if (settled) return;
-      settled = true;
-      clear(onAbort);
-      resolve();
-    };
-
-    timeoutId = setTimeout(finish, ms);
-    signal?.addEventListener("abort", onAbort, { once: true });
-  });
-}
-
-async function getEnabledLocalProxyUrl(): Promise<string | null> {
-  const storage = getAppStorage();
-  const enabled = await storage.settings.get("proxy.enabled");
-  if (!enabled) return null;
-
-  const rawUrl = await storage.settings.get("proxy.url");
-  const proxyUrl = validateOfficeProxyUrl(resolveConfiguredProxyUrl(rawUrl));
-  return isLoopbackProxyUrl(proxyUrl) ? proxyUrl : null;
-}
-
-function buildCallbackPollUrl(proxyUrl: string, providerId: string, state: string): string {
-  const normalizedBase = proxyUrl.endsWith("/") ? proxyUrl : `${proxyUrl}/`;
-  const url = new URL(`oauth/callback/${encodeURIComponent(providerId)}`, normalizedBase);
-  url.searchParams.set("state", state);
-  return url.toString();
-}
-
 export async function pollOAuthCallbackCapture(
   options: PollOptions,
 ): Promise<OAuthCallbackCapture | null> {
-  const proxyUrl = await getEnabledLocalProxyUrl().catch(() => null);
-  if (!proxyUrl) return null;
-
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
-  const deadline = Date.now() + timeoutMs;
-  const pollUrl = buildCallbackPollUrl(proxyUrl, options.providerId, options.state);
-
-  while (Date.now() <= deadline) {
-    throwIfAborted(options.signal);
-
-    try {
-      const requestInit: RequestInit = {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      };
-      if (options.signal !== undefined) {
-        requestInit.signal = options.signal;
-      }
-      const response = await fetch(pollUrl, requestInit);
-
-      if (response.status >= 400 && response.status < 500) {
-        return null;
-      }
-
-      if (response.ok) {
-        const payload: unknown = await response.json();
-        if (isOAuthCallbackCapture(payload)) {
-          return payload.providerId === options.providerId && payload.state === options.state
-            ? payload
-            : null;
-        }
-
-        if (!isAuthOauthCallbackCapturePayloadShape(payload) || payload.status !== "pending") {
-          return null;
-        }
-      }
-    } catch {
-      if (options.signal?.aborted) {
-        throw createAbortError();
-      }
-    }
-
-    await wait(intervalMs, options.signal);
+  let proxyUrl: string;
+  try {
+    const { settings } = getAppStorage();
+    if (!await settings.get("proxy.enabled")) return null;
+    proxyUrl = validateOfficeProxyUrl(resolveConfiguredProxyUrl(await settings.get("proxy.url")));
+    if (!isLoopbackProxyUrl(proxyUrl)) return null;
+  } catch {
+    return null;
   }
 
-  return null;
+  const normalizedBase = proxyUrl.endsWith("/") ? proxyUrl : `${proxyUrl}/`;
+  const pollUrl = new URL(`oauth/callback/${encodeURIComponent(options.providerId)}`, normalizedBase);
+  pollUrl.searchParams.set("state", options.state);
+
+  const timeout = new AbortController();
+  const timeoutId = setTimeout(() => timeout.abort(), options.timeoutMs ?? DEFAULT_TIMEOUT_MS);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal;
+
+  try {
+    while (!signal.aborted) {
+      try {
+        const response = await fetch(pollUrl.toString(), {
+          method: "GET",
+          headers: { Accept: "application/json" },
+          signal,
+        });
+        if (signal.aborted) break;
+        if (response.status >= 400 && response.status < 500) return null;
+
+        if (response.ok) {
+          const payload: unknown = await response.json();
+          if (signal.aborted) break;
+          if (!Value.Check(callbackResponseSchema, payload)) return null;
+          if (payload.status === "ready") {
+            return payload.providerId === options.providerId && payload.state === options.state
+              ? payload
+              : null;
+          }
+        }
+      } catch {
+      }
+
+      if (signal.aborted) break;
+      await new Promise<void>((resolve) => {
+        const onAbort = (): void => {
+          clearTimeout(timer);
+          resolve();
+        };
+        const timer = setTimeout(() => {
+          signal.removeEventListener("abort", onAbort);
+          resolve();
+        }, options.intervalMs ?? DEFAULT_INTERVAL_MS);
+        signal.addEventListener("abort", onAbort, { once: true });
+      });
+    }
+
+    if (options.signal?.aborted) {
+      const error = new Error("OAuth callback polling aborted");
+      error.name = "AbortError";
+      throw error;
+    }
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }

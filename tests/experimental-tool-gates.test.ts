@@ -254,7 +254,7 @@ void test("execute_office_js denial of risky code cancels execution in Auto mode
   assert.equal(executeCount, 0);
 });
 
-void test("python bridge approvals fail open when no approval handler is configured", async () => {
+void test("python bridge approvals fail closed when no approval handler is configured", async () => {
   let executeCount = 0;
 
   const [pythonTool] = await applyExperimentalToolGates([
@@ -267,11 +267,11 @@ void test("python bridge approvals fail open when no approval handler is configu
     probePythonBridge: () => Promise.resolve(true),
   });
 
-  await pythonTool.execute("call-python-no-approval-handler", {
+  await assert.rejects(pythonTool.execute("call-python-no-approval-handler", {
     code: "print('hello')",
-  });
+  }), /cancelled by user/u);
 
-  assert.equal(executeCount, 1);
+  assert.equal(executeCount, 0);
 });
 
 void test("python fallback tools return structured gate errors when configured bridge is unreachable", async () => {

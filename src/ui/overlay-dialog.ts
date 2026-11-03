@@ -291,16 +291,29 @@ export function installOverlayFocus(overlay: HTMLElement, card: HTMLElement): Ov
   };
 }
 
+const overlayCovers = new Map<HTMLElement, { count: number; inert: boolean }>();
+
 export function coverOpenOverlays(overlay: HTMLElement): () => void {
   const covered = Array.from(document.body.children).filter(
     (element): element is HTMLElement => element instanceof HTMLElement
       && element !== overlay
-      && element.getAttribute("aria-modal") === "true"
-      && !element.inert,
+      && element.getAttribute("aria-modal") === "true",
   );
-  for (const element of covered) element.inert = true;
+  for (const element of covered) {
+    const cover = overlayCovers.get(element) ?? { count: 0, inert: element.inert };
+    cover.count += 1;
+    overlayCovers.set(element, cover);
+    element.inert = true;
+  }
   return () => {
-    for (const element of covered) element.inert = false;
+    for (const element of covered) {
+      const cover = overlayCovers.get(element);
+      if (!cover) continue;
+      cover.count -= 1;
+      if (cover.count > 0) continue;
+      element.inert = cover.inert;
+      overlayCovers.delete(element);
+    }
   };
 }
 
@@ -394,7 +407,7 @@ export function createOverlayDialogManager(options: OverlayDialogOptions): Overl
   let current: OverlayDialogController | null = null;
 
   const ensure = (): OverlayDialogController => {
-    if (current && current.overlay.isConnected) {
+    if (current) {
       return current;
     }
 

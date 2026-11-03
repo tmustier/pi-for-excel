@@ -155,3 +155,69 @@ void test("one session open in two taskpanes keeps both conversations", async ()
   paneA.persistence.dispose();
   paneB.persistence.dispose();
 });
+
+class HeldWriteBackend extends MemoryStorageBackend {
+  private held: { gate: Promise<void>; arrived: () => void } | null = null;
+
+  hold(): { arrived: Promise<void>; release: () => void } {
+    let release: () => void = () => {};
+    let arrived: () => void = () => {};
+    const arrival = new Promise<void>((resolve) => {
+      arrived = resolve;
+    });
+    this.held = {
+      gate: new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+      arrived,
+    };
+    return {
+      arrived: arrival,
+      release: () => {
+        this.held = null;
+        release();
+      },
+    };
+  }
+
+  override async transaction<T>(
+    storeNames: string[],
+    mode: "readonly" | "readwrite",
+    operation: (tx: StorageTransaction) => Promise<T>,
+  ): Promise<T> {
+    const held = this.held;
+    if (mode === "readwrite" && held) {
+      held.arrived();
+      await held.gate;
+    }
+    return super.transaction(storeNames, mode, operation);
+  }
+}
+
+void test("a session opened in a tab while that tab's last save is still writing keeps saving as itself", async () => {
+  const backend = new HeldWriteBackend();
+  const other = await createRuntime(backend);
+  other.agent.state.messages.push({ role: "user", content: "the other conversation", timestamp: 1 });
+  await other.persistence.saveSession({ force: true });
+  const loaded = await other.sessions.get(other.persistence.getSessionId());
+  assert.ok(loaded);
+  other.persistence.dispose();
+
+  const copies: string[] = [];
+  const tab = await createRuntime(backend, false, ({ toSessionId }) => copies.push(toSessionId));
+  tab.agent.state.messages.push({ role: "user", content: "blank tab draft turn", timestamp: 2 });
+  const write = backend.hold();
+  const earlierSave = tab.persistence.saveSession({ force: true });
+  await write.arrived;
+  const opening = tab.persistence.applyLoadedSession(loaded);
+  write.release();
+  await Promise.all([earlierSave, opening]);
+
+  tab.agent.state.messages.push({ role: "user", content: "continue the other conversation", timestamp: 3 });
+  await tab.persistence.saveSession({ force: true });
+
+  assert.deepEqual(copies, []);
+  assert.equal(tab.persistence.getSessionId(), loaded.id);
+  assert.match(JSON.stringify((await tab.sessions.get(loaded.id))?.messages), /continue the other conversation/u);
+  tab.persistence.dispose();
+});

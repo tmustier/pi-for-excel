@@ -3,72 +3,112 @@ import type {
   PythonBridgeResponse,
 } from "../tools/python-run.js";
 import type {
+  PyodideWorkerMessage,
   PyodideWorkerRequest,
   PyodideWorkerResponse,
 } from "./pyodide-worker.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
-let worker: Worker | null = null;
-let requestCounter = 0;
-const pendingRequests = new Map<string, {
+interface PendingRequest {
+  request: PyodideWorkerRequest;
+  timeoutMs: number;
   resolve: (response: PyodideWorkerResponse) => void;
   reject: (error: Error) => void;
-  timeoutId: ReturnType<typeof setTimeout>;
-}>();
+}
 
-function getOrCreateWorker(): Worker {
-  if (worker) return worker;
+type WorkerPhase =
+  | { kind: "idle" }
+  | { kind: "running"; pending: PendingRequest; timeoutId: ReturnType<typeof setTimeout> }
+  | { kind: "terminated" };
 
-  worker = new Worker(
-    new URL("./pyodide-worker.ts", import.meta.url),
-    { type: "module" },
-  );
+interface WorkerInstance {
+  worker: Worker;
+  loaded: boolean;
+  phase: WorkerPhase;
+  queue: PendingRequest[];
+}
 
-  worker.addEventListener("message", (event: MessageEvent<PyodideWorkerResponse>) => {
-    const response = event.data;
-    const pending = pendingRequests.get(response.id);
-    if (!pending) return;
+type RuntimeState = { kind: "stopped" } | { kind: "active"; instance: WorkerInstance };
+let runtime: RuntimeState = { kind: "stopped" };
+let requestCounter = 0;
 
-    clearTimeout(pending.timeoutId);
-    pendingRequests.delete(response.id);
-    pending.resolve(response);
-  });
+function terminateInstance(instance: WorkerInstance, error: Error): void {
+  const phase = instance.phase;
+  if (phase.kind === "terminated") return;
+  instance.phase = { kind: "terminated" };
+  if (runtime.kind === "active" && runtime.instance === instance) runtime = { kind: "stopped" };
+  instance.worker.terminate();
+  if (phase.kind === "running") {
+    clearTimeout(phase.timeoutId);
+    phase.pending.reject(error);
+  }
+  for (const pending of instance.queue.splice(0)) pending.reject(error);
+}
 
-  worker.addEventListener("error", (event) => {
-    const error = new Error(`Pyodide worker error: ${event.message}`);
-    for (const [id, pending] of pendingRequests) {
-      clearTimeout(pending.timeoutId);
-      pending.reject(error);
-      pendingRequests.delete(id);
+function dispatchNext(instance: WorkerInstance): void {
+  if (instance.phase.kind !== "idle") return;
+  const pending = instance.queue.shift();
+  if (!pending) return;
+  const timeoutId = setTimeout(() => {
+    terminateInstance(instance, new Error(`Pyodide execution timed out after ${pending.timeoutMs}ms. Worker was terminated.`));
+  }, pending.timeoutMs);
+  instance.phase = { kind: "running", pending, timeoutId };
+  try {
+    instance.worker.postMessage(pending.request);
+  } catch (error) {
+    terminateInstance(instance, error instanceof Error ? error : new Error(String(error)));
+  }
+}
+
+function getOrCreateWorker(): WorkerInstance {
+  if (runtime.kind === "active") return runtime.instance;
+  const worker = new Worker(new URL("./pyodide-worker.ts", import.meta.url), { type: "module" });
+  const instance: WorkerInstance = { worker, loaded: false, phase: { kind: "idle" }, queue: [] };
+  runtime = { kind: "active", instance };
+  worker.addEventListener("message", (event: MessageEvent<PyodideWorkerMessage>) => {
+    if (instance.phase.kind === "terminated") return;
+    if ("type" in event.data) {
+      instance.loaded = true;
+      return;
     }
-
-    worker = null;
+    const phase = instance.phase;
+    if (phase.kind !== "running" || phase.pending.request.id !== event.data.id) return;
+    clearTimeout(phase.timeoutId);
+    instance.phase = { kind: "idle" };
+    phase.pending.resolve(event.data);
+    dispatchNext(instance);
   });
-
-  return worker;
+  worker.addEventListener("error", (event) => {
+    terminateInstance(instance, new Error(`Pyodide worker error: ${event.message}`));
+  });
+  return instance;
 }
 
 function sendToWorker(
   request: PyodideWorkerRequest,
   timeoutMs: number,
+  signal?: AbortSignal,
 ): Promise<PyodideWorkerResponse> {
   return new Promise<PyodideWorkerResponse>((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      pendingRequests.delete(request.id);
-
-      if (worker) {
-        worker.terminate();
-        worker = null;
+    const instance = getOrCreateWorker();
+    const abort = (): void => {
+      if (instance.phase.kind === "running" && instance.phase.pending.request.id === request.id) {
+        terminateInstance(instance, new Error("Aborted"));
+      } else {
+        const index = instance.queue.findIndex((pending) => pending.request.id === request.id);
+        if (index >= 0) instance.queue.splice(index, 1)[0]?.reject(new Error("Aborted"));
       }
-
-      reject(new Error(`Pyodide execution timed out after ${timeoutMs}ms. Worker was terminated.`));
-    }, timeoutMs);
-
-    pendingRequests.set(request.id, { resolve, reject, timeoutId });
-
-    const w = getOrCreateWorker();
-    w.postMessage(request);
+    };
+    const cleanup = (): void => signal?.removeEventListener("abort", abort);
+    instance.queue.push({
+      request, timeoutMs,
+      resolve: (response) => { cleanup(); resolve(response); },
+      reject: (error) => { cleanup(); reject(error); },
+    });
+    signal?.addEventListener("abort", abort, { once: true });
+    if (signal?.aborted) abort();
+    dispatchNext(instance);
   });
 }
 
@@ -96,21 +136,8 @@ export async function callPyodideRuntime(
     workerRequest.inputJson = request.input_json;
   }
 
-  let abortHandler: (() => void) | null = null;
-  if (signal) {
-    abortHandler = () => {
-      const pending = pendingRequests.get(id);
-      if (pending) {
-        clearTimeout(pending.timeoutId);
-        pendingRequests.delete(id);
-        pending.reject(new Error("Aborted"));
-      }
-    };
-    signal.addEventListener("abort", abortHandler, { once: true });
-  }
-
   try {
-    const workerResponse = await sendToWorker(workerRequest, timeoutMs);
+    const workerResponse = await sendToWorker(workerRequest, timeoutMs, signal);
 
     const response: PythonBridgeResponse = {
       ok: workerResponse.ok,
@@ -134,10 +161,6 @@ export async function callPyodideRuntime(
       action: "run_python",
       error: message,
     };
-  } finally {
-    if (signal && abortHandler) {
-      signal.removeEventListener("abort", abortHandler);
-    }
   }
 }
 
@@ -148,18 +171,9 @@ export function isPyodideAvailable(): boolean {
 }
 
 export function isPyodideLoaded(): boolean {
-  return worker !== null;
+  return runtime.kind === "active" && runtime.instance.loaded;
 }
 
 export function terminatePyodide(): void {
-  if (!worker) return;
-
-  for (const [id, pending] of pendingRequests) {
-    clearTimeout(pending.timeoutId);
-    pending.reject(new Error("Pyodide runtime terminated"));
-    pendingRequests.delete(id);
-  }
-
-  worker.terminate();
-  worker = null;
+  if (runtime.kind === "active") terminateInstance(runtime.instance, new Error("Pyodide runtime terminated"));
 }

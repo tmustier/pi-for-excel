@@ -1,3 +1,5 @@
+import { defaultGetApprovedPythonBridgeUrl } from "./experimental-tool-gates/evaluation.js";
+
 function isToolsPythonRunPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -101,6 +103,7 @@ export interface PythonRunToolDetails {
 }
 
 export interface PythonRunToolDependencies {
+  getApprovedBridgeUrl?: () => Promise<string | undefined>;
   getBridgeConfig?: () => Promise<PythonBridgeConfig | null>;
   callBridge?: (
     request: PythonBridgeRequest,
@@ -474,6 +477,7 @@ export function createPythonRunTool(
   dependencies: PythonRunToolDependencies = {},
 ): AgentTool<TSchema, PythonRunToolDetails> {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
+  const getApprovedBridgeUrl = dependencies.getApprovedBridgeUrl ?? defaultGetApprovedPythonBridgeUrl;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
   const checkPyodide = dependencies.isPyodideAvailable;
   const pyodideCall = dependencies.callPyodide;
@@ -498,7 +502,11 @@ export function createPythonRunTool(
         params = parseParams(rawParams);
         validateParams(params);
 
-        const bridgeConfig = await getBridgeConfig();
+        let bridgeConfig = await getBridgeConfig();
+        if (bridgeConfig && await getApprovedBridgeUrl() !== bridgeConfig.url) {
+          if (bridgeConfig.configured) throw new Error("Python bridge URL requires user approval before execution.");
+          bridgeConfig = null;
+        }
         const request = toBridgeRequest(params);
 
         if (bridgeConfig) {

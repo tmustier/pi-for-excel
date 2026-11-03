@@ -1,3 +1,4 @@
+import { createConcurrencyLimit } from "../../../utils/concurrency.js";
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import {
@@ -23,10 +24,6 @@ import {
 import type { SettingsShellPage } from "../../../ui/settings-shell.js";
 import { showToast } from "../../../ui/toast.js";
 import type { SettingsAccess } from "../../../storage/local/settings-store.js";
-
-function isProxyPagePayloadShape(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function resolveProxyCallout(args: {
   enabled: boolean;
@@ -89,6 +86,11 @@ export function createProxyPage(): SettingsShellPage {
       const card = document.createElement("div");
       card.className = "pi-overlay-surface pi-settings-proxy-card";
 
+      const serializeSave = createConcurrencyLimit(1);
+      let disposed = false;
+      let enabledRevision = 0;
+      let urlRevision = 0;
+      let persistedEnabled = false;
       let enabled = false;
       let proxyUrl = DEFAULT_PROXY_URL;
       let proxyState: ProxyState = getProxyState();
@@ -120,15 +122,10 @@ export function createProxyPage(): SettingsShellPage {
       const statusHost = document.createElement("div");
       statusHost.className = "pi-settings-proxy-status";
 
-      let recheckToken = 0;
-      const recheckProxy = async (): Promise<void> => {
-        const token = ++recheckToken;
+      const recheckProxy = (): void => {
         proxyState = "unknown";
         updateStatus();
-        const state = await checkProxyOnce(settingsStore, { force: true });
-        if (token !== recheckToken) return;
-        proxyState = state;
-        updateStatus();
+        void checkProxyOnce(settingsStore, { force: true });
       };
 
       const warnIfRemote = (): void => {
@@ -148,61 +145,76 @@ export function createProxyPage(): SettingsShellPage {
         statusHost.replaceChildren(createCallout(status.tone, status.icon, status.message, { compact: true }));
       };
 
-      const saveProxyEnabled = async (nextEnabled: boolean): Promise<void> => {
+      const saveProxyEnabled = (nextEnabled: boolean): Promise<void> => {
+        const revision = ++enabledRevision;
         enabled = nextEnabled;
         updateStatus();
 
-        try {
-          await settingsStore.set("proxy.enabled", enabled);
-        } catch {
-          enabled = !nextEnabled;
-          proxyToggle.input.checked = enabled;
-          updateStatus();
-          showToast(t("settings.toast.proxy_save_failed"));
-          return;
-        }
+        return serializeSave(async () => {
+          await initialRead;
+          try {
+            await settingsStore.set("proxy.enabled", nextEnabled);
+            persistedEnabled = nextEnabled;
+          } catch {
+            if (disposed || revision !== enabledRevision) return;
+            enabled = persistedEnabled;
+            proxyToggle.input.checked = enabled;
+            updateStatus();
+            showToast(t("settings.toast.proxy_save_failed"));
+            return;
+          }
 
-        showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
-        warnIfRemote();
-        if (enabled) void recheckProxy();
-        else void checkProxyOnce(settingsStore, { force: true });
+          if (disposed || revision !== enabledRevision) return;
+          showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
+          warnIfRemote();
+          if (enabled) recheckProxy();
+          else void checkProxyOnce(settingsStore, { force: true });
+        });
       };
 
-      const saveProxyUrl = async (): Promise<void> => {
+      const saveProxyUrl = (): Promise<void> => {
+        const revision = ++urlRevision;
         const raw = proxyUrlInput.value.trim();
         const candidate = raw.length > 0 ? raw : DEFAULT_PROXY_URL;
+        return serializeSave(async () => {
+          await initialRead;
 
-        let normalizedUrl: string;
-        try {
-          normalizedUrl = validateOfficeProxyUrl(candidate);
-        } catch (error) {
-          validationError = error instanceof Error ? error.message : t("settings.toast.proxy_url_invalid");
-          updateStatus();
-          showToast(t("settings.toast.proxy_url_not_saved", { error: validationError }));
-          return;
-        }
+          let normalizedUrl: string;
+          try {
+            normalizedUrl = validateOfficeProxyUrl(candidate);
+          } catch (error) {
+            if (disposed || revision !== urlRevision) return;
+            validationError = error instanceof Error ? error.message : t("settings.toast.proxy_url_invalid");
+            updateStatus();
+            showToast(t("settings.toast.proxy_url_not_saved", { error: validationError }));
+            return;
+          }
 
-        validationError = null;
+          validationError = null;
 
-        if (normalizedUrl === proxyUrl) {
+          if (normalizedUrl === proxyUrl) {
+            if (disposed || revision !== urlRevision) return;
+            proxyUrlInput.value = normalizedUrl;
+            updateStatus();
+            return;
+          }
+
+          try {
+            await saveTaskpaneProxyUrl(settingsStore, normalizedUrl);
+          } catch {
+            if (disposed || revision !== urlRevision) return;
+            showToast(t("settings.toast.proxy_url_save_failed"));
+            return;
+          }
+
+          proxyUrl = normalizedUrl;
+          if (disposed || revision !== urlRevision) return;
           proxyUrlInput.value = normalizedUrl;
           updateStatus();
-          return;
-        }
-
-        try {
-          await saveTaskpaneProxyUrl(settingsStore, normalizedUrl);
-        } catch {
-          showToast(t("settings.toast.proxy_url_save_failed"));
-          return;
-        }
-
-        proxyUrl = normalizedUrl;
-        proxyUrlInput.value = normalizedUrl;
-        updateStatus();
-        showToast(t("settings.toast.proxy_url_saved"));
-        warnIfRemote();
-        void recheckProxy();
+          showToast(t("settings.toast.proxy_url_saved"));
+          warnIfRemote();
+          recheckProxy();
+        });
       };
 
       const scheduleProxyUrlSave = (): void => {
@@ -226,6 +238,7 @@ export function createProxyPage(): SettingsShellPage {
         void saveProxyUrl();
       };
 
+      proxyUrlInput.addEventListener("input", () => { urlRevision += 1; });
       proxyUrlInput.addEventListener("blur", scheduleProxyUrlSave);
       proxyUrlInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
@@ -237,17 +250,9 @@ export function createProxyPage(): SettingsShellPage {
         proxyUrlInput.blur();
       });
 
-      const onProxyStateChanged = (event: Event): void => {
-        if (!(event instanceof CustomEvent)) return;
-
-        const detail: unknown = event.detail;
-        if (!isProxyPagePayloadShape(detail)) return;
-
-        const state = detail.state;
-        if (state === "detected" || state === "not-detected" || state === "unknown") {
-          proxyState = state;
-          updateStatus();
-        }
+      const onProxyStateChanged = (): void => {
+        proxyState = getProxyState();
+        updateStatus();
       };
 
       document.addEventListener("pi:proxy-state-changed", onProxyStateChanged);
@@ -256,6 +261,7 @@ export function createProxyPage(): SettingsShellPage {
       });
       ctx.addCleanup(() => {
         flushPendingProxyUrlSave();
+        disposed = true;
       });
 
       const helper = document.createElement("p");
@@ -281,22 +287,25 @@ export function createProxyPage(): SettingsShellPage {
         ".",
       );
 
-      void (async () => {
+      const initialRead = (async () => {
         try {
           const storedEnabled = await settingsStore.get("proxy.enabled");
           const storedUrl = await settingsStore.get("proxy.url");
 
-          enabled = storedEnabled === true;
-          proxyUrl = typeof storedUrl === "string" && storedUrl.trim().length > 0
+          persistedEnabled = storedEnabled === true;
+          if (disposed) return;
+          if (enabledRevision === 0) enabled = persistedEnabled;
+          if (urlRevision === 0) proxyUrl = typeof storedUrl === "string" && storedUrl.trim().length > 0
             ? storedUrl.trim()
             : DEFAULT_PROXY_URL;
         } catch {
-          enabled = false;
-          proxyUrl = DEFAULT_PROXY_URL;
+          if (disposed) return;
+          if (enabledRevision === 0) enabled = false;
+          if (urlRevision === 0) proxyUrl = DEFAULT_PROXY_URL;
         }
 
-        proxyToggle.input.checked = enabled;
-        proxyUrlInput.value = proxyUrl;
+        if (enabledRevision === 0) proxyToggle.input.checked = enabled;
+        if (urlRevision === 0) proxyUrlInput.value = proxyUrl;
         updateStatus();
       })();
 

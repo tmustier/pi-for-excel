@@ -44,6 +44,7 @@ export interface ConnectionState {
 }
 
 export interface ConnectionSnapshot extends ConnectionState {
+  credentialRevision: string;
   title: string;
   capability: string;
   setupHint: string;

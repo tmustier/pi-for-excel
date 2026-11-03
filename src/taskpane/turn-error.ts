@@ -17,7 +17,7 @@ export interface TurnFailureContext {
 }
 
 export function describeTurnFailure(context: TurnFailureContext): string | null {
-  const last = context.messages[context.messages.length - 1];
+  const last = context.messages.slice().reverse().find((message) => message.role === "user" || message.role === "assistant");
   if (!last || last.role !== "assistant" || last.stopReason !== "error") return null;
   const error = last.errorMessage ?? "";
 
