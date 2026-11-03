@@ -871,7 +871,7 @@ export function buildProviderRow(
     }
   });
 
-  if (oauthBtn) {
+  if (oauthBtn && oauth) {
     oauthBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       const operation = begin("logging-in");
@@ -880,10 +880,6 @@ export function buildProviderRow(
       void (async () => {
         errorEl.hidden = true;
         try {
-          if (!oauth) {
-            throw new Error("OAuth provider id missing");
-          }
-
           const oauthProvider = getOAuthProvider(oauth);
           if (!oauthProvider) {
             throw new Error(`OAuth provider not supported: ${oauth}`);
@@ -907,8 +903,8 @@ export function buildProviderRow(
             }
           }
 
-          const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
-          const authUrlRef: { current: string | null } = { current: null };
+          let closeDeviceCodeDialog: (() => void) | undefined;
+          let authUrl: string | null = null;
 
           loginAbort.signal.throwIfAborted();
           let cred;
@@ -916,7 +912,7 @@ export function buildProviderRow(
             cred = await oauthProvider.login({
               onAuth: (info) => {
                 loginAbort.signal.throwIfAborted();
-                authUrlRef.current = info.url;
+                authUrl = info.url;
                 const w = window.open(info.url, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
               },
@@ -924,8 +920,8 @@ export function buildProviderRow(
                 loginAbort.signal.throwIfAborted();
                 const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
-                deviceCodeDialogRef.close = showDeviceCodeDialog(info, () => loginAbort.abort());
-                loginAbort.signal.addEventListener("abort", () => deviceCodeDialogRef.close?.(), { once: true });
+                closeDeviceCodeDialog = showDeviceCodeDialog(info, () => loginAbort.abort());
+                loginAbort.signal.addEventListener("abort", () => closeDeviceCodeDialog?.(), { once: true });
               },
               onSelect: (prompt) =>
                 promptForSelect({
@@ -948,7 +944,7 @@ export function buildProviderRow(
                   ? oauth
                   : undefined;
                 const oauthCallbackState = oauthCallbackProviderId
-                  ? getOAuthStateFromAuthUrl(authUrlRef.current)
+                  ? getOAuthStateFromAuthUrl(authUrl)
                   : undefined;
 
                 const value = await promptForText({
@@ -958,7 +954,7 @@ export function buildProviderRow(
                   placeholder: prompt.placeholder || "",
                   ...(helperText !== undefined ? { helperText } : {}),
                   submitLabel: t("provider.prompt.continue"),
-                  ...(authUrlRef.current !== null ? { externalUrl: authUrlRef.current } : {}),
+                  ...(authUrl !== null ? { externalUrl: authUrl } : {}),
                   ...(oauthCallbackProviderId && oauthCallbackState
                     ? { autoCapture: { providerId: oauthCallbackProviderId, state: oauthCallbackState } }
                     : {}),
@@ -973,13 +969,8 @@ export function buildProviderRow(
               onProgress: (msg) => { if (!loginAbort.signal.aborted) oauthBtn.textContent = msg; },
               signal: loginAbort.signal,
             });
-          } catch (error) {
-            if (loginAbort.signal.aborted) {
-              return;
-            }
-            throw error;
           } finally {
-            deviceCodeDialogRef.close?.();
+            closeDeviceCodeDialog?.();
           }
 
           loginAbort.signal.throwIfAborted();

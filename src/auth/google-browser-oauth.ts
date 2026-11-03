@@ -280,22 +280,16 @@ async function discoverGeminiCliProject(
   callbacks.signal?.throwIfAborted();
   callbacks.onProgress?.("Provisioning Cloud Code Assist project…");
 
-  const onboardBody: Record<string, unknown> = {
+  const onboardBody = {
     tierId,
     metadata: {
       ideType: "IDE_UNSPECIFIED",
       platform: "PLATFORM_UNSPECIFIED",
       pluginType: "GEMINI",
+      ...(projectId ? { duetProject: projectId } : {}),
     },
+    ...(projectId ? { cloudaicompanionProject: projectId } : {}),
   };
-
-  if (projectId) {
-    onboardBody.cloudaicompanionProject = projectId;
-    const metadata = onboardBody.metadata;
-    if (isAuthGoogleBrowserOauthPayloadShape(metadata)) {
-      metadata.duetProject = projectId;
-    }
-  }
 
   const onboardResponse = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal:onboardUser`, {
     method: "POST",

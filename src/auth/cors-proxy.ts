@@ -17,10 +17,6 @@ type ProxySettingsCache =
 let proxyCache: ProxySettingsCache = { kind: "empty" };
 let installed = false;
 
-function parseProxyEnabled(value: unknown): boolean {
-  return Boolean(value);
-}
-
 export async function readCorsProxySettings(
   settings: SettingsReader,
 ): Promise<{ enabled: boolean; url: string }> {
@@ -30,7 +26,7 @@ export async function readCorsProxySettings(
       settings.get("proxy.url"),
     ]);
     return {
-      enabled: parseProxyEnabled(enabled),
+      enabled: Boolean(enabled),
       url: typeof url === "string" ? url.trim() : "",
     };
   } catch {

@@ -465,8 +465,8 @@ function withPayloadHook(
 }
 
 type CodexBridgeCapabilityCacheEntry =
-  | { kind: "probing"; generation: number }
-  | { kind: "ready"; generation: number; checkedAt: number; supported: boolean };
+  | { kind: "probing" }
+  | { kind: "ready"; checkedAt: number; supported: boolean };
 
 const CODEX_BRIDGE_SUPPORTED_TTL_MS = 60_000;
 const CODEX_BRIDGE_UNAVAILABLE_TTL_MS = 3_000;
@@ -509,11 +509,11 @@ async function proxySupportsCodexWebSocketBridge(proxyUrl: string): Promise<bool
     if (Date.now() - cached.checkedAt < cacheTtlMs) return cached.supported;
   }
 
-  const generation = (cached?.generation ?? 0) + 1;
-  codexBridgeCapabilityCache.set(normalized, { kind: "probing", generation });
+  const probe: CodexBridgeCapabilityCacheEntry = { kind: "probing" };
+  codexBridgeCapabilityCache.set(normalized, probe);
   const supported = await probeCodexWebSocketBridge(normalized);
-  if (codexBridgeCapabilityCache.get(normalized)?.generation === generation) {
-    codexBridgeCapabilityCache.set(normalized, { kind: "ready", checkedAt: Date.now(), supported, generation });
+  if (codexBridgeCapabilityCache.get(normalized) === probe) {
+    codexBridgeCapabilityCache.set(normalized, { kind: "ready", checkedAt: Date.now(), supported });
   }
   return supported;
 }
