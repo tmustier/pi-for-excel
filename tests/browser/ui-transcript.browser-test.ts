@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
 
-import { openBrowserPage, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { connectFixtureProvider, enterInput, openBrowserPage, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
 before(async () => { env = await startTaskpaneServer(); });
@@ -397,7 +397,7 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
         summarizeTurnChanges({ ...shared, turnId: "js-only", toolCallIds: new Set(["js"]), backups: [] }),
         summarizeTurnChanges({ ...shared, turnId: "mixed", toolCallIds: new Set(["core", "js"]),
           officeJsRanges: ["Sheet1!X12", "'Q3 Plan'!B2:C3", "Sheet1!A1", "Sheet1!A2", "Sheet1!A3", "Sheet1!A4", "Sheet1!A5"], backups: [
-          { id: "core-backup", at: 0, toolCallId: "core", address: "Sheet1!D7", changedCount: 1 },
+          { id: "core-backup", at: 0, toolCallId: "core", toolName: "write_cells", address: "Sheet1!D7", changedCount: 1 },
         ] }),
       ];
     });
@@ -417,3 +417,146 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     await opened.finish();
   }
 });
+
+for (const { name, language, toolName, args, sentence, button } of [
+  { name: "chart create", language: "en", toolName: "charts", args: { action: "create", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:B12" },
+    sentence: "Create chart 'Sales' — Sheet1!A1:B12", button: "Create" },
+  { name: "chart update", language: "en", toolName: "charts", args: { action: "update", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:C12" },
+    sentence: "Update chart 'Sales' — Sheet1!A1:C12", button: "Update" },
+  { name: "chart delete", language: "en", toolName: "charts", args: { action: "delete", sheet: "Sheet1", name: "Sales" },
+    sentence: "Delete chart 'Sales'", button: "Delete" },
+  { name: "conditional format", language: "en", toolName: "conditional_format", args: { action: "add", range: "Sheet1!A1:A5", type: "cell_value", operator: "GreaterThan", value: 10, fill_color: "#FFC7CE" },
+    sentence: "Conditionally format Sheet1!A1:A5", button: "Conditionally format" },
+  { name: "conditional format clear", language: "en", toolName: "conditional_format", args: { action: "clear", range: "Sheet1!A1:A5" },
+    sentence: "Clear conditional formats in Sheet1!A1:A5", button: "Clear" },
+  { name: "Chinese chart delete", language: "zh-CN", toolName: "charts", args: { action: "delete", sheet: "Sheet1", name: "Sales" },
+    sentence: "删除 图表“Sales”", button: "删除" },
+  { name: "Chinese chart create", language: "zh-CN", toolName: "charts", args: { action: "create", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:B12" },
+    sentence: "创建 图表“Sales” — Sheet1!A1:B12", button: "创建" },
+] as const) {
+  void test(`${name} approval shows its action in the card and button`, async () => {
+    const opened = await openTaskpane(env, { viewport });
+    const { page } = opened;
+    try {
+      await connectFixtureProvider(page);
+      await page.evaluate(async ({ language, toolName, args }) => {
+        const languagePath = "/src/language/index.ts";
+        const { initLanguage } = await import(languagePath);
+        initLanguage(language);
+        const storagePath = "/src/storage/local/app-storage.ts";
+        const { getAppStorage } = await import(storagePath);
+        await getAppStorage().settings.set("execution.mode.v1", "safe");
+        const streamPath = "/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";
+        const { createAssistantMessageEventStream } = await import(streamPath);
+        const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+        const { fauxAssistantMessage } = await import(fauxPath);
+        const sidebar = document.querySelector("pi-sidebar");
+        let requested = false;
+        sidebar.agent.streamFunction = () => {
+          const stream = createAssistantMessageEventStream();
+          const message = requested ? fauxAssistantMessage("Declined.") : fauxAssistantMessage([
+            { type: "toolCall", id: "approval-action", name: toolName, arguments: args },
+          ], { stopReason: "toolUse" });
+          requested = true;
+          stream.push({ type: "done", reason: message.stopReason, message });
+          return stream;
+        };
+      }, { language, toolName, args });
+      await enterInput(page, "Make the change");
+      const card = page.locator(".pi-turn-row--approval");
+      await card.waitFor({ state: "visible" });
+      assert.deepEqual([
+        await card.locator(".pi-turn-row__sentence").innerText(),
+        await card.locator(".pi-btn--primary").innerText(),
+      ], [sentence, button]);
+      await card.locator(".pi-turn-row__actions .pi-btn--secondary").click();
+      await card.waitFor({ state: "detached" });
+      await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
+    } finally {
+      await opened.finish();
+    }
+  });
+}
+
+void test("Chinese transcript rows conjugate overview and Office.js actions", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+    await page.evaluate(async () => {
+      const languagePath = "/src/language/index.ts";
+      const { initLanguage } = await import(languagePath);
+      initLanguage("zh-CN");
+      const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+      const { fauxAssistantMessage } = await import(fauxPath);
+      const list = document.querySelector('[data-gallery="turn-changes"] message-list');
+      const calls = [
+        { type: "toolCall", id: "overview", name: "get_workbook_overview", arguments: { sheet: "Sheet1" } },
+        { type: "toolCall", id: "office", name: "execute_office_js", arguments: { explanation: "Sum totals", code: "return 1;" } },
+      ];
+      list.messages = [
+        { role: "user", content: "Look", timestamp: 0 },
+        fauxAssistantMessage(calls, { stopReason: "toolUse" }),
+        ...calls.map((call) => ({ role: "toolResult", toolCallId: call.id, toolName: call.name,
+          content: [{ type: "text", text: "Done" }], isError: false, timestamp: 0 })),
+        fauxAssistantMessage("Done."),
+      ];
+    });
+    const group = page.locator('[data-gallery="turn-changes"] turn-group');
+    await group.locator(".pi-turn__header").click();
+    assert.deepEqual(await group.locator(".pi-turn-row__sentence").allInnerTexts(), ["已读取概览 Sheet1", "已运行 Office.js Sum totals"]);
+  } finally {
+    await opened.finish();
+  }
+});
+
+for (const source of ["audit", "backup"] as const) {
+  void test(`transcript receipts distinguish chart and mixed changes from cells using ${source}`, async () => {
+    const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+    const { page } = opened;
+    try {
+      await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+      await page.evaluate(async (source) => {
+        const modulePath = "/src/messages/turn-changes.ts";
+        const { summarizeTurnChanges } = await import(modulePath);
+        const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+        const { fauxAssistantMessage } = await import(fauxPath);
+        const list = document.querySelector('[data-gallery="turn-changes"] message-list');
+        list.messages = [
+          ["charts"], ["write_cells", "charts"], ["write_cells"],
+        ].flatMap((tools, index) => {
+          const entries = tools.map((toolName) => ({
+            id: `${index}-${toolName}`, at: index, toolCallId: `${index}-${toolName}`, toolName,
+            changedCount: toolName === "charts" ? 1 : 40,
+          }));
+          const summary = summarizeTurnChanges({
+            turnId: `receipt-${index}`, timestamp: index, outcome: "finished",
+            toolCallIds: new Set(entries.map((entry) => entry.toolCallId)),
+            audit: source === "audit" ? entries.map((entry) => ({ ...entry, blocked: false, outputAddress: "Sheet1!A1:B20", changes: [] })) : [],
+            backups: source === "backup" ? entries.map((entry) => ({ ...entry, address: "Sheet1!A1:B20" })) : [],
+          });
+          return [
+            { role: "user", content: `Change ${index}`, timestamp: index },
+            fauxAssistantMessage(entries.map((entry) => ({
+              type: "toolCall", id: entry.toolCallId, name: entry.toolName,
+              arguments: entry.toolName === "charts"
+                ? { action: source === "audit" ? "delete" : "update", sheet: "Sheet1", name: "Sales", title: "Sales" }
+                : { start_cell: "Sheet1!A1", values: Array.from({ length: 20 }, () => [1, 2]) },
+            })), { stopReason: "toolUse" }),
+            ...entries.map((entry) => ({ role: "toolResult", toolCallId: entry.toolCallId, toolName: entry.toolName,
+              content: [{ type: "text", text: "Done" }], isError: false, timestamp: index })),
+            summary,
+          ];
+        });
+        list.messages = [...list.messages, { role: "turnChanges", turnId: "legacy", timestamp: 4, outcome: "finished",
+          changes: [{ address: "Sheet1!C1", changedCount: 1, backupIds: [] }] }];
+      }, source);
+      const summaries = page.locator('[data-gallery="turn-changes"] .pi-turn-changes__summary');
+      await page.waitForFunction(() => document.querySelectorAll('[data-gallery="turn-changes"] .pi-turn-changes__summary').length === 4);
+      assert.deepEqual(await summaries.allTextContents(), ["Made 1 change", "Made 2 changes", "Changed 40 cells", "Changed 1 cell"]);
+      assert.equal(await page.locator('[data-gallery="turn-changes"] turn-group .pi-turn-changes').count(), 3);
+    } finally {
+      await opened.finish();
+    }
+  });
+}

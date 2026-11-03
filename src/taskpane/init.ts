@@ -155,8 +155,7 @@ import type { RecoveryMetadata } from "../workbook/recovery/log-store.js";
 import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
 import { requestApproval } from "../ui/approval-dialog.js";
 import { humanizeToolInput } from "../ui/humanize-params.js";
-import { describePendingToolCall } from "../ui/tool-renderers.js";
-import { toolActionVerb } from "../ui/tool-rows.js";
+import { describePendingToolCall, toolActionVerb } from "../ui/tool-rows.js";
 import {
   BackupIdentityMonitor,
   startBackupIdentityPolling,
@@ -1173,7 +1172,7 @@ export async function initTaskpane(opts: {
               ? t("init.confirm.wpsJsTitle")
               : t("init.confirm.officeJsTitle"),
             toolCallId: request.toolCallId,
-            headline: apiName === "WPS JSAPI" ? t("tools.action.runWpsJs") : t("tools.action.runOfficeJs"),
+            headline: apiName === "WPS JSAPI" ? t("turn.verb.run_wps_jsapi.base") : t("turn.verb.run_office_js.base"),
             message: buildOfficeJsExecuteApprovalMessage(request),
             confirmLabel: t("init.confirm.allowOnce"),
             allowForTurn: !request.destructive && !request.riskIdentifiers?.length,
