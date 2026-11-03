@@ -544,7 +544,10 @@ export type FilesToolDetails =
   | FilesWriteDetails
   | FilesDeleteDetails;
 
+const stoppedToolDetailsSchema = Type.Object({ kind: Type.Literal("stopped") });
+
 const toolDetailsSchemasByKind = {
+  stopped: stoppedToolDetailsSchema,
   write_cells: writeCellsDetailsSchema,
   fill_formula: fillFormulaDetailsSchema,
   format_cells: formatCellsDetailsSchema,
@@ -595,6 +598,10 @@ const kindedDetailsSchema = Type.Object({ kind: Type.String() });
 export function decodeToolDetails(raw: unknown): ExcelToolDetails | undefined {
   if (!Value.Check(kindedDetailsSchema, raw) || !isToolDetailsKind(raw.kind)) return undefined;
   return decodeToolDetailsOfKind(raw, raw.kind);
+}
+
+export function reportsStop(details: ExcelToolDetails | undefined): boolean {
+  return details !== undefined && (details.kind === "stopped" || ("stopped" in details && details.stopped === true));
 }
 
 export function decodeToolDetailsOfKind<K extends ToolDetailsKind>(

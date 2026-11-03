@@ -2,7 +2,7 @@ import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent, ThinkingContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type { TurnChangesMessage } from "../../messages/turn-changes.js";
-import { decodeToolDetails } from "../../tools/tool-details.js";
+import { decodeToolDetails, reportsStop } from "../../tools/tool-details.js";
 import { isFailedToolResult } from "../tool-renderers.js";
 import type { ToolRowTense } from "../tool-rows.js";
 import { thinkingKey } from "./transcript-state.js";
@@ -136,10 +136,8 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
         if (!chunk) break;
         if (chunk.type === "toolCall") {
           const result = results.get(chunk.id);
-          const details = decodeToolDetails(result?.details);
-          const stopped = details !== undefined && "stopped" in details && details.stopped === true;
           const state: ToolRowTense = result
-            ? (stopped ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
+            ? (reportsStop(decodeToolDetails(result.details)) ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
             : assistant.stopReason === "error" ? "failed"
             : assistant.stopReason === "aborted" ? "stopped"
             : active && (streaming || pendingToolCalls.has(chunk.id) || assistant.stopReason === "toolUse") ? "live"

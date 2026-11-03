@@ -585,6 +585,7 @@ export function createPythonRunTool(
           },
         };
       } catch (error) {
+        if (signal?.aborted) throw error;
         const message = getErrorMessage(error);
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"

@@ -1,4 +1,10 @@
-import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
+import type {
+  AfterToolCallContext,
+  AfterToolCallResult,
+  AgentTool,
+  AgentToolResult,
+  AgentToolUpdateCallback,
+} from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 import { Value } from "typebox/value";
 
@@ -6,6 +12,7 @@ import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { decodeToolDetails, reportsStop } from "./tool-details.js";
 import {
   getToolApprovalRequirement,
   getToolContextImpact,
@@ -109,6 +116,18 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
 
 export const STOP_GRACE_MS: Readonly<Record<"read" | "write", number>> = { read: 500, write: 10_000 };
 
+const STOPPED_WITH_UNKNOWN_OUTCOME = "Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it.";
+
+export function markStoppedToolResult(
+  { result, isError }: AfterToolCallContext,
+  signal?: AbortSignal,
+): Promise<AfterToolCallResult | undefined> {
+  const [first] = result.content;
+  const stopped = signal?.aborted === true && isError && !reportsStop(decodeToolDetails(result.details))
+    && !(first?.type === "text" && first.text === STOPPED_WITH_UNKNOWN_OUTCOME);
+  return Promise.resolve(stopped ? { details: { kind: "stopped" } } : undefined);
+}
+
 function settleOnStop<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
@@ -122,7 +141,7 @@ function settleOnStop<T>(
       timer = setTimeout(() => {
         work.catch(() => {});
         reject(mode === "write"
-          ? Object.assign(new Error("Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it."), { outcomeUnknown: true })
+          ? Object.assign(new Error(STOPPED_WITH_UNKNOWN_OUTCOME), { outcomeUnknown: true })
           : new Error("Stopped by the user before Excel answered."));
       }, STOP_GRACE_MS[mode]);
     };

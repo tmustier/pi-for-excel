@@ -201,6 +201,7 @@ void test("a result summary's full stop and an extension tool's label do not lea
   assert.equal(textOf(describeToolRow("modify_structure", { action: "add_sheet", name: "Q3" }, added, "done").sentence), "Added sheet \"Q3\"");
   assert.equal(textOf(describeToolRow("sum_rows", {}, undefined, "live", "Sum rows").sentence), "Running Sum rows");
   assert.equal(textOf(describeToolRow("sum_rows", {}, result("s", "oops", 2, { isError: true }), "failed").sentence), "Could not run sum_rows");
+  assert.equal(textOf(describeToolRow("sum_rows", {}, undefined, "stopped", "Sum rows").sentence), "Stopped running Sum rows");
 });
 
 void test("approval buttons name the action, falling back for extension tools", () => {

@@ -210,7 +210,7 @@ export function describeToolRow(
     const name = label ?? toolName;
     const text = tense === "live" ? t("turn.row.running", { name })
       : tense === "failed" ? t("turn.row.couldNot", { action: t("turn.row.run", { name }) })
-      : tense === "stopped" ? t("turn.row.stopped", { action: t("turn.row.running", { name }) })
+      : tense === "stopped" ? t("turn.row.stopped", { action: lowerFirst(t("turn.row.running", { name })) })
       : t("turn.row.ran", { name });
     return { sentence: html`${text}`, meta: null, reason };
   }
