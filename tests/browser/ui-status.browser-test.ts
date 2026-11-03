@@ -92,8 +92,7 @@ void test("a deferred composer focus yields to focus moved before it runs, but n
       const textarea = document.querySelector("pi-input textarea");
       if (!(browse instanceof HTMLButtonElement) || !(textarea instanceof HTMLTextAreaElement)) return null;
 
-      browse.blur();
-      textarea.blur();
+      textarea.focus();
       await nextFrames();
       document.dispatchEvent(new CustomEvent("pi:request-input-focus"));
       browse.focus();
