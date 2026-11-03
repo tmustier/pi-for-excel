@@ -522,7 +522,7 @@ export function buildRuntimeManagerActivationBridge(
       try {
         await connectionManager.markRuntimeAuthFailure(normalizedConnectionId, {
           message: authFailureMessage,
-        });
+        }, snapshot.credentialRevision);
       } catch {
       }
 

@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { Agent } from "@earendil-works/pi-agent-core";
 import { InMemoryModelsStore } from "@earendil-works/pi-ai";
 import { Type } from "typebox";
 
-import type { ExcelExtensionAPI } from "../src/commands/extension-api.ts";
+import { loadExtension, type ExcelExtensionAPI } from "../src/commands/extension-api.ts";
 import { commandRegistry } from "../src/commands/types.ts";
 import { ConnectionManager } from "../src/connections/manager.ts";
 import { ExtensionRuntimeManager, type ExtensionRuntimeManagerOptions } from "../src/extensions/runtime-manager.ts";
@@ -182,6 +183,38 @@ void test("retained registration callbacks cannot resurrect an unloaded instance
   assert.ok(api);
   assert.throws(() => registerTool(api), /no longer active|Permission denied/, "retained API must reject registration after teardown");
   assert.deepEqual(manager.getRegisteredTools(), []);
+});
+
+void test("uninstall retries the failed teardown of a disabled extension", async (t) => {
+  let fail = true;
+  let cleanups = 0;
+  let successfulCleanups = 0;
+  let unsubscribes = 0;
+  const agent = new Agent({ streamFn: () => { throw new Error("unused"); } });
+  t.mock.method(agent, "subscribe", () => () => {
+    unsubscribes += 1;
+    if (fail) throw new Error("unsubscribe unavailable");
+  });
+  const { manager } = createManager({
+    getActiveAgent: () => agent,
+    loadExtensionFromSource: (api) => {
+      api.onAgentEvent(() => {});
+      return loadExtension(api, () => [
+        () => { successfulCleanups += 1; },
+        () => { cleanups += 1; if (fail) throw new Error("cleanup unavailable"); },
+      ]);
+    },
+  });
+  await manager.initialize();
+  const id = await manager.installFromModuleSpecifier("Lifecycle", "./lifecycle.js");
+  await assert.rejects(manager.setExtensionEnabled(id, false), /cleanup unavailable/);
+  assert.match(manager.list()[0]?.lastError ?? "", /cleanup unavailable/);
+  fail = false;
+  await manager.uninstallExtension(id);
+  assert.equal(cleanups, 2, "uninstall must finish the teardown that disabling could not complete");
+  assert.equal(unsubscribes, 2, "failed subscriptions must also be released before uninstall completes");
+  assert.equal(successfulCleanups, 1, "successful cleanups must not be replayed");
+  assert.deepEqual(manager.list(), []);
 });
 
 void test("an extension can unregister its resources from its teardown callback", async () => {

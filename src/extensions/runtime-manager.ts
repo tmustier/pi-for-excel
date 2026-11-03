@@ -151,7 +151,7 @@ type ExtensionLifecycle =
   | { kind: "refreshing"; instance: LoadedExtensionState }
   | { kind: "active"; instance: LoadedExtensionState }
   | { kind: "deactivating"; instance: LoadedExtensionState }
-  | { kind: "failed"; error: string };
+  | { kind: "failed"; error: string; instance: LoadedExtensionState | null };
 
 export interface ExtensionRuntimeStatus {
   id: string;
@@ -657,7 +657,9 @@ export class ExtensionRuntimeManager {
       await this.activateEntry(entry);
     } catch (error) {
       const message = getRuntimeManagerErrorMessage(error);
-      this.lifecycles.set(entry.id, { kind: "failed", error: message });
+      const lifecycle = this.lifecycles.get(entry.id);
+      const instance = lifecycle && "instance" in lifecycle ? lifecycle.instance : null;
+      this.lifecycles.set(entry.id, { kind: "failed", error: message, instance });
       console.warn(`[pi] Failed to load extension "${entry.name}": ${message}`);
     }
   }
@@ -688,7 +690,8 @@ export class ExtensionRuntimeManager {
     };
     const assertRegistrationAllowed = (): void => {
       assertInstanceCurrent();
-      if (this.lifecycles.get(entry.id)?.kind === "deactivating") {
+      const lifecycle = this.lifecycles.get(entry.id);
+      if (lifecycle?.kind === "deactivating" || lifecycle?.kind === "failed") {
         throw new Error("Extension instance is deactivating.");
       }
     };
@@ -942,14 +945,15 @@ export class ExtensionRuntimeManager {
         if (!state.eventUnsubscribers.has(unsubscribe)) {
           return;
         }
-        state.eventUnsubscribers.delete(unsubscribe);
         unsubscribe();
+        state.eventUnsubscribers.delete(unsubscribe);
       };
     };
 
     const isCapabilityEnabled = (capability: ExtensionCapability): boolean => {
       const lifecycle = this.lifecycles.get(entry.id);
-      return lifecycle !== undefined && "instance" in lifecycle && lifecycle.instance === state
+      return lifecycle !== undefined && lifecycle.kind !== "failed"
+        && "instance" in lifecycle && lifecycle.instance === state
         && isExtensionCapabilityAllowed(entry.permissions, capability);
     };
 
@@ -1066,13 +1070,14 @@ export class ExtensionRuntimeManager {
 
   private async deactivateEntry(entryId: string): Promise<void> {
     const lifecycle = this.lifecycles.get(entryId);
-    if (lifecycle?.kind !== "active") return;
-    this.lifecycles.set(entryId, { kind: "deactivating", instance: lifecycle.instance });
+    const instance = lifecycle && "instance" in lifecycle ? lifecycle.instance : null;
+    if (!instance) return;
+    this.lifecycles.set(entryId, { kind: "deactivating", instance });
     try {
-      await this.cleanupState(lifecycle.instance);
+      await this.cleanupState(instance);
       this.lifecycles.set(entryId, { kind: "disabled" });
     } catch (error) {
-      this.lifecycles.set(entryId, { kind: "failed", error: getRuntimeManagerErrorMessage(error) });
+      this.lifecycles.set(entryId, { kind: "failed", error: getRuntimeManagerErrorMessage(error), instance });
       throw error;
     }
   }
@@ -1083,6 +1088,7 @@ export class ExtensionRuntimeManager {
     if (state.handle) {
       try {
         await state.handle.deactivate();
+        state.handle = null;
       } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
@@ -1098,11 +1104,11 @@ export class ExtensionRuntimeManager {
     for (const unsubscribe of state.eventUnsubscribers) {
       try {
         unsubscribe();
+        state.eventUnsubscribers.delete(unsubscribe);
       } catch (error) {
         failures.push(getRuntimeManagerErrorMessage(error));
       }
     }
-    state.eventUnsubscribers.clear();
 
     for (const commandName of state.commandNames) {
       const owner = this.commandOwners.get(commandName);
