@@ -46,7 +46,6 @@ function createRuntimeHarness(runtimeId: string): RuntimeHarness {
     getSessionTitle: () => "",
     getSessionCreatedAt: () => "2026-01-01T00:00:00.000Z",
     hasExplicitTitle: () => false,
-    startNewSession: () => {},
     renameSession: () => Promise.resolve(),
     applyLoadedSession: () => Promise.resolve(),
     restoreLatestSession: () => Promise.resolve(false),

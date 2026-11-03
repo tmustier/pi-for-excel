@@ -68,10 +68,6 @@ export type OpenSessionTarget =
 
 export type OpenSessionResult = { outcome: "opened" | "replaced" | "focused"; runtime: SessionRuntime };
 
-export function isRuntimeBusy(runtime: Pick<SessionRuntime, "agent" | "actionQueue">): boolean {
-  return runtime.agent.state.isStreaming || runtime.actionQueue.isBusy();
-}
-
 function isValidTabNumber(value: number | undefined): value is number {
   return value !== undefined && Number.isInteger(value) && value >= 1;
 }
@@ -143,12 +139,10 @@ export class SessionRuntimeManager {
     const unsubscribePersistence = runtime.persistence.subscribe(() => {
       this.emit();
     });
-    const isTabBusy = () => runtime.tab.busy || runtime.tab.activity !== null;
-    let wasBusy = isTabBusy();
+    let wasBusy = runtime.tab.busy;
     const unsubscribeTab = runtime.tab.subscribe(() => {
-      const busy = isTabBusy();
-      if (busy === wasBusy) return;
-      wasBusy = busy;
+      if (runtime.tab.busy === wasBusy) return;
+      wasBusy = runtime.tab.busy;
       this.emit();
     });
     this.runtimeListeners.set(runtime.runtimeId, { unsubscribeAgent, unsubscribePersistence, unsubscribeTab });
@@ -186,7 +180,7 @@ export class SessionRuntimeManager {
 
     if (target.kind === "resume") {
       const runtime = this.getActiveRuntime();
-      if (runtime && !isRuntimeBusy(runtime) && countVisibleSessionMessages(runtime.agent.state.messages) === 0) {
+      if (runtime && !runtime.actionQueue.isBusy() && countVisibleSessionMessages(runtime.agent.state.messages) === 0) {
         await runtime.persistence.applyLoadedSession(sessionData);
         this.switchRuntime(runtime.runtimeId);
         return { outcome: "replaced", runtime };
@@ -290,7 +284,7 @@ export class SessionRuntimeManager {
       return { outcome: "unchanged" };
     }
 
-    const busy = isRuntimeBusy(runtime);
+    const busy = runtime.actionQueue.isBusy();
     const thinkingLevel = clampThinkingLevel(args.nextModel, runtime.agent.state.thinkingLevel);
     runtime.agent.state.model = args.nextModel;
     runtime.agent.state.thinkingLevel = thinkingLevel;
@@ -352,7 +346,7 @@ export class SessionRuntimeManager {
         }),
         isActive: runtime.runtimeId === this.activeRuntimeId,
         isStreaming: runtime.agent.state.isStreaming,
-        isBusy: isRuntimeBusy(runtime),
+        isBusy: runtime.actionQueue.isBusy(),
         lockState: runtime.lockState,
         attention: this.attention.get(runtime.runtimeId) ?? "none",
       };
@@ -370,7 +364,7 @@ export class SessionRuntimeManager {
   private emit(): void {
     const settled = new Map<string, RuntimeRunOutcome>();
     for (const runtime of this.runtimes.values()) {
-      const busy = isRuntimeBusy(runtime);
+      const busy = runtime.actionQueue.isBusy();
       const wasBusy = this.wasBusy.get(runtime.runtimeId) ?? false;
       this.wasBusy.set(runtime.runtimeId, busy);
       if (busy) {

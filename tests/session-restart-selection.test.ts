@@ -216,13 +216,13 @@ void test("a newer saved conversation becomes the workbook's restart target", as
   await first.agent.prompt("first conversation");
   await first.persistence.saveSession({ force: true });
   const firstId = first.persistence.getSessionId();
-  first.persistence.startNewSession();
-  first.agent.state.messages = [];
-  first.faux.setResponses([fauxAssistantMessage("second answer")]);
-  await first.agent.prompt("second conversation");
-  await first.persistence.saveSession({ force: true });
-  const secondId = first.persistence.getSessionId();
   first.persistence.dispose();
+  const second = await createRuntime(backend, workbookA);
+  second.faux.setResponses([fauxAssistantMessage("second answer")]);
+  await second.agent.prompt("second conversation");
+  await second.persistence.saveSession({ force: true });
+  const secondId = second.persistence.getSessionId();
+  second.persistence.dispose();
 
   const restarted = await createRuntime(backend, workbookA);
   assert.equal(await restarted.persistence.restoreLatestSession(), true);

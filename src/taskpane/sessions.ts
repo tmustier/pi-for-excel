@@ -10,13 +10,13 @@ import type { SpreadsheetHost } from "../host/types.js";
 import { getCurrentSpreadsheetHost } from "../host/index.js";
 import { extractTextFromContent } from "../utils/content.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { createConcurrencyLimit } from "../utils/concurrency.js";
 
 export interface SessionPersistenceController {
   getSessionId: () => string;
   getSessionTitle: () => string;
   getSessionCreatedAt: () => string;
   hasExplicitTitle: () => boolean;
-  startNewSession: () => void;
   renameSession: (title: string) => Promise<void>;
   applyLoadedSession: (sessionData: SessionData) => Promise<void>;
   restoreLatestSession: () => Promise<boolean>;
@@ -123,7 +123,7 @@ export async function setupSessionPersistence(opts: {
   let titleRequest: AbortController | null = null;
   let canWriteLatestSessionPointer = !opts.autoRestoreLatest;
   let baseRevision: string | undefined;
-  let saveQueue: Promise<void> = Promise.resolve();
+  const serially = createConcurrencyLimit(1);
 
   agent.sessionId = sessionId;
 
@@ -148,9 +148,7 @@ export async function setupSessionPersistence(opts: {
   }
 
   function saveSession(optsForSave?: { force?: boolean }): Promise<boolean> {
-    const run = saveQueue.then(() => saveSessionNow(optsForSave));
-    saveQueue = run.then(() => undefined);
-    return run;
+    return serially(() => saveSessionNow(optsForSave));
   }
 
   async function saveSessionNow(optsForSave?: { force?: boolean }): Promise<boolean> {
@@ -274,20 +272,6 @@ export async function setupSessionPersistence(opts: {
     }
   }
 
-  function startNewSession(): void {
-    titleRequest?.abort();
-    titleRequest = null;
-    titleGenerationAttempted = false;
-    sessionId = crypto.randomUUID();
-    baseRevision = undefined;
-    sessionTitle = "";
-    sessionCreatedAt = new Date().toISOString();
-    explicitTitle = false;
-    canWriteLatestSessionPointer = true;
-    agent.sessionId = sessionId;
-    emitChange();
-  }
-
   async function renameSession(title: string): Promise<void> {
     sessionTitle = title.trim();
     explicitTitle = sessionTitle.length > 0;
@@ -295,7 +279,11 @@ export async function setupSessionPersistence(opts: {
     await saveSession({ force: true });
   }
 
-  async function applyLoadedSession(sessionData: SessionData): Promise<void> {
+  function applyLoadedSession(sessionData: SessionData): Promise<void> {
+    return serially(() => applyLoadedSessionNow(sessionData));
+  }
+
+  async function applyLoadedSessionNow(sessionData: SessionData): Promise<void> {
     titleRequest?.abort();
     titleRequest = null;
     titleGenerationAttempted = sessionData.titleGenerationAttempted === true;
@@ -408,7 +396,6 @@ export async function setupSessionPersistence(opts: {
     getSessionTitle: () => sessionTitle,
     getSessionCreatedAt: () => sessionCreatedAt,
     hasExplicitTitle: () => explicitTitle,
-    startNewSession,
     renameSession,
     applyLoadedSession,
     restoreLatestSession,

@@ -202,9 +202,9 @@ import {
   readTaskpaneLanguage,
   readTaskpaneProxySettings,
 } from "./settings.js";
+import { trackTurns } from "./turn-tracker.js";
 import {
   SessionRuntimeManager,
-  isRuntimeBusy,
   type CreateRuntimeOptions,
   type OpenSessionTarget,
   type RuntimeRunOutcome,
@@ -557,7 +557,7 @@ export async function initTaskpane(opts: {
   listModelRefreshRuntimes = () => runtimeManager.listRuntimes().map((runtime) => ({
     runtimeId: runtime.runtimeId,
     model: runtime.agent.state.model,
-    isBusy: isRuntimeBusy(runtime),
+    isBusy: runtime.actionQueue.isBusy(),
     applyModel: (model, thinkingLevel) => {
       const previous = runtime.agent.state.model;
       runtime.agent.state.model = model;
@@ -1017,10 +1017,6 @@ export async function initTaskpane(opts: {
     const runtimeAssistantCreatedFiles = new Set<string>();
 
     let runtimeAgent: Agent | null = null;
-    let currentTurnId = crypto.randomUUID();
-    const toolTurns = new Map<string, string>();
-    let currentTurnCalls = new Set<string>();
-    let currentTurnOfficeJsCalls = new Set<string>();
 
     const stopRuntimeTurn = (): void => {
       const runtime = runtimeManager.getRuntime(runtimeId);
@@ -1059,7 +1055,7 @@ export async function initTaskpane(opts: {
         hostKind: spreadsheetHost.kind,
         getExtensionManager: () => extensionManager,
         getSessionId: () => runtimeAgent?.sessionId ?? runtimeSessionId,
-        getTurnId: (toolCallId) => toolTurns.get(toolCallId),
+        getTurnId: (toolCallId) => turns.turnIdOf(toolCallId),
         skillReadCache: runtimeSkillReadCache,
         guidance: {
           getExecutionMode: () => executionModeController.readMode(),
@@ -1107,9 +1103,10 @@ export async function initTaskpane(opts: {
         },
         {
           onWriteStarted: (window) => {
-            if (toolTurns.get(window.toolCallId) === currentTurnId) {
-              currentTurnCalls.add(window.toolCallId);
-              if (window.toolName === "execute_office_js") currentTurnOfficeJsCalls.add(window.toolCallId);
+            const turn = turns.current();
+            if (turns.turnIdOf(window.toolCallId) === turn.id) {
+              turn.toolCallIds.add(window.toolCallId);
+              if (window.toolName === "execute_office_js") turn.officeJsCallIds.add(window.toolCallId);
             }
             changeTracker.notePiWrite(window, { kind: "runtime", runtimeId });
           },
@@ -1301,15 +1298,15 @@ export async function initTaskpane(opts: {
     };
 
     const tab = createTabState();
-    let missingCredentialsFor: string | null = null;
-    let expiredLoginFor: string | null = null;
+    const turns = trackTurns(agent);
 
     agent.getApiKey = async (provider: string) => {
       if (await oauthRefresher.ensureFresh(provider) === "expired") {
         // Sending the stale token would only surface the provider's 401, and
         // returning no key lets pi-ai fall back to that same stored token.
         // Throwing fails the turn; the banner tells the user to sign in again.
-        expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
+        const turn = turns.running();
+        if (turn) turn.expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
         throw new Error(`The ${provider} login has expired and could not be refreshed.`);
       }
       const resolvedAuth = await modelRuntime.models.getAuth(provider);
@@ -1327,7 +1324,8 @@ export async function initTaskpane(opts: {
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      missingCredentialsFor = provider;
+      const turn = turns.running();
+      if (turn) turn.missingCredentialsFor = provider;
       return undefined;
     };
 
@@ -1353,17 +1351,14 @@ export async function initTaskpane(opts: {
         }
       },
       onTurnSettled: ({ overflowAfterRecovery }) => {
-        const credentials = missingCredentialsFor;
-        missingCredentialsFor = null;
-        const expiredLogin = expiredLoginFor;
-        expiredLoginFor = null;
+        const { missingCredentialsFor, expiredLoginFor } = turns.current();
         void getConfiguredProxyUrl().then((proxyUrl) => {
           tab.setError(describeTurnFailure({
             messages: agent.state.messages,
             isContextOverflow: findTrailingContextOverflowError(agent.state) !== null,
             overflowAfterRecovery,
-            missingCredentialsFor: credentials,
-            expiredLoginFor: expiredLogin,
+            missingCredentialsFor,
+            expiredLoginFor,
             online: navigator.onLine,
             proxyUrl: proxyUrl ?? null,
             defaultProxyUrl: DEFAULT_PROXY_URL,
@@ -1411,13 +1406,7 @@ export async function initTaskpane(opts: {
 
     const unsubscribeErrorTracking = agent.subscribe(async (ev, signal) => {
       if (ev.type === "agent_start") {
-        currentTurnId = crypto.randomUUID();
-        currentTurnCalls = new Set();
-        currentTurnOfficeJsCalls = new Set();
         nativeSearchModel = modelRuntime.models.getModel(agent.state.model.provider, agent.state.model.id) ?? initialModel;
-      }
-      if (ev.type === "tool_execution_start") {
-        toolTurns.set(ev.toolCallId, currentTurnId);
       }
       if (ev.type === "message_start" && ev.message.role === "user") {
         tab.setError(null);
@@ -1430,9 +1419,10 @@ export async function initTaskpane(opts: {
       const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
       const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
       runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
-      const endedTurnId = currentTurnId;
-      const endedTurnCalls = currentTurnCalls;
-      const officeJsCalls = currentTurnOfficeJsCalls;
+      const endedTurn = turns.current();
+      const endedTurnId = endedTurn.id;
+      const endedTurnCalls = endedTurn.toolCallIds;
+      const officeJsCalls = endedTurn.officeJsCallIds;
       try {
         const backups = await readTurnBackups(workbookRecoveryLog, endedTurnId);
         const summary = summarizeTurnChanges({
@@ -1469,6 +1459,7 @@ export async function initTaskpane(opts: {
         runtimeSkillReadCache.clearAll();
         unsubscribeSessionCapabilitySync();
         unsubscribeErrorTracking();
+        turns.dispose();
         unbindDraft();
         queueDisplay.detach();
         actionQueue.shutdown();
@@ -1708,7 +1699,7 @@ export async function initTaskpane(opts: {
       return false;
     }
 
-    if (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy()) {
+    if (runtime.actionQueue.isBusy()) {
       const proceed = await requestConfirmationDialog({
         title: t("init.confirm.stopAndCloseTitle"),
         message: t("init.confirm.stopAndCloseMessage"),
@@ -1842,7 +1833,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    if (isRuntimeBusy(sourceRuntime)) {
+    if (sourceRuntime.actionQueue.isBusy()) {
       showToast(t("init.waitBeforeDuplicating"));
       return;
     }
@@ -2079,7 +2070,7 @@ export async function initTaskpane(opts: {
       return;
     }
 
-    const busy = isRuntimeBusy(activeRuntime);
+    const busy = activeRuntime.actionQueue.isBusy();
     const result = executeSlashCommand({
       name,
       args,
@@ -2295,7 +2286,7 @@ export async function initTaskpane(opts: {
     getActiveAgent,
     isActiveTabBusy: () => {
       const runtime = getActiveRuntime();
-      return runtime !== null && (runtime.agent.state.isStreaming || runtime.actionQueue.isBusy());
+      return runtime !== null && runtime.actionQueue.isBusy();
     },
     sidebar,
     stopActiveTab,

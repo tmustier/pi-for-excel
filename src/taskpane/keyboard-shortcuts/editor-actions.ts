@@ -40,7 +40,7 @@ export function submitComposerText(args: {
     const result = executeSlashCommand({
       name,
       args: commandArgs,
-      busy: isStreaming || actionQueue.isBusy(),
+      busy: actionQueue.isBusy(),
       enqueueCommand: actionQueue.enqueueCommand,
       beforeExecute: hideCommandMenu,
       onError: () => {

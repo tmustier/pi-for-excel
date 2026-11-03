@@ -13,7 +13,7 @@ export type ProxyState = "detected" | "not-detected" | "unknown";
 
 let currentState: ProxyState = "unknown";
 let blockedByBrowser = false;
-let intervalId: ReturnType<typeof setInterval> | undefined;
+let latestCheck = 0;
 
 export function getProxyState(): ProxyState {
   return currentState;
@@ -63,6 +63,7 @@ export async function checkProxyOnce(
   settings: SettingsReader,
   opts: { force?: boolean } = {},
 ): Promise<ProxyState> {
+  const check = ++latestCheck;
   let proxyUrl: string = DEFAULT_PROXY_URL;
   try {
     const raw = await settings.get("proxy.url");
@@ -76,6 +77,7 @@ export async function checkProxyOnce(
   const reachable = await probeProxy(proxyUrl);
   const newState: ProxyState = reachable ? "detected" : "not-detected";
   const newBlocked = !reachable && isLoopbackBlockedByFramePolicy(proxyUrl);
+  if (check !== latestCheck) return newState;
 
   if (newState !== currentState || newBlocked !== blockedByBrowser || opts.force === true) {
     blockedByBrowser = newBlocked;
@@ -88,15 +90,8 @@ export async function checkProxyOnce(
 
 export function startProxyPolling(settings: SettingsReader): () => void {
   void checkProxyOnce(settings);
-
-  intervalId = setInterval(() => {
+  const intervalId = setInterval(() => {
     void checkProxyOnce(settings);
   }, CHECK_INTERVAL_MS);
-
-  return () => {
-    if (intervalId !== undefined) {
-      clearInterval(intervalId);
-      intervalId = undefined;
-    }
-  };
+  return () => clearInterval(intervalId);
 }
