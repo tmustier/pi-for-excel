@@ -30,7 +30,6 @@ void test("python_transform_range returns bridge setup guidance when URL is miss
       values: [[1, 2], [3, 4]],
       text: [["1", "2"], ["3", "4"]],
     }),
-    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve(null),
     isPyodideAvailable: () => false,
   });

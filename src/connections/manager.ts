@@ -27,20 +27,6 @@ const CONNECTION_ID_PATTERN = /^[a-z0-9][a-z0-9._-]{1,95}$/;
 const HTTP_HEADER_NAME_PATTERN = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 const HTTP_ALLOWED_HOST_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 
-const ALL_CONNECTION_STATUSES: readonly ConnectionStatus[] = [
-  "connected",
-  "missing",
-  "invalid",
-  "error",
-];
-
-const STATUS_TRANSITIONS: Readonly<Record<ConnectionStatus, readonly ConnectionStatus[]>> = {
-  connected: ALL_CONNECTION_STATUSES,
-  missing: ALL_CONNECTION_STATUSES,
-  invalid: ALL_CONNECTION_STATUSES,
-  error: ALL_CONNECTION_STATUSES,
-};
-
 function normalizeNonEmpty(input: string, field: string): string {
   const trimmed = input.trim();
   if (trimmed.length === 0) {
@@ -173,13 +159,6 @@ function redactSecretsInMessage(message: string, secrets: Record<string, string>
 
 function buildDefaultSetupHint(title: string): string {
   return `Open /tools → Connections → ${title}`;
-}
-
-function assertStatusTransition(from: ConnectionStatus, to: ConnectionStatus): void {
-  const allowed = STATUS_TRANSITIONS[from];
-  if (!allowed.includes(to)) {
-    throw new Error(`Invalid connection status transition: ${from} → ${to}`);
-  }
 }
 
 function hasRequiredSecrets(definition: ConnectionDefinition, secrets: Record<string, string> | undefined): boolean {
@@ -604,16 +583,11 @@ export class ConnectionManager {
     const changed = await mutateConnectionRecord({
       settings: this.settings,
       connectionId: definition.id,
-      mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, nextStatus);
-
-        return buildStoredConnectionRecord({
-          status: nextStatus,
-          secrets: normalizedSecrets,
-          ...(requiredPresent ? { lastValidatedAt: now } : {}),
-        });
-      },
+      mutator: () => buildStoredConnectionRecord({
+        status: nextStatus,
+        secrets: normalizedSecrets,
+        ...(requiredPresent ? { lastValidatedAt: now } : {}),
+      }),
     });
 
     if (changed) {
@@ -628,15 +602,10 @@ export class ConnectionManager {
     const changed = await mutateConnectionRecord({
       settings: this.settings,
       connectionId: definition.id,
-      mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "missing");
-
-        return buildStoredConnectionRecord({
-          status: "missing",
-          secrets: {},
-        });
-      },
+      mutator: () => buildStoredConnectionRecord({
+        status: "missing",
+        secrets: {},
+      }),
     });
 
     if (changed) {
@@ -652,17 +621,13 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-
         if (!hasRequiredSecrets(definition, record?.secrets)) {
-          assertStatusTransition(previousStatus, "missing");
           return buildStoredConnectionRecord({
             status: "missing",
             ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
           });
         }
 
-        assertStatusTransition(previousStatus, "connected");
         return buildStoredConnectionRecord({
           status: "connected",
           ...(record?.secrets !== undefined ? { secrets: record.secrets } : {}),
@@ -685,9 +650,6 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "invalid");
-
         const redactedReason = redactSecretsInMessage(trimmedReason, record?.secrets);
 
         return buildStoredConnectionRecord({
@@ -713,8 +675,6 @@ export class ConnectionManager {
       connectionId: definition.id,
       mutator: (record) => {
         if (credentialRevision !== undefined && credentialRevision !== (record?.credentialRevision ?? "")) return record ?? null;
-        const previousStatus = record?.status ?? "missing";
-        assertStatusTransition(previousStatus, "error");
 
         const redactedMessage = redactSecretsInMessage(message, record?.secrets);
 

@@ -21,7 +21,6 @@ function firstText(result: AgentToolResult<PythonRunToolDetails>): string {
 
 void test("python_run returns guidance when no backend is available", async () => {
   const tool = createPythonRunTool({
-    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve(null),
     isPyodideAvailable: () => false,
   });
@@ -38,7 +37,6 @@ void test("python_run returns guidance when no backend is available", async () =
 
 void test("python_run validates input_json before bridge call", async () => {
   const tool = createPythonRunTool({
-    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: true }),
     callBridge: () => Promise.resolve({ ok: true, action: "run_python" }),
   });
@@ -159,7 +157,7 @@ void test("python_run falls back to Pyodide only when the default bridge is unre
     let pyodideCalls = 0;
     const tool = createPythonRunTool({
       getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
-    getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
+      getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340", configured: false }),
       isPyodideAvailable: () => true,
       callPyodide: () => {
         pyodideCalls += 1;

@@ -51,44 +51,7 @@ declare function _loadPyodide(options?: {
 
 const PYODIDE_CDN_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 
-type PyodideState =
-  | { kind: "unloaded" }
-  | { kind: "loading"; promise: Promise<PyodideInterface> }
-  | { kind: "loaded"; instance: PyodideInterface };
-
-let pyodideState: PyodideState = { kind: "unloaded" };
-
-async function ensurePyodide(): Promise<PyodideInterface> {
-  if (pyodideState.kind === "loaded") return pyodideState.instance;
-  if (pyodideState.kind === "loading") return pyodideState.promise;
-
-  const promise = (async () => {
-    try {
-      const mod = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
-        loadPyodide: typeof _loadPyodide;
-      };
-
-      const instance = await mod.loadPyodide({
-        indexURL: PYODIDE_CDN_URL,
-      });
-
-      pyodideState = { kind: "loaded", instance };
-      self.postMessage({ type: "loaded" });
-      return instance;
-    } catch (error) {
-      pyodideState = { kind: "unloaded" };
-      const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        "Failed to load Pyodide from jsDelivr. " +
-        "Check internet access and Content-Security-Policy allowlists for https://cdn.jsdelivr.net. " +
-        `Original error: ${reason}`,
-      );
-    }
-  })();
-
-  pyodideState = { kind: "loading", promise };
-  return promise;
-}
+let pyodide: PyodideInterface | undefined;
 
 function detectImports(code: string): string[] {
   const imports = new Set<string>();
@@ -155,7 +118,23 @@ function detectImports(code: string): string[] {
 
 async function handleRun(request: PyodideWorkerRequest): Promise<PyodideWorkerResponse> {
   const loadStart = performance.now();
-  const py = await ensurePyodide();
+  if (!pyodide) {
+    try {
+      const { loadPyodide } = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
+        loadPyodide: typeof _loadPyodide;
+      };
+      pyodide = await loadPyodide({ indexURL: PYODIDE_CDN_URL });
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        "Failed to load Pyodide from jsDelivr. " +
+        "Check internet access and Content-Security-Policy allowlists for https://cdn.jsdelivr.net. " +
+        `Original error: ${reason}`,
+      );
+    }
+    self.postMessage({ type: "loaded" });
+  }
+  const py = pyodide;
   const loadTimeMs = Math.round(performance.now() - loadStart);
 
   let stdout = "";

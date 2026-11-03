@@ -21,7 +21,6 @@ function firstText(result: AgentToolResult<LibreOfficeConvertToolDetails>): stri
 
 void test("libreoffice_convert returns guidance when bridge URL is missing", async () => {
   const tool = createLibreOfficeConvertTool({
-    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve(null),
   });
 
@@ -41,7 +40,6 @@ void test("libreoffice_convert returns guidance when bridge URL is missing", asy
 
 void test("libreoffice_convert validates absolute input_path", async () => {
   const tool = createLibreOfficeConvertTool({
-    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
     callBridge: () => Promise.resolve({ ok: true, action: "convert" }),
   });
