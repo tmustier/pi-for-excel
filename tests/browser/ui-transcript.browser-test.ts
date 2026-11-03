@@ -4,7 +4,7 @@ import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
 
-import { openBrowserPage, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { connectFixtureProvider, enterInput, openBrowserPage, openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
 
 let env: TaskpaneServer;
 before(async () => { env = await startTaskpaneServer(); });
@@ -417,3 +417,102 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
     await opened.finish();
   }
 });
+
+for (const [action, verb, range] of [
+  ["create", "Create", "Sheet1!A1:B12"],
+  ["update", "Update", "Sheet1!A1:C12"],
+  ["delete", "Delete", null],
+] as const) {
+  void test(`chart ${action} approval shows its action in the card and button`, async () => {
+    const opened = await openTaskpane(env, { viewport });
+    const { page } = opened;
+    try {
+      await connectFixtureProvider(page);
+      await page.evaluate(async ({ action, range }) => {
+        const storagePath = "/src/storage/local/app-storage.ts";
+        const { getAppStorage } = await import(storagePath);
+        await getAppStorage().settings.set("execution.mode.v1", "safe");
+        const streamPath = "/node_modules/@earendil-works/pi-ai/dist/utils/event-stream.js";
+        const { createAssistantMessageEventStream } = await import(streamPath);
+        const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+        const { fauxAssistantMessage } = await import(fauxPath);
+        const sidebar = document.querySelector("pi-sidebar");
+        let requested = false;
+        sidebar.agent.streamFunction = () => {
+          const stream = createAssistantMessageEventStream();
+          const message = requested ? fauxAssistantMessage("Declined.") : fauxAssistantMessage([
+            { type: "toolCall", id: "chart-action", name: "charts", arguments: {
+              action, sheet: "Sheet1", name: "Sales", ...(range ? { source_range: range } : {}),
+            } },
+          ], { stopReason: "toolUse" });
+          requested = true;
+          stream.push({ type: "done", reason: message.stopReason, message });
+          return stream;
+        };
+      }, { action, range });
+      await enterInput(page, `${verb} the Sales chart`);
+      const card = page.locator(".pi-turn-row--approval");
+      await card.waitFor({ state: "visible" });
+      assert.deepEqual([
+        await card.locator(".pi-turn-row__sentence").innerText(),
+        await card.locator(".pi-btn--primary").innerText(),
+      ], [`${verb} chart 'Sales'${range ? ` — ${range}` : ""}`, verb]);
+      await card.getByRole("button", { name: "Decline", exact: true }).click();
+      await card.waitFor({ state: "detached" });
+      await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
+    } finally {
+      await opened.finish();
+    }
+  });
+}
+
+for (const source of ["audit", "backup"] as const) {
+  void test(`transcript receipts distinguish chart and mixed changes from cells using ${source}`, async () => {
+    const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+    const { page } = opened;
+    try {
+      await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+      await page.evaluate(async (source) => {
+        const modulePath = "/src/messages/turn-changes.ts";
+        const { summarizeTurnChanges } = await import(modulePath);
+        const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+        const { fauxAssistantMessage } = await import(fauxPath);
+        const list = document.querySelector('[data-gallery="turn-changes"] message-list');
+        list.messages = [
+          ["charts"], ["write_cells", "charts"], ["write_cells"],
+        ].flatMap((tools, index) => {
+          const entries = tools.map((toolName) => ({
+            id: `${index}-${toolName}`, at: index, toolCallId: `${index}-${toolName}`, toolName,
+            changedCount: toolName === "charts" ? 1 : 40,
+          }));
+          const summary = summarizeTurnChanges({
+            turnId: `receipt-${index}`, timestamp: index, outcome: "finished",
+            toolCallIds: new Set(entries.map((entry) => entry.toolCallId)),
+            audit: source === "audit" ? entries.map((entry) => ({ ...entry, blocked: false, outputAddress: "Sheet1!A1:B20", changes: [] })) : [],
+            backups: source === "backup" ? entries.map((entry) => ({ ...entry, address: "Sheet1!A1:B20" })) : [],
+          });
+          return [
+            { role: "user", content: `Change ${index}`, timestamp: index },
+            fauxAssistantMessage(entries.map((entry) => ({
+              type: "toolCall", id: entry.toolCallId, name: entry.toolName,
+              arguments: entry.toolName === "charts"
+                ? { action: source === "audit" ? "delete" : "update", sheet: "Sheet1", name: "Sales", title: "Sales" }
+                : { start_cell: "Sheet1!A1", values: Array.from({ length: 20 }, () => [1, 2]) },
+            })), { stopReason: "toolUse" }),
+            ...entries.map((entry) => ({ role: "toolResult", toolCallId: entry.toolCallId, toolName: entry.toolName,
+              content: [{ type: "text", text: "Done" }], isError: false, timestamp: index })),
+            summary,
+          ];
+        });
+        list.messages = [...list.messages, { role: "turnChanges", turnId: "legacy", timestamp: 4, outcome: "finished",
+          changes: [{ address: "Sheet1!C1", changedCount: 1, backupIds: [] }] }];
+      }, source);
+      const summaries = page.locator('[data-gallery="turn-changes"] .pi-turn-changes__summary');
+      await page.waitForFunction(() => document.querySelectorAll('[data-gallery="turn-changes"] .pi-turn-changes__summary').length === 4);
+      assert.deepEqual(await summaries.allTextContents(), ["Made 1 change", "Made 2 changes", "Changed 40 cells", "Changed 1 cell"]);
+      assert.equal(await page.locator('[data-gallery="turn-changes"] turn-group .pi-turn-changes').count(), 3);
+    } finally {
+      await opened.finish();
+    }
+  });
+}

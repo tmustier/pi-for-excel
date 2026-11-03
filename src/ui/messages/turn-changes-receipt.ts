@@ -6,11 +6,11 @@ import { describeOfficeJsChanges, type TurnChangesMessage } from "../../messages
 export function renderTurnChangesReceipt(message: TurnChangesMessage, placement: "footer" | "standalone"): TemplateResult {
   const hasBackups = message.changes.some((change) => change.backupIds.some((id) => !message.undoneBackupIds?.includes(id)));
   const partial = message.changes.some((change) => change.backupIds.length === 0);
-  const count = message.changes.reduce((total, change) => total + change.changedCount, 0);
-  const { length } = message.changes;
-  const summary = message.changes.some((change) => change.unit === "changes")
-    ? length === 1 ? t("turnChanges.changesOne") : t("turnChanges.changes", { count: length })
-    : count === 1 ? t("turnChanges.summaryOne") : t("turnChanges.summary", { count });
+  const cellsOnly = !message.changes.some((change) => change.unit === "changes");
+  const count = cellsOnly ? message.changes.reduce((total, change) => total + change.changedCount, 0) : message.changes.length;
+  const summary = cellsOnly
+    ? t(count === 1 ? "turnChanges.summaryOne" : "turnChanges.summary", { count })
+    : t(count === 1 ? "turnChanges.changesOne" : "turnChanges.changes", { count });
   const action = (name: "review" | "undo"): void => {
     document.dispatchEvent(new CustomEvent("pi:turn-change-action", { detail: { action: name, summary: message } }));
   };
