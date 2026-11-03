@@ -6,7 +6,7 @@ import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai"
 import { Archive, ChevronRight, FileText, Keyboard, Puzzle, RotateCcw, Ruler, Settings, Wrench } from "lucide";
 import "./pi-input.js";
 import "./working-indicator.js";
-import { describePendingToolCall } from "./tool-renderers.js";
+import { describePendingToolCall } from "./tool-rows.js";
 import {
   endOpenThinking,
   forgetOpenThinking,

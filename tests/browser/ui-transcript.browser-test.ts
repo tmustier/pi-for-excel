@@ -418,17 +418,29 @@ void test("Office.js-only and mixed turns explicitly disclose the limit of turn 
   }
 });
 
-for (const [action, verb, range] of [
-  ["create", "Create", "Sheet1!A1:B12"],
-  ["update", "Update", "Sheet1!A1:C12"],
-  ["delete", "Delete", null],
+for (const { name, language, toolName, args, sentence, button } of [
+  { name: "chart create", language: "en", toolName: "charts", args: { action: "create", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:B12" },
+    sentence: "Create chart 'Sales' — Sheet1!A1:B12", button: "Create" },
+  { name: "chart update", language: "en", toolName: "charts", args: { action: "update", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:C12" },
+    sentence: "Update chart 'Sales' — Sheet1!A1:C12", button: "Update" },
+  { name: "chart delete", language: "en", toolName: "charts", args: { action: "delete", sheet: "Sheet1", name: "Sales" },
+    sentence: "Delete chart 'Sales'", button: "Delete" },
+  { name: "conditional format", language: "en", toolName: "conditional_format", args: { action: "add", range: "Sheet1!A1:A5", type: "cell_value", operator: "GreaterThan", value: 10, fill_color: "#FFC7CE" },
+    sentence: "Conditionally format Sheet1!A1:A5", button: "Conditionally format" },
+  { name: "Chinese chart delete", language: "zh-CN", toolName: "charts", args: { action: "delete", sheet: "Sheet1", name: "Sales" },
+    sentence: "删除 图表“Sales”", button: "删除" },
+  { name: "Chinese chart create", language: "zh-CN", toolName: "charts", args: { action: "create", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:B12" },
+    sentence: "创建 图表“Sales” — Sheet1!A1:B12", button: "创建" },
 ] as const) {
-  void test(`chart ${action} approval shows its action in the card and button`, async () => {
+  void test(`${name} approval shows its action in the card and button`, async () => {
     const opened = await openTaskpane(env, { viewport });
     const { page } = opened;
     try {
       await connectFixtureProvider(page);
-      await page.evaluate(async ({ action, range }) => {
+      await page.evaluate(async ({ language, toolName, args }) => {
+        const languagePath = "/src/language/index.ts";
+        const { initLanguage } = await import(languagePath);
+        initLanguage(language);
         const storagePath = "/src/storage/local/app-storage.ts";
         const { getAppStorage } = await import(storagePath);
         await getAppStorage().settings.set("execution.mode.v1", "safe");
@@ -441,23 +453,21 @@ for (const [action, verb, range] of [
         sidebar.agent.streamFunction = () => {
           const stream = createAssistantMessageEventStream();
           const message = requested ? fauxAssistantMessage("Declined.") : fauxAssistantMessage([
-            { type: "toolCall", id: "chart-action", name: "charts", arguments: {
-              action, sheet: "Sheet1", name: "Sales", ...(range ? { source_range: range } : {}),
-            } },
+            { type: "toolCall", id: "approval-action", name: toolName, arguments: args },
           ], { stopReason: "toolUse" });
           requested = true;
           stream.push({ type: "done", reason: message.stopReason, message });
           return stream;
         };
-      }, { action, range });
-      await enterInput(page, `${verb} the Sales chart`);
+      }, { language, toolName, args });
+      await enterInput(page, "Make the change");
       const card = page.locator(".pi-turn-row--approval");
       await card.waitFor({ state: "visible" });
       assert.deepEqual([
         await card.locator(".pi-turn-row__sentence").innerText(),
         await card.locator(".pi-btn--primary").innerText(),
-      ], [`${verb} chart 'Sales'${range ? ` — ${range}` : ""}`, verb]);
-      await card.getByRole("button", { name: "Decline", exact: true }).click();
+      ], [sentence, button]);
+      await card.locator(".pi-turn-row__actions .pi-btn--secondary").click();
       await card.waitFor({ state: "detached" });
       await page.waitForFunction(() => !document.querySelector("pi-sidebar").agent.state.isStreaming);
     } finally {

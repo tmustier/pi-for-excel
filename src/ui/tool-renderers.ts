@@ -844,7 +844,7 @@ function describeCharts(context: ToolDescriptionContext): ToolDesc {
     const count = chartDetails?.count !== undefined ? ` (${chartDetails.count})` : "";
     return { action: "Charts", detail: `${(params.sheet as string | undefined) ?? "workbook"}${count}` };
   }
-  const chart = chartName ? `chart '${chartName}'` : "chart";
+  const chart = chartName ? t("tool-card.chart.named", { name: chartName }) : t("tool-card.chart.unnamed");
   if (operation === "create" || operation === "update") {
     return toolDescWithAddress(
       operation === "create" ? "Create" : "Update",
@@ -1183,10 +1183,4 @@ const SUPPORTED_TOOL_NAMES = new Set<string>(TOOL_NAMES_WITH_RENDERER);
 
 export function isSupportedToolName(name: string): name is SupportedToolName {
   return SUPPORTED_TOOL_NAMES.has(name);
-}
-
-export function describePendingToolCall(toolName: string, params: unknown): string | null {
-  if (!isSupportedToolName(toolName)) return null;
-  const desc = describeToolCall(toolName, params, undefined, undefined);
-  return desc.detail ? `${desc.action} ${desc.detail}` : desc.action;
 }

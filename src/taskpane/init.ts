@@ -155,8 +155,7 @@ import type { RecoveryMetadata } from "../workbook/recovery/log-store.js";
 import { PI_BACKUP_SAVE_FAILED_EVENT } from "../tools/mutation/finalize.js";
 import { requestApproval } from "../ui/approval-dialog.js";
 import { humanizeToolInput } from "../ui/humanize-params.js";
-import { describePendingToolCall } from "../ui/tool-renderers.js";
-import { toolActionVerb } from "../ui/tool-rows.js";
+import { describePendingToolCall, toolActionVerb } from "../ui/tool-rows.js";
 import {
   BackupIdentityMonitor,
   startBackupIdentityPolling,
