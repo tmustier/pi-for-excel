@@ -21,6 +21,7 @@ interface ToastEntry {
   root: HTMLDivElement;
   message: string;
   hasAction: boolean;
+  pauses: Set<"hover" | "focus">;
   remainingMs: number;
   startedAt: number;
   timer: ReturnType<typeof setTimeout> | null;
@@ -60,6 +61,10 @@ function removeEntry(entry: ToastEntry): void {
 
 function startTimer(entry: ToastEntry): void {
   if (entry.timer !== null) clearTimeout(entry.timer);
+  if (entry.pauses.size > 0) {
+    entry.timer = null;
+    return;
+  }
   entry.startedAt = Date.now();
   entry.timer = setTimeout(() => removeEntry(entry), Math.max(0, entry.remainingMs));
 }
@@ -80,14 +85,13 @@ function renderToast(opts: {
 }): ToastEntry | null {
   const host = ensureRegion();
 
-  if (opts.id !== undefined) dismissToast(opts.id);
-
-  const duplicate = entries.find((entry) => entry.message === opts.message && !entry.hasAction);
+  const duplicate = entries.find((entry) => entry.id === opts.id && entry.message === opts.message && !entry.hasAction);
   if (duplicate && !opts.action) {
     duplicate.remainingMs = opts.duration;
     startTimer(duplicate);
     return duplicate;
   }
+  if (opts.id !== undefined) dismissToast(opts.id);
 
   const root = document.createElement("div");
   root.className = `pi-toast visible${opts.variant === "error" ? " pi-toast--error" : ""}${opts.action ? " pi-toast--action" : ""}`;
@@ -103,6 +107,7 @@ function renderToast(opts: {
     root,
     message: opts.message,
     hasAction: Boolean(opts.action),
+    pauses: new Set(),
     remainingMs: opts.duration,
     startedAt: Date.now(),
     timer: null,
@@ -131,10 +136,21 @@ function renderToast(opts: {
     root.appendChild(dismiss);
   }
 
-  root.addEventListener("pointerenter", () => pauseTimer(entry));
-  root.addEventListener("pointerleave", () => startTimer(entry));
-  root.addEventListener("focusin", () => pauseTimer(entry));
-  root.addEventListener("focusout", () => startTimer(entry));
+  const pause = (reason: "hover" | "focus"): void => {
+    entry.pauses.add(reason);
+    pauseTimer(entry);
+  };
+  const resume = (reason: "hover" | "focus"): void => {
+    entry.pauses.delete(reason);
+    if (entry.pauses.size === 0) startTimer(entry);
+  };
+  root.addEventListener("pointerenter", () => pause("hover"));
+  root.addEventListener("pointerleave", () => resume("hover"));
+  root.addEventListener("focusin", () => pause("focus"));
+  root.addEventListener("focusout", (event) => {
+    if (event.relatedTarget instanceof Node && root.contains(event.relatedTarget)) return;
+    resume("focus");
+  });
 
   entries.push(entry);
   host.appendChild(root);

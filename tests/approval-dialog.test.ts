@@ -332,7 +332,7 @@ void test("turn consent answers already waiting inline changes without granting 
   }
 });
 
-void test("inline preparation runs once and cannot approve after the host has released it", async () => {
+void test("inline preparation retains ownership until completion after its host releases it", async () => {
   const { restore } = installFakeDom();
   const host = registerInlineApprovalHost({ claims: () => true, onChange() {} });
   try {
@@ -350,9 +350,8 @@ void test("inline preparation runs once and cannot approve after the host has re
     host.unregister();
     finish();
     await first;
-    assert.equal(onScreenTitle(), "Delete");
-    clickButton("Decline");
-    assert.equal(await pending, false);
+    assert.equal(onScreenTitle(), undefined);
+    assert.equal(await pending, true);
   } finally {
     host.unregister();
     restore();

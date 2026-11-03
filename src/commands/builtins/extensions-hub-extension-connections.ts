@@ -12,6 +12,7 @@ import {
 } from "../../ui/extensions-hub-components.js";
 import { lucide, AlertTriangle, Plug } from "../../ui/lucide-icons.js";
 import { showToast } from "../../ui/toast.js";
+import type { ConnectionsMutation } from "./extensions-hub-connections.js";
 import { formatRelativeDate } from "./overlay-relative-date.js";
 
 interface BadgeSpec {
@@ -33,6 +34,8 @@ function renderConnectionCard(args: {
   snapshot: ConnectionSnapshot;
   presence: Record<string, boolean>;
   connectionManager: ConnectionManager;
+  isBusy: () => boolean;
+  runMutation: ConnectionsMutation;
 }): HTMLElement {
   const { definition, snapshot, presence, connectionManager } = args;
   const badge = connectionBadge(snapshot.status);
@@ -96,6 +99,8 @@ function renderConnectionCard(args: {
     primary: true,
     compact: true,
     onClick: () => {
+      if (args.isBusy()) return;
+      const submitted = new Map([...inputs].map(([id, input]) => [id, input.value]));
       const patch: Record<string, string> = {};
       for (const [fieldId, input] of inputs) {
         const value = input.value.trim();
@@ -109,31 +114,29 @@ function renderConnectionCard(args: {
         return;
       }
 
-      void (async () => {
-        try {
-          await connectionManager.updateSecretsFromHost(definition.id, patch);
-          for (const input of inputs.values()) {
-            input.value = "";
-          }
-          showToast(t("ext-hub-extension-connections.toast.saved", { title: definition.title }));
-        } catch (err) {
-          showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: err instanceof Error ? err.message : String(err) }));
+      void args.runMutation(async () => {
+        await connectionManager.updateSecretsFromHost(definition.id, patch);
+        for (const [fieldId, input] of inputs) {
+          if (input.value === submitted.get(fieldId)) input.value = "";
         }
-      })();
+      }, "config", t("ext-hub-extension-connections.toast.saved", { title: definition.title }));
     },
   });
 
   const clearBtn = createButton(t("ext-hub-extension-connections.clear"), {
     compact: true,
     onClick: () => {
-      void (async () => {
-        try {
-          await connectionManager.clearSecretsFromHost(definition.id);
-          showToast(t("ext-hub-extension-connections.toast.cleared", { title: definition.title }));
-        } catch (err) {
-          showToast(t("ext-hub-extension-connections.toast.clearFailed", { error: err instanceof Error ? err.message : String(err) }));
-        }
-      })();
+      void args.runMutation(
+        async () => {
+          try {
+            await connectionManager.clearSecretsFromHost(definition.id);
+          } catch (err) {
+            throw new Error(t("ext-hub-extension-connections.toast.clearFailed", { error: err instanceof Error ? err.message : String(err) }));
+          }
+        },
+        "config",
+        t("ext-hub-extension-connections.toast.cleared", { title: definition.title }),
+      );
     },
   });
 
@@ -154,6 +157,8 @@ export async function renderExtensionConnectionsSection(args: {
   container: HTMLElement;
   connectionManager: ConnectionManager;
   extensionManager: ExtensionListSource;
+  isBusy: () => boolean;
+  runMutation: ConnectionsMutation;
 }): Promise<void> {
   const { container, connectionManager, extensionManager } = args;
 
@@ -187,6 +192,8 @@ export async function renderExtensionConnectionsSection(args: {
       snapshot,
       presence,
       connectionManager,
+      isBusy: args.isBusy,
+      runMutation: args.runMutation,
     });
     list.appendChild(cardEl);
   }

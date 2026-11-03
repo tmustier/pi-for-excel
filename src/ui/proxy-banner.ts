@@ -16,9 +16,11 @@ export function createProxyBannerController(opts: {
   isProxyEnabled: () => Promise<boolean>;
 }): ProxyBannerController {
   let dismissed = false;
+  let generation = 0;
 
   return {
     update: async (state, blockedByBrowser = false) => {
+      const currentGeneration = ++generation;
       if (state === "detected") dismissed = false;
       if (state !== "not-detected" || dismissed) {
         hideBanner(BANNER_ID);
@@ -26,6 +28,7 @@ export function createProxyBannerController(opts: {
       }
 
       const enabled = await opts.isProxyEnabled().catch(() => false);
+      if (currentGeneration !== generation) return;
       if (!enabled) {
         hideBanner(BANNER_ID);
         return;

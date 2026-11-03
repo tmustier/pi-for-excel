@@ -1,3 +1,4 @@
+import { createAsyncCoalescer } from "../../../utils/concurrency.js";
 import { getAppStorage } from "../../../storage/local/app-storage.js";
 
 import {
@@ -867,21 +868,24 @@ export function createRulesPage(): SettingsShellPage {
     title: () => t("rules.title"),
     subtitle: () => t("rules.subtitle"),
     render: async (ctx) => {
+      let disposed = false;
+      ctx.addCleanup(() => { disposed = true; });
       const storage = getAppStorage();
       const workbookContext = await getWorkbookContext();
       let workbookId = workbookContext.workbookId;
       const workbookLabel = formatWorkbookLabel(workbookContext);
 
-      const initialUserDraft = (await getUserRules(storage.settings)) ?? "";
+      let initialUserDraft = (await getUserRules(storage.settings)) ?? "";
       let initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
       const storedConventions = await getStoredConventions(storage.settings);
-      const initialConventionsJson = serializeConventionsForDirtyCheck(storedConventions);
+      let initialConventionsJson = serializeConventionsForDirtyCheck(storedConventions);
 
+      if (disposed) return;
       let userDraft = initialUserDraft;
       let workbookDraft = initialWorkbookDraft;
       const conventionsDraft = cloneStoredConventions(storedConventions);
       let activeTab: RulesTab = "user";
-      let saved = false;
+      let saveState: "idle" | "saving" = "idle";
 
       const segmented = createSegmentedControl({
         segments: [
@@ -916,17 +920,23 @@ export function createRulesPage(): SettingsShellPage {
 
       ctx.body.append(segmented.root, workbookTag, hint, textarea, conventionsContainer);
 
-      const refreshWorkbookIdentity = async (): Promise<void> => {
-        if (workbookId) return;
-        const nextContext = await getWorkbookContext().catch(() => null);
-        if (!nextContext?.workbookId || workbookId) return;
+      const refreshWorkbookIdentity = createAsyncCoalescer(async (): Promise<void> => {
+        try {
+          if (workbookId) return;
+          const nextContext = await getWorkbookContext().catch(() => null);
+          if (!nextContext?.workbookId || workbookId) return;
 
-        workbookId = nextContext.workbookId;
-        initialWorkbookDraft = (await getWorkbookRules(storage.settings, workbookId)) ?? "";
-        workbookDraft = initialWorkbookDraft;
-        workbookTag.textContent = t("rules.workbook_tag", { label: formatWorkbookLabel(nextContext) });
-        refreshTabUi();
-      };
+          const nextDraft = (await getWorkbookRules(storage.settings, nextContext.workbookId)) ?? "";
+          if (disposed) return;
+          workbookId = nextContext.workbookId;
+          initialWorkbookDraft = nextDraft;
+          workbookDraft = nextDraft;
+          workbookTag.textContent = t("rules.workbook_tag", { label: formatWorkbookLabel(nextContext) });
+          refreshTabUi();
+        } catch (error) {
+          if (!disposed) showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: error instanceof Error ? error.message : String(error) }));
+        }
+      });
       const onFocus = (): void => {
         void refreshWorkbookIdentity();
       };
@@ -1032,7 +1042,8 @@ export function createRulesPage(): SettingsShellPage {
       };
 
       ctx.setBeforeLeave(async () => {
-        if (saved || !isDirty()) return true;
+        if (saveState === "saving") return false;
+        if (!isDirty()) return true;
         return requestConfirmationDialog({
           title: t("rules.discard.title"),
           message: t("rules.discard.message"),
@@ -1053,13 +1064,22 @@ export function createRulesPage(): SettingsShellPage {
       });
 
       saveBtn.addEventListener("click", () => {
+        if (saveState === "saving" || disposed) return;
+        saveState = "saving";
+        saveBtn.disabled = true;
+        cancelBtn.disabled = true;
+        saveActiveDraft();
+        const savingUserDraft = userDraft;
+        const savingConventions = cloneStoredConventions(conventionsDraft);
+        const savingConventionsJson = serializeConventionsForDirtyCheck(savingConventions);
         void (async () => {
-          saveActiveDraft();
           await refreshWorkbookIdentity();
-
-          const userChanged = userDraft !== initialUserDraft;
+          if (disposed) return;
+          const savingWorkbookId = workbookId;
+          const savingWorkbookDraft = workbookDraft;
+          const userChanged = savingUserDraft !== initialUserDraft;
           const workbookChanged = workbookId !== null && workbookDraft !== initialWorkbookDraft;
-          const conventionsChanged = serializeConventionsForDirtyCheck(conventionsDraft) !== initialConventionsJson;
+          const conventionsChanged = savingConventionsJson !== initialConventionsJson;
 
           const changedUnderneath = (userChanged
             && ((await getUserRules(storage.settings)) ?? "") !== initialUserDraft)
@@ -1068,6 +1088,7 @@ export function createRulesPage(): SettingsShellPage {
             || (conventionsChanged
               && serializeConventionsForDirtyCheck(await getStoredConventions(storage.settings)) !== initialConventionsJson);
 
+          if (disposed) return;
           if (changedUnderneath) {
             const replace = await requestConfirmationDialog({
               title: t("rules.conflict.title"),
@@ -1077,17 +1098,20 @@ export function createRulesPage(): SettingsShellPage {
               confirmButtonTone: "danger",
               restoreFocusOnClose: false,
             });
-            if (!replace) return;
+            if (!replace || disposed) return;
           }
 
           if (userChanged) {
-            await setUserRules(storage.settings, userDraft);
+            await setUserRules(storage.settings, savingUserDraft);
+            initialUserDraft = savingUserDraft;
           }
-          if (workbookId && workbookChanged) {
-            await setWorkbookRules(storage.settings, workbookId, workbookDraft);
+          if (savingWorkbookId && workbookChanged) {
+            await setWorkbookRules(storage.settings, savingWorkbookId, savingWorkbookDraft);
+            initialWorkbookDraft = savingWorkbookDraft;
           }
           if (conventionsChanged) {
-            await setStoredConventions(storage.settings, conventionsDraft);
+            await setStoredConventions(storage.settings, savingConventions);
+            initialConventionsJson = savingConventionsJson;
           }
 
           if (userChanged || workbookChanged) {
@@ -1103,10 +1127,17 @@ export function createRulesPage(): SettingsShellPage {
             await onRulesSaved();
           }
 
-          saved = true;
+          if (disposed) return;
           showToast(t(userChanged || workbookChanged || conventionsChanged ? "rules.toast.saved" : "rules.toast.noChanges"));
-          ctx.close();
-        })();
+          saveState = "idle";
+          if (!isDirty()) ctx.close();
+        })().catch((error: unknown) => {
+          if (!disposed) showToast(t("ext-hub-extension-connections.toast.saveFailed", { error: error instanceof Error ? error.message : String(error) }));
+        }).finally(() => {
+          saveState = "idle";
+          saveBtn.disabled = false;
+          cancelBtn.disabled = false;
+        });
       });
 
       refreshTabUi();

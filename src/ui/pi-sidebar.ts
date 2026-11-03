@@ -179,7 +179,7 @@ export class PiSidebar extends LitElement {
   private _liveToolResults = new Map<string, ToolResultMessage>();
   @state() private _streamingMessage: AssistantMessage | null = null;
   private _pendingStreamingMessage: AssistantMessage | null = null;
-  private _streamingUpdateScheduled = false;
+  private _streamingUpdateFrame: number | undefined;
   private _autoScroll = true;
   private _lastScrollTop = 0;
   private _resizeObserver: ResizeObserver | undefined;
@@ -292,12 +292,14 @@ export class PiSidebar extends LitElement {
     document.addEventListener("keydown", this._onEscapeKey);
     window.addEventListener("resize", this._onWindowResize);
     this._onPayloadUpdate();
+    this._setupSubscription();
   }
 
   override disconnectedCallback() {
     super.disconnectedCallback();
     this._unsubscribe?.();
     this._unsubscribe = undefined;
+    this._setStreamingMessage(null);
     this._resizeObserver?.disconnect();
     this._resizeObserver = undefined;
     this._dockObserver?.disconnect();
@@ -375,24 +377,28 @@ export class PiSidebar extends LitElement {
   private _setStreamingMessage(message: AssistantMessage | null): void {
     this._pendingStreamingMessage = message;
     if (message === null) {
+      if (this._streamingUpdateFrame !== undefined) cancelAnimationFrame(this._streamingUpdateFrame);
+      this._streamingUpdateFrame = undefined;
       this._streamingMessage = null;
       return;
     }
-    if (this._streamingUpdateScheduled) return;
-    this._streamingUpdateScheduled = true;
-    requestAnimationFrame(() => {
-      this._streamingUpdateScheduled = false;
+    if (this._streamingUpdateFrame !== undefined) return;
+    this._streamingUpdateFrame = requestAnimationFrame(() => {
+      this._streamingUpdateFrame = undefined;
       if (this._pendingStreamingMessage !== null) this._streamingMessage = structuredClone(this._pendingStreamingMessage);
     });
   }
 
   private _setupSubscription() {
     this._unsubscribe?.();
+    this._unsubscribe = undefined;
+    this._thinking = false;
+    this._toolLabel = null;
     this._liveToolResults = new Map();
     this._setStreamingMessage(null);
     forgetOpenThinking();
     const agent = this.agent;
-    if (!agent) return;
+    if (!agent || !this.isConnected) return;
 
     this._hasMessages = hasRenderableMessages(agent.state.messages);
     this._isStreaming = agent.state.isStreaming;
@@ -445,6 +451,8 @@ export class PiSidebar extends LitElement {
           break;
         }
         case "agent_end":
+          this._thinking = false;
+          this._toolLabel = null;
           this._isStreaming = false;
           this._setStreamingMessage(null);
           this.requestUpdate();

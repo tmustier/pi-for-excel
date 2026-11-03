@@ -1,3 +1,4 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
 import { createOverlayDialog, registerOverlayCloser } from "./overlay-dialog.js";
 
 export interface SettingsPageContext {
@@ -48,7 +49,7 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
   let stack: string[] = [];
   let pageCleanups: Array<() => void> = [];
   let beforeLeave: (() => Promise<boolean>) | null = null;
-  let transitionInFlight = false;
+  const serializeTransition = createConcurrencyLimit(1);
   let renderToken = 0;
 
   const runPageCleanups = (): void => {
@@ -74,23 +75,18 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     shell.destroy();
   };
 
-  const confirmLeave = async (): Promise<boolean> => {
-    if (!beforeLeave) return true;
-    if (transitionInFlight) return false;
-    transitionInFlight = true;
-    try {
-      return await beforeLeave();
-    } finally {
-      transitionInFlight = false;
-    }
+  const transition = (action: () => void): Promise<void> => {
+    const shell = mounted;
+    const token = renderToken;
+    return serializeTransition(async () => {
+      if (!shell || mounted !== shell || token !== renderToken) return;
+      if (beforeLeave && !await beforeLeave()) return;
+      if (mounted !== shell || token !== renderToken) return;
+      action();
+    });
   };
 
-  const requestClose = async (): Promise<void> => {
-    if (!mounted) return;
-    const canLeave = await confirmLeave();
-    if (!canLeave) return;
-    destroyShell();
-  };
+  const requestClose = (): Promise<void> => transition(destroyShell);
 
   const renderCurrentPage = (direction: "forward" | "back" | "none"): void => {
     if (!mounted) return;
@@ -189,39 +185,30 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
     shell.bodyEl.focus({ preventScroll: true });
   };
 
-  const navigateTo = async (pageId: string): Promise<void> => {
-    if (!mounted) return;
+  const navigateTo = (pageId: string): Promise<void> => transition(() => {
     if (stack[stack.length - 1] === pageId) return;
-    const canLeave = await confirmLeave();
-    if (!canLeave) return;
     stack.push(pageId);
     renderCurrentPage("forward");
-  };
+  });
 
-  const goBack = async (): Promise<void> => {
-    if (!mounted) return;
-    if (stack.length <= 1) {
-      await requestClose();
-      return;
+  const back = (): void => {
+    if (stack.length <= 1) destroyShell();
+    else {
+      stack.pop();
+      renderCurrentPage("back");
     }
-    const canLeave = await confirmLeave();
-    if (!canLeave) return;
-    stack.pop();
-    renderCurrentPage("back");
   };
 
-  const goUp = async (): Promise<void> => {
-    if (!mounted) return;
+  const goBack = (): Promise<void> => transition(back);
+
+  const goUp = (): Promise<void> => transition(() => {
     const parentId = stack.length <= 1 ? options.getPage(stack[0] ?? options.rootId)?.parentId : undefined;
-    if (parentId === undefined) {
-      await goBack();
-      return;
+    if (parentId === undefined) back();
+    else {
+      stack = [parentId];
+      renderCurrentPage("back");
     }
-    const canLeave = await confirmLeave();
-    if (!canLeave) return;
-    stack = [parentId];
-    renderCurrentPage("back");
-  };
+  });
 
   const mountShell = (): MountedShell => {
     const dialog = createOverlayDialog({
@@ -325,10 +312,10 @@ export function createSettingsShell(options: SettingsShellOptions): SettingsShel
 
       if (mounted) {
         if (stack[stack.length - 1] === targetId) return;
-        const canLeave = await confirmLeave();
-        if (!canLeave) return;
-        stack = [targetId];
-        renderCurrentPage("forward");
+        await transition(() => {
+          stack = [targetId];
+          renderCurrentPage("forward");
+        });
         return;
       }
 

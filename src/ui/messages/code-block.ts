@@ -48,6 +48,7 @@ export class CodeBlock extends LitElement {
 
   override disconnectedCallback(): void {
     super.disconnectedCallback();
+    this._copied = false;
     if (this._copyResetTimer !== undefined) {
       window.clearTimeout(this._copyResetTimer);
       this._copyResetTimer = undefined;
@@ -67,7 +68,7 @@ export class CodeBlock extends LitElement {
     const code = this._decodedCode();
     void copyText(code)
       .then((outcome) => {
-        if (outcome !== "copied") return;
+        if (outcome !== "copied" || !this.isConnected) return;
         this._copied = true;
         if (this._copyResetTimer !== undefined) {
           window.clearTimeout(this._copyResetTimer);

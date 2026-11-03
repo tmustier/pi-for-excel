@@ -85,7 +85,7 @@ function getStatusBadge(ok: boolean, label: string): { text: string; tone: "ok" 
   return ok ? { text: label, tone: "ok" } : { text: label, tone: "muted" };
 }
 
-type ConnectionsMutation = (
+export type ConnectionsMutation = (
   action: () => Promise<void>,
   reason: "toggle" | "scope" | "external-toggle" | "config",
   msg?: string,
@@ -161,7 +161,7 @@ function appendIntegrationScopeControls(args: {
       setScope("session", sessionId, checked);
     },
   });
-  sessionToggleRow.input.disabled = args.isBusy() || !sessionId;
+  sessionToggleRow.input.disabled = !sessionId;
   scopeBody.appendChild(sessionToggleRow.root);
 
   const workbookToggleRow = createToggleRow({
@@ -177,7 +177,7 @@ function appendIntegrationScopeControls(args: {
       setScope("workbook", workbookId, checked);
     },
   });
-  workbookToggleRow.input.disabled = args.isBusy() || !workbookId;
+  workbookToggleRow.input.disabled = !workbookId;
   scopeBody.appendChild(workbookToggleRow.root);
 
   scopeDetails.append(scopeSummary, scopeBody);
@@ -243,14 +243,20 @@ function createBridgeSetupCommand(command: string): HTMLDivElement {
   return setup;
 }
 
+const connectionsRenderGenerations = new WeakMap<HTMLElement, number>();
+
 export async function renderConnectionsTab(args: {
   container: HTMLElement;
   settings: SettingsAccess & SettingsUpdater;
   deps: ExtensionsHubDependencies;
   isBusy: () => boolean;
   runMutation: ConnectionsMutation;
+  canCommit?: () => boolean;
 }): Promise<void> {
-  const { container, settings, deps, isBusy, runMutation } = args;
+  const { container: target, settings, deps, isBusy, runMutation } = args;
+  const generation = (connectionsRenderGenerations.get(target) ?? 0) + 1;
+  connectionsRenderGenerations.set(target, generation);
+  const container = document.createElement("div");
 
   const sessionId = deps.getActiveSessionId();
   const workbookContext = await deps.resolveWorkbookContext();
@@ -445,6 +451,8 @@ export async function renderConnectionsTab(args: {
     container,
     connectionManager: deps.connectionManager,
     extensionManager: deps.extensionManager,
+    isBusy,
+    runMutation,
   });
 
   const mcpAddForm = createAddForm();
@@ -574,6 +582,8 @@ export async function renderConnectionsTab(args: {
 
     container.appendChild(bridgeList);
   }
+  if (connectionsRenderGenerations.get(target) !== generation || args.canCommit?.() === false) return;
+  target.replaceChildren(...container.childNodes);
 }
 
 async function renderMcpServerCard(
