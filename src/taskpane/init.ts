@@ -117,6 +117,7 @@ import {
 import { requestConfirmationDialog } from "../ui/confirm-dialog.js";
 import { requestTextInputDialog } from "../ui/text-input-dialog.js";
 import { dismissToast, showActionToast, showToast, type ActionToastHandle } from "../ui/toast.js";
+import { formatBytes } from "../files/mime.js";
 import { PiSidebar } from "../ui/pi-sidebar.js";
 import { createProxyBannerController } from "../ui/proxy-banner.js";
 import { announce } from "../ui/announcer.js";
@@ -1147,9 +1148,9 @@ export async function initTaskpane(opts: {
               note: deletesBackups ? t("approval.note.deleteBackups")
                 : irreversible ? t("approval.note.irreversible") : t("approval.note.confirmMode"),
               allowForTurn: request.reason === "confirm_mode",
-              ...(irreversible && workbookId ? { secondaryApproval: {
+              ...(irreversible ? { secondaryApproval: {
                 label: t("approval.fullBackupFirst"),
-                onApprove: async () => { await createManualFullBackup(); },
+                onApprove: backUpBeforeChange,
               } } : {}),
               confirmLabel: deletesBackups ? t("approval.allowDelete") : toolActionVerb(request.toolName, request.params) ?? t("init.confirm.allowOnce"),
               confirmTone: deletesBackups || irreversible ? "danger" : "primary",
@@ -1176,9 +1177,9 @@ export async function initTaskpane(opts: {
             confirmLabel: t("init.confirm.allowOnce"),
             allowForTurn: !request.destructive && !request.riskIdentifiers?.length,
             ...(request.destructive ? { note: t("approval.note.irreversible") } : {}),
-            ...(request.destructive && workbookId ? { secondaryApproval: {
+            ...(request.destructive ? { secondaryApproval: {
               label: t("approval.fullBackupFirst"),
-              onApprove: async () => { await createManualFullBackup(); },
+              onApprove: backUpBeforeChange,
             } } : {}),
             ...(request.signal ? { signal: request.signal } : {}),
             onStop: stopRuntimeTurn,
@@ -1647,6 +1648,11 @@ export async function initTaskpane(opts: {
   const createManualFullBackup = (): Promise<DownloadedFullWorkbookBackup> => manualFullBackupStore.createAndDownload({
     runCapture: (capture) => runUserWorkbookOperation("manual_backup", capture),
   });
+
+  const backUpBeforeChange = async (): Promise<void> => {
+    const backup = await createManualFullBackup();
+    if (!backup.kept) showToast(t("recovery.toast.backupDownloadedNotKept", { id: backup.id, size: formatBytes(backup.sizeBytes) }));
+  };
 
   const listManualFullBackups = async (limit = 5): Promise<Array<{
     id: string;

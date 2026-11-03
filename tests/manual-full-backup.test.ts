@@ -255,3 +255,43 @@ void test("a backup of a workbook Pi cannot identify is downloaded but not kept"
   assert.deepEqual(downloads, []);
   assert.deepEqual(await store.listForCurrentWorkbook(), []);
 });
+
+void test("a backup reads the workbook identity once it holds the workbook lock", async () => {
+  let context: WorkbookContext = { workbookId: "wb-old", workbookName: "Old.xlsx", source: "document.url" };
+  const writes: string[] = [];
+  const downloads: string[] = [];
+  const store = new ManualFullWorkbookBackupStore({
+    getWorkbookContext: () => Promise.resolve(context),
+    getWorkspace: () => ({
+      listFiles: () => Promise.resolve([]),
+      writeBase64File: (path: string) => {
+        writes.push(path);
+        return Promise.resolve();
+      },
+      beginDownload: () => ({
+        download: (path: string) => {
+          downloads.push(path);
+          return Promise.resolve();
+        },
+        cancel: () => {},
+      }),
+      deleteFile: () => Promise.resolve(),
+    }),
+    captureWorkbookBytes: () => Promise.resolve(new Uint8Array([1])),
+    saveFile: () => assert.fail("an identified workbook is kept, not saved directly"),
+    now: () => 0,
+    createSuffix: () => "suffix",
+  });
+
+  const created = await store.createAndDownload({
+    runCapture: (capture) => {
+      context = { workbookId: "wb-new", workbookName: "New.xlsx", source: "document.url" };
+      return capture();
+    },
+  });
+
+  const path = "manual-backups/full-workbook/v1/wb-new/1970-01-01T00-00-00-000Z_new.xlsx_suffix.xlsx";
+  assert.deepEqual(created, { id: "1970-01-01T00-00-00-000Z_new.xlsx_suffix", createdAt: 0, sizeBytes: 1, kept: true });
+  assert.deepEqual(writes, [path]);
+  assert.deepEqual(downloads, [path]);
+});

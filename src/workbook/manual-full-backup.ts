@@ -351,21 +351,22 @@ export class ManualFullWorkbookBackupStore {
     runCapture?: <T>(capture: () => Promise<T>) => Promise<T>;
   } = {}): Promise<DownloadedFullWorkbookBackup> {
     const runCapture = options.runCapture ?? (<T>(capture: () => Promise<T>) => capture());
-    const { workbookId, workbookName } = await this.dependencies.getWorkbookContext();
-
-    if (!workbookId) {
-      const { id, createdAt, bytes } = await runCapture(() => this.capture(workbookName));
-      this.dependencies.saveFile(new Blob([bytes.slice()], { type: XLSX_MIME_TYPE }), `${id}.xlsx`);
-      return { id, createdAt, sizeBytes: bytes.byteLength, kept: false };
-    }
-
-    const { id, createdAt, sizeBytes } = await this.withDownload(() => runCapture(async () => {
+    const { captured, path } = await runCapture(async () => {
+      const { workbookId, workbookName } = await this.dependencies.getWorkbookContext();
       const captured = await this.capture(workbookName);
+      if (!workbookId) return { captured, path: null };
       const path = toBackupPath(workbookId, captured.id);
       await this.dependencies.getWorkspace().writeBase64File(path, bytesToBase64(captured.bytes), XLSX_MIME_TYPE);
-      return { id: captured.id, path, createdAt: captured.createdAt, sizeBytes: captured.bytes.byteLength };
-    }));
-    return { id, createdAt, sizeBytes, kept: true };
+      return { captured, path };
+    });
+
+    const { id, createdAt, bytes } = captured;
+    if (path === null) {
+      this.dependencies.saveFile(new Blob([bytes.slice()], { type: XLSX_MIME_TYPE }), `${id}.xlsx`);
+    } else {
+      await this.dependencies.getWorkspace().beginDownload().download(path);
+    }
+    return { id, createdAt, sizeBytes: bytes.byteLength, kept: path !== null };
   }
 
   private async capture(workbookName: string | null): Promise<CapturedWorkbook> {

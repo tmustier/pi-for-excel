@@ -835,7 +835,7 @@
   "recovery.subtitle": "Pi 修改数据前保存的快照",
   "recovery.title": "备份",
   "recovery.toast.backupDownloaded": "备份已下载：#{id}（{size}）",
-  "recovery.toast.backupDownloadedNotKept": "备份已下载：#{id}（{size}）。Pi 无法识别当前工作簿，因此没有保留可再次下载的副本。",
+  "recovery.toast.backupDownloadedNotKept": "备份已开始下载：#{id}（{size}）。Pi 无法识别当前工作簿，因此没有保留可再次下载的副本。",
   "recovery.toast.backupFailed": "备份失败：{message}",
   "recovery.toast.clearFailed": "清除失败：{message}",
   "recovery.toast.cleared": "已清除 {count} 个备份",
