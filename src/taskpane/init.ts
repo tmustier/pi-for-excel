@@ -776,7 +776,10 @@ export async function initTaskpane(opts: {
   };
 
   const focusChatInputSoon = (): void => {
+    const focusedAtRequest = document.activeElement;
     requestAnimationFrame(() => {
+      const focused = document.activeElement;
+      if (focused !== focusedAtRequest && focused !== null && focused !== document.body) return;
       focusChatInput();
     });
   };
