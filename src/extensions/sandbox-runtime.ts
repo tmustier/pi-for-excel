@@ -366,7 +366,7 @@ class SandboxRuntimeHost {
   private rejectReady: ((reason: unknown) => void) | null = null;
 
   private nextRequestId = 1;
-  private disposed = false;
+  private disposal: Promise<void> | null = null;
   private readonly widgetOwnerId: string;
   private readonly widgetApiV2Enabled: boolean;
   private port: MessagePort | null = null;
@@ -415,12 +415,12 @@ class SandboxRuntimeHost {
     }
   }
 
-  async dispose(gracefulDeactivate: boolean): Promise<void> {
-    if (this.disposed) {
-      return;
-    }
-    this.disposed = true;
+  dispose(gracefulDeactivate: boolean): Promise<void> {
+    this.disposal ??= Promise.resolve().then(() => this.teardown(gracefulDeactivate));
+    return this.disposal;
+  }
 
+  private async teardown(gracefulDeactivate: boolean): Promise<void> {
     if (gracefulDeactivate) {
       try {
         await this.callSandbox("deactivate", {}, { allowWhenDisposed: true });
@@ -461,7 +461,7 @@ class SandboxRuntimeHost {
   }
 
   private bootstrapSandboxPort(): void {
-    if (this.disposed || this.port) {
+    if (this.disposal || this.port) {
       return;
     }
 
@@ -513,7 +513,7 @@ class SandboxRuntimeHost {
       allowWhenDisposed?: boolean;
     },
   ): Promise<unknown> {
-    if (this.disposed && !options?.allowWhenDisposed) {
+    if (this.disposal && !options?.allowWhenDisposed) {
       throw new Error("Sandbox runtime is already disposed.");
     }
 
@@ -542,7 +542,13 @@ class SandboxRuntimeHost {
         params,
       };
 
-      this.getSandboxPort().postMessage(envelope);
+      try {
+        this.getSandboxPort().postMessage(envelope);
+      } catch (error) {
+        this.pendingRequests.delete(requestId);
+        clearTimeout(timeoutId);
+        reject(new Error(getErrorMessage(error)));
+      }
     });
   }
 
@@ -574,7 +580,7 @@ class SandboxRuntimeHost {
   }
 
   private sendEvent(eventName: string, data: unknown): void {
-    if (!this.port) {
+    if (this.disposal || !this.port) {
       return;
     }
 
@@ -645,6 +651,11 @@ class SandboxRuntimeHost {
         pending.reject(new Error(typeof envelope.error === "string" ? envelope.error : "Sandbox request failed."));
       }
 
+      return;
+    }
+
+    if (this.disposal) {
+      if (envelope.kind === "request") this.sendResponse(envelope.requestId, false, "Sandbox runtime is already disposed.");
       return;
     }
 
@@ -1292,16 +1303,5 @@ export async function activateExtensionInSandbox(
     throw error;
   }
 
-  let deactivated = false;
-
-  return {
-    deactivate: async () => {
-      if (deactivated) {
-        return;
-      }
-
-      deactivated = true;
-      await host.dispose(true);
-    },
-  };
+  return { deactivate: () => host.dispose(true) };
 }

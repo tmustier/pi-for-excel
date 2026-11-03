@@ -240,6 +240,7 @@ export interface RuntimeManagerActivationBridge {
 
 export interface BuildRuntimeManagerActivationBridgeOptions {
   entry: StoredExtensionEntry;
+  assertRegistrationAllowed: () => void;
   settings: SettingsWriter;
   connectionManager: ConnectionManager;
   getRequiredActiveAgent: () => Agent;
@@ -262,6 +263,7 @@ export function buildRuntimeManagerActivationBridge(
 ): RuntimeManagerActivationBridge {
   const {
     entry,
+    assertRegistrationAllowed,
     settings,
     connectionManager,
     getRequiredActiveAgent,
@@ -316,6 +318,7 @@ export function buildRuntimeManagerActivationBridge(
   };
 
   const registerConnection = (definition: Parameters<ConnectionManager["registerDefinition"]>[1]) => {
+    assertRegistrationAllowed();
     const normalizedDefinition = {
       ...definition,
       id: qualifyExtensionConnectionId(entry.id, definition.id),
@@ -325,6 +328,7 @@ export function buildRuntimeManagerActivationBridge(
   };
 
   const unregisterConnection = (connectionId: string): void => {
+    if (!isCapabilityEnabled("connections.readwrite")) throw new Error(formatCapabilityError("connections.readwrite"));
     const normalizedConnectionId = qualifyExtensionConnectionId(entry.id, connectionId);
     connectionManager.unregisterDefinition(entry.id, normalizedConnectionId);
   };

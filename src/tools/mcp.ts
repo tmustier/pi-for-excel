@@ -620,7 +620,21 @@ export function createMcpTool(
             if (!approved) throw new Error("MCP tool call cancelled by the user.");
           }
           signal?.throwIfAborted();
-          const callResult = await targetList.callJsonRpc({
+          const currentConfig = await getRuntimeConfig();
+          const currentServer = currentConfig.servers.find((server) => server.id === targetServer.id);
+          if (!currentServer?.enabled || !matchesConnection(targetList, currentServer, currentConfig.proxyBaseUrl)) {
+            throw new Error("MCP server configuration changed while awaiting approval. Retry the tool call.");
+          }
+          const currentList = await ensureServerTools({
+            server: currentServer,
+            ...proxyBaseUrlArg(currentConfig.proxyBaseUrl),
+            signal,
+          });
+          if (!currentList.tools.some((tool) => tool.name === targetTool.name)) {
+            throw new Error(`MCP tool not found: ${targetTool.name}`);
+          }
+          signal?.throwIfAborted();
+          const callResult = await currentList.callJsonRpc({
             server: targetServer,
             method: "tools/call",
             params: {
@@ -628,7 +642,7 @@ export function createMcpTool(
               arguments: parsedArgs,
             },
             signal,
-            ...proxyBaseUrlArg(runtimeConfig.proxyBaseUrl),
+            ...proxyBaseUrlArg(currentConfig.proxyBaseUrl),
           });
 
           if (!callResult) {

@@ -67,6 +67,7 @@ function buildBridge(args: {
 
   return buildRuntimeManagerActivationBridge({
     entry: args.entry,
+    assertRegistrationAllowed: () => {},
     settings: args.settings,
     connectionManager: args.connectionManager,
     getRequiredActiveAgent,

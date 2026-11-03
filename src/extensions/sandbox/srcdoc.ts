@@ -1,6 +1,7 @@
 import {
   SANDBOX_BOOTSTRAP_KIND,
   SANDBOX_CHANNEL,
+  SANDBOX_REQUEST_TIMEOUT_MS,
   serializeForSandboxInlineScript,
 } from "./protocol.js";
 
@@ -35,6 +36,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       extensionName: options.extensionName,
       source: sourceConfig,
       widgetApiV2Enabled: options.widgetApiV2Enabled,
+      requestTimeoutMs: SANDBOX_REQUEST_TIMEOUT_MS,
     };
 
     const serializedConfig = serializeForSandboxInlineScript(config);
@@ -81,7 +83,8 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       let nextRequestId = 1;
       let moduleDeactivate = null;
       let cleanups = [];
-      let activating = true;
+      let phase = "activating";
+      let teardown = null;
       const activationOps = [];
 
       function getErrorMessage(error) {
@@ -130,20 +133,31 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       }
 
       function requestHost(method, params) {
+        if (phase === "disposed") return Promise.reject(new Error("Sandbox extension is disposed."));
         const requestId = 'host-' + String(nextRequestId++);
 
         return new Promise((resolve, reject) => {
-          pendingHostRequests.set(requestId, { resolve, reject });
+          const timeoutId = setTimeout(() => {
+            pendingHostRequests.delete(requestId);
+            reject(new Error("Sandbox host request timed out: " + method));
+          }, config.requestTimeoutMs);
+          pendingHostRequests.set(requestId, { resolve, reject, timeoutId });
 
-          sendToHost({
-            channel: config.channel,
-            instanceId: config.instanceId,
-            direction: "sandbox_to_host",
-            kind: "request",
-            requestId,
-            method,
-            params,
-          });
+          try {
+            sendToHost({
+              channel: config.channel,
+              instanceId: config.instanceId,
+              direction: "sandbox_to_host",
+              kind: "request",
+              requestId,
+              method,
+              params,
+            });
+          } catch (error) {
+            pendingHostRequests.delete(requestId);
+            clearTimeout(timeoutId);
+            reject(error);
+          }
         });
       }
 
@@ -335,6 +349,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       }
 
       async function runDeactivate() {
+        phase = "deactivating";
         const failures = [];
 
         for (let i = cleanups.length - 1; i >= 0; i -= 1) {
@@ -364,6 +379,15 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         clearSurfaceActions(widgetActionIds);
         clearAllWidgetActions();
 
+        phase = "disposed";
+        commandHandlers.clear();
+        toolHandlers.clear();
+        for (const pending of pendingHostRequests.values()) {
+          clearTimeout(pending.timeoutId);
+          pending.reject(new Error("Sandbox extension is disposed."));
+        }
+        pendingHostRequests.clear();
+
         if (failures.length > 0) {
           throw new Error('Extension cleanup failed:\\n- ' + failures.join('\\n- '));
         }
@@ -373,6 +397,15 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         const { method, requestId, params } = message;
 
         try {
+          if (method === "deactivate") {
+            teardown ??= runDeactivate();
+            await teardown;
+            respondToHost(requestId, true, null);
+            return;
+          }
+          if (phase === "deactivating" || phase === "disposed") {
+            throw new Error("Sandbox extension is disposed.");
+          }
           if (method === "invoke_command") {
             const payload = typeof params === "object" && params !== null ? params : {};
             const commandId = typeof payload.commandId === "string" ? payload.commandId : "";
@@ -416,12 +449,6 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
             return;
           }
 
-          if (method === "deactivate") {
-            await runDeactivate();
-            respondToHost(requestId, true, null);
-            return;
-          }
-
           throw new Error('Unsupported host request method: ' + method);
         } catch (error) {
           respondToHost(requestId, false, getErrorMessage(error));
@@ -429,7 +456,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       }
 
       function handleHostEvent(message) {
-        if (message.event !== "agent_event") {
+        if (phase === "deactivating" || phase === "disposed" || message.event !== "agent_event") {
           return;
         }
 
@@ -473,6 +500,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
           }
 
           pendingHostRequests.delete(message.requestId);
+          clearTimeout(pending.timeoutId);
           if (message.ok) {
             pending.resolve(message.result);
           } else {
@@ -525,7 +553,7 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
       });
 
       function queueActivationOp(promise) {
-        if (activating) {
+        if (phase === "activating") {
           activationOps.push(promise);
           return;
         }
@@ -1094,9 +1122,11 @@ export function buildSandboxSrcdoc(options: BuildSandboxSrcdocOptions): string {
         const activationResult = await activate(makeApi());
         cleanups = collectActivationCleanups(activationResult);
 
-        activating = false;
-        await Promise.all(activationOps);
-
+        while (activationOps.length > 0) {
+          await Promise.all(activationOps.splice(0));
+        }
+        if (phase !== "activating") return;
+        phase = "active";
         sendEvent("ready", null);
       }
     </script>

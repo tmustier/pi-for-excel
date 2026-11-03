@@ -9,11 +9,13 @@ const TICK = 110;
 type Dir = "up" | "down" | "left" | "right";
 type Pt = { x: number; y: number };
 
-export function activate(api: ExcelExtensionAPI): void {
+export function activate(api: ExcelExtensionAPI): () => void {
+  let stopGame = (): void => {};
   api.registerCommand("snake", {
     description: "Play Snake! 🐍",
     busyAllowed: true,
     handler: () => {
+      stopGame();
       const el = document.createElement("div");
       el.style.cssText = `
         display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -52,11 +54,14 @@ export function activate(api: ExcelExtensionAPI): void {
       let score = 0;
       let gameOver = false;
 
-      function spawnFood(s: Pt[]): Pt {
-        let f: Pt;
-        do { f = { x: Math.floor(Math.random() * COLS), y: Math.floor(Math.random() * ROWS) }; }
-        while (s.some(p => p.x === f.x && p.y === f.y));
-        return f;
+      function spawnFood(s: Pt[]): Pt | null {
+        const available: Pt[] = [];
+        for (let y = 0; y < ROWS; y += 1) {
+          for (let x = 0; x < COLS; x += 1) {
+            if (!s.some((point) => point.x === x && point.y === y)) available.push({ x, y });
+          }
+        }
+        return available[Math.floor(Math.random() * available.length)] ?? null;
       }
 
       function draw(): void {
@@ -67,10 +72,12 @@ export function activate(api: ExcelExtensionAPI): void {
         for (let x = 0; x <= COLS; x++) { ctx2d.beginPath(); ctx2d.moveTo(x * CELL, 0); ctx2d.lineTo(x * CELL, ROWS * CELL); ctx2d.stroke(); }
         for (let y = 0; y <= ROWS; y++) { ctx2d.beginPath(); ctx2d.moveTo(0, y * CELL); ctx2d.lineTo(COLS * CELL, y * CELL); ctx2d.stroke(); }
 
-        ctx2d.fillStyle = "#d44";
-        ctx2d.beginPath();
-        ctx2d.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
-        ctx2d.fill();
+        if (food) {
+          ctx2d.fillStyle = "#d44";
+          ctx2d.beginPath();
+          ctx2d.arc(food.x * CELL + CELL / 2, food.y * CELL + CELL / 2, CELL / 2.5, 0, Math.PI * 2);
+          ctx2d.fill();
+        }
 
         snake.forEach((p, i) => {
           const r = i === 0 ? 3 : 2;
@@ -127,9 +134,10 @@ export function activate(api: ExcelExtensionAPI): void {
         }
 
         snake.unshift(nh);
-        if (nh.x === food.x && nh.y === food.y) {
+        if (food && nh.x === food.x && nh.y === food.y) {
           score += 10;
           food = spawnFood(snake);
+          gameOver = food === null;
           updateHeader();
         } else {
           snake.pop();
@@ -168,7 +176,9 @@ export function activate(api: ExcelExtensionAPI): void {
         document.removeEventListener("keydown", keyHandler);
       }
 
+      stopGame = cleanup;
       api.widget.show(el);
     },
   });
+  return () => stopGame();
 }

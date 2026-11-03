@@ -85,41 +85,42 @@ export function createLoadedExtensionHandle(
   cleanups: readonly ExtensionCleanup[],
   moduleDeactivate: ExtensionDeactivator | null,
 ): LoadedExtensionHandle {
-  let deactivated = false;
+  let teardown: Promise<void> | null = null;
+  let remaining = [...cleanups].reverse();
+  let deactivateModule = moduleDeactivate;
+
+  const runCleanups = async (): Promise<void> => {
+    const failures: string[] = [];
+    const retry: ExtensionCleanup[] = [];
+    for (const cleanup of remaining) {
+      try {
+        await cleanup();
+      } catch (error) {
+        retry.push(cleanup);
+        failures.push(toErrorMessage(error));
+      }
+    }
+    remaining = retry;
+    if (deactivateModule) {
+      try {
+        await deactivateModule();
+        deactivateModule = null;
+      } catch (error) {
+        failures.push(toErrorMessage(error));
+      }
+    }
+    if (failures.length > 0) {
+      throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
+    }
+  };
 
   return {
-    deactivate: async () => {
-      if (deactivated) {
-        return;
-      }
-      deactivated = true;
-
-      const failures: string[] = [];
-
-      for (let i = cleanups.length - 1; i >= 0; i -= 1) {
-        const cleanup = cleanups[i];
-        if (!cleanup) {
-          continue;
-        }
-
-        try {
-          await cleanup();
-        } catch (error) {
-          failures.push(toErrorMessage(error));
-        }
-      }
-
-      if (moduleDeactivate) {
-        try {
-          await moduleDeactivate();
-        } catch (error) {
-          failures.push(toErrorMessage(error));
-        }
-      }
-
-      if (failures.length > 0) {
-        throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
-      }
+    deactivate: () => {
+      teardown ??= runCleanups().catch((error: unknown) => {
+        teardown = null;
+        throw error;
+      });
+      return teardown;
     },
   };
 }
