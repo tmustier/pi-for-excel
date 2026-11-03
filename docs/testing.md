@@ -43,12 +43,13 @@ Behavior changes still require the model-driven acceptance described in `coding-
 
 ## Browser contracts
 
-Run `npm run test:browser` for taskpane behavior in real headless Chromium (files run serially: each boots its own Vite server and Chromium, and parallel boots contend on the Vite dependency optimizer and time out), or `npm run test:all` for the deterministic and browser suites together. CI splits the files across four runners with `NODE_OPTIONS=--test-shard=N/4`; the flag must reach Node before the file glob, so it cannot be appended after `npm run test:browser --`. Install the pinned browser once with `npx playwright install chromium` if it is not already cached. The recording contract also requires system `ffmpeg` and `ffprobe`.
+Run `npm run test:browser` for taskpane behavior in real headless Chromium (files run serially: each builds the taskpane with Vite into a temporary directory, serves that bundle with `vite preview` and launches Chromium, because bridge and `VITE_*` settings are baked into the bundle per file), or `npm run test:all` for the deterministic and browser suites together. CI splits the files across four runners with `NODE_OPTIONS=--test-shard=N/4`; the flag must reach Node before the file glob, so it cannot be appended after `npm run test:browser --`. Install the pinned browser once with `npx playwright install chromium` if it is not already cached. The recording contract also requires system `ffmpeg` and `ffprobe`.
 
 Add a browser contract under `tests/browser/` when the capability depends on real DOM entry, event propagation, focus, accessibility or rendered visibility. Use the `*.browser-test.ts` suffix so `npm test` remains browser-free. Enter through user-visible controls and assert the visible outcome rather than implementation names.
 
-Use `tests/browser/harness.ts` for the shared Vite server, Chromium lifecycle, loopback-only routing and taskpane setup.
+Use `tests/browser/harness.ts` for the prebuilt taskpane server, Chromium lifecycle, loopback-only routing and taskpane setup.
 Supply its `bridge` hook when a test needs custom background-verify commands or responses.
+A test may `import()` a repository module from `page.evaluate` by its `"/src/….ts"` URL (or a pi-ai module by its `"/node_modules/….js"` URL); the harness scans `tests/browser/*.ts` for those string literals and bundles each one as an entry under the same URL, so write the path as a literal even when it is passed through a variable.
 
 ## Foundation status
 

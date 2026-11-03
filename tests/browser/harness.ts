@@ -8,9 +8,15 @@ import {
   type Page,
   type Route,
 } from "playwright";
-import { createServer, type ViteDevServer } from "vite";
+import { build, preview, type PreviewServer } from "vite";
+
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 const BRIDGE_URL = "https://localhost:3157";
+const BROWSER_MODULE_URL = /["'](\/(?:src\/[^"']+\.ts|node_modules\/[^"']+\.js))["']/gu;
+const BUNDLED_MODULE_PATH = /^\/(?:src\/.+\.ts|node_modules\/.+\.js)$/u;
 const LOOPBACK_HOSTNAMES = new Set(["127.0.0.1", "localhost", "[::1]"]);
 
 export interface TaskpaneServer {
@@ -66,25 +72,25 @@ export async function startTaskpaneServer(
   process.env.VITE_PI_BACKGROUND_VERIFY_URL = BRIDGE_URL;
   process.env.VITE_PI_BACKGROUND_VERIFY_TOKEN = options.token ?? "browser-bridge-token";
 
-  const server: ViteDevServer = await createServer({
-    configFile: false,
-    root: process.cwd(),
-    server: { host: "127.0.0.1", port: 0, strictPort: false },
-  });
-  await server.listen();
+  const outDir = await mkdtemp(path.join(os.tmpdir(), "pi-browser-test-"));
+  let browser: Browser;
+  let server: PreviewServer;
+  try {
+    [browser, server] = await Promise.all([
+      chromium.launch({ headless: true }),
+      buildTaskpane(outDir).then(() => serveTaskpane(outDir)),
+    ]);
+  } catch (error) {
+    await rm(outDir, { recursive: true, force: true });
+    throw error;
+  }
 
   const localUrl = server.resolvedUrls?.local[0];
   if (!localUrl) {
+    await browser.close();
     await server.close();
+    await rm(outDir, { recursive: true, force: true });
     throw new Error("Vite did not expose a local URL");
-  }
-
-  let browser: Browser;
-  try {
-    browser = await chromium.launch({ headless: true });
-  } catch (error) {
-    await server.close();
-    throw error;
   }
 
   return {
@@ -93,8 +99,73 @@ export async function startTaskpaneServer(
     async close(): Promise<void> {
       await browser.close();
       await server.close();
+      await rm(outDir, { recursive: true, force: true });
     },
   };
+}
+
+async function sourceModulesImportedByTests(): Promise<Record<string, string>> {
+  const dir = import.meta.dirname;
+  const entries: Record<string, string> = {};
+  for (const name of await readdir(dir)) {
+    if (!name.endsWith(".ts")) continue;
+    const source = await readFile(path.join(dir, name), "utf8");
+    for (const match of source.matchAll(BROWSER_MODULE_URL)) {
+      const file = match[1].slice(1);
+      entries[file.slice(0, -path.extname(file).length)] = file;
+    }
+  }
+  return entries;
+}
+
+async function buildTaskpane(outDir: string): Promise<void> {
+  process.env.NODE_ENV ??= "development";
+  await build({
+    root: process.cwd(),
+    mode: "development",
+    logLevel: "error",
+    build: {
+      outDir,
+      emptyOutDir: true,
+      minify: false,
+      rollupOptions: {
+        input: {
+          taskpane: "src/taskpane.html",
+          "ui-gallery": "src/ui-gallery.html",
+          ...(await sourceModulesImportedByTests()),
+        },
+        preserveEntrySignatures: "allow-extension",
+        output: {
+          entryFileNames: (chunk) => (chunk.name.startsWith("src/") ? "[name].ts" : "[name].js"),
+        },
+      },
+    },
+  });
+}
+
+async function serveTaskpane(outDir: string): Promise<PreviewServer> {
+  const root = process.cwd();
+  return preview({
+    configFile: false,
+    root,
+    logLevel: "error",
+    build: { outDir },
+    preview: { host: "127.0.0.1", port: 0, strictPort: false, open: false },
+    plugins: [{
+      name: "pi-browser-test-sources",
+      configurePreviewServer(server) {
+        server.middlewares.use((req, res, next) => {
+          const url = new URL(req.url ?? "/", "http://localhost");
+          const bundled = BUNDLED_MODULE_PATH.test(url.pathname);
+          if (!bundled && !(url.pathname.startsWith("/src/") && url.pathname.endsWith(".css"))) return next();
+          void readFile(path.join(bundled ? outDir : root, url.pathname)).then((body) => {
+            res.setHeader("Content-Type", bundled ? "text/javascript; charset=utf-8" : "text/css; charset=utf-8");
+            res.end(body);
+          }, next);
+        });
+      },
+    }],
+  });
 }
 
 export async function openBrowserPage(
