@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
@@ -376,9 +377,9 @@ export class SessionRuntimeManager {
         this.refreshRequested = false;
         const runtimes = this.listRuntimes();
 
-        await Promise.all(runtimes.map((runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
+        await mapWithConcurrency(runtimes, 4, (runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
           this.warnCapabilityRefresh(error);
-        })));
+        }));
       }
     } finally {
       this.refreshPromise = null;

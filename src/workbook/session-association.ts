@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
 const SESSION_WORKBOOK_PREFIX = "session.workbook.v1.";
@@ -63,6 +64,8 @@ export interface SessionWorkbookPartition {
   foreignSessionIds: string[];
 }
 
+const SESSION_LOOKUP_CONCURRENCY = 16;
+
 export async function partitionSessionIdsByWorkbook(
   settings: SettingsWriter,
   sessionIds: string[],
@@ -72,10 +75,10 @@ export async function partitionSessionIdsByWorkbook(
   const unlinkedSessionIds: string[] = [];
   const foreignSessionIds: string[] = [];
 
-  const linkedWorkbookIds = await Promise.all(sessionIds.map(async (sessionId) => ({
+  const linkedWorkbookIds = await mapWithConcurrency(sessionIds, SESSION_LOOKUP_CONCURRENCY, async (sessionId) => ({
     sessionId,
     linkedWorkbookId: await getSessionWorkbookId(settings, sessionId),
-  })));
+  }));
 
   for (const { sessionId, linkedWorkbookId } of linkedWorkbookIds) {
     if (!linkedWorkbookId) {

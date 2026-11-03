@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import { getFilesWorkspace, type FilesWorkspace } from "../files/workspace.js";
 import type { WorkspaceFileEntry } from "../files/types.js";
 import type {
@@ -107,6 +108,8 @@ function dedupeSkillsByName(skills: readonly AgentSkillDefinition[], duplicateLa
   return Array.from(byName.values()).sort((left, right) => left.name.localeCompare(right.name));
 }
 
+const SKILL_READ_CONCURRENCY = 8;
+
 async function loadSkillDefinitionsFromFiles(args: {
   workspace: ExternalSkillWorkspace;
   files: readonly WorkspaceFileEntry[];
@@ -114,7 +117,7 @@ async function loadSkillDefinitionsFromFiles(args: {
   tooLargeWarningLabel: string;
   invalidWarningLabel: string;
 }): Promise<AgentSkillDefinition[]> {
-  const loaded = await Promise.all(args.files.map(async (file): Promise<AgentSkillDefinition | null> => {
+  const loaded = await mapWithConcurrency(args.files, SKILL_READ_CONCURRENCY, async (file): Promise<AgentSkillDefinition | null> => {
     let readResult: Awaited<ReturnType<ExternalSkillWorkspace["readFile"]>>;
 
     try {
@@ -147,7 +150,7 @@ async function loadSkillDefinitionsFromFiles(args: {
       console.warn(`[skills] Invalid SKILL.md frontmatter (${args.invalidWarningLabel}): ${file.path}`);
     }
     return skill;
-  }));
+  });
 
   return loaded.filter((skill) => skill !== null);
 }

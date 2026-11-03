@@ -720,38 +720,30 @@ export class ConnectionManager {
   }
 
   async getSnapshot(connectionId: string): Promise<ConnectionSnapshot | null> {
-    const definition = this.definitions.get(normalizeConnectionId(connectionId));
-    if (!definition) {
-      return null;
-    }
+    return (await this.listSnapshotsUnsorted([connectionId]))[0] ?? null;
+  }
+
+  private async listSnapshotsUnsorted(connectionIds: readonly string[]): Promise<ConnectionSnapshot[]> {
+    const definitions = connectionIds
+      .map((connectionId) => this.definitions.get(normalizeConnectionId(connectionId)))
+      .filter((definition) => definition !== undefined);
+    if (definitions.length === 0) return [];
 
     const items = await loadConnectionStoreDocument(this.settings);
-    const record = items[definition.id];
-
-    const status = resolveEffectiveStatus(definition, record);
-
-    const setupHint = definition.setupHint ?? buildDefaultSetupHint(definition.title);
-
-    const lastError = (status === "invalid" || status === "error")
-      ? record?.lastError
-      : undefined;
-
-    const snapshot: ConnectionSnapshot = {
-      connectionId: definition.id,
-      title: definition.title,
-      capability: definition.capability,
-      status,
-      setupHint,
-    };
-
-    if (record?.lastValidatedAt !== undefined) {
-      snapshot.lastValidatedAt = record.lastValidatedAt;
-    }
-    if (lastError !== undefined) {
-      snapshot.lastError = lastError;
-    }
-
-    return snapshot;
+    return definitions.map((definition) => {
+      const record = items[definition.id];
+      const status = resolveEffectiveStatus(definition, record);
+      const lastError = status === "invalid" || status === "error" ? record?.lastError : undefined;
+      return {
+        connectionId: definition.id,
+        title: definition.title,
+        capability: definition.capability,
+        status,
+        setupHint: definition.setupHint ?? buildDefaultSetupHint(definition.title),
+        ...(record?.lastValidatedAt !== undefined ? { lastValidatedAt: record.lastValidatedAt } : {}),
+        ...(lastError !== undefined ? { lastError } : {}),
+      };
+    });
   }
 
   async getState(connectionId: string): Promise<ConnectionState | null> {
@@ -778,8 +770,7 @@ export class ConnectionManager {
       ? Array.from(new Set(connectionIds.map((id) => normalizeConnectionId(id))))
       : this.listRegisteredConnectionIds();
 
-    const snapshots = (await Promise.all(ids.map((connectionId) => this.getSnapshot(connectionId))))
-      .filter((snapshot) => snapshot !== null);
+    const snapshots = await this.listSnapshotsUnsorted(ids);
 
     snapshots.sort((left, right) => left.title.localeCompare(right.title));
     return snapshots;

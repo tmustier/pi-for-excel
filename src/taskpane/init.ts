@@ -219,8 +219,10 @@ import {
 } from "./runtime-utils.js";
 import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
+import { mapWithConcurrency } from "../utils/concurrency.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
+const RESTORE_TAB_CONCURRENCY = 4;
 
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
@@ -457,19 +459,20 @@ export async function initTaskpane(opts: {
     activeIntegrationIds: readonly string[];
     requiredConnectionIds: readonly string[];
   }): Promise<string> => {
-    await localServicesReady;
-
+    const rules = Promise.all([
+      getUserRules(settings),
+      getWorkbookRules(settings, args.workbookId),
+      getResolvedConventions(settings),
+    ]);
+    rules.catch(() => {});
     const [availableSkills, activeConnections] = await Promise.all([
       resolveAvailableSkills(),
       connectionManager.listPromptEntries(args.requiredConnectionIds),
+      localServicesReady,
     ]);
 
     try {
-      const [userRules, workbookRules, conventions] = await Promise.all([
-        getUserRules(settings),
-        getWorkbookRules(settings, args.workbookId),
-        getResolvedConventions(settings),
-      ]);
+      const [userRules, workbookRules, conventions] = await rules;
       setRulesActive(hasAnyRules({ userRules, workbookRules }));
       const activeIntegrations = buildIntegrationPromptEntries(args.activeIntegrationIds);
       return buildSystemPrompt({
@@ -1507,7 +1510,7 @@ export async function initTaskpane(opts: {
     if (!savedLayout) return null;
 
     runtimeManager.seedNextTabNumber(savedLayout.nextTabNumber ?? 1);
-    const restoredTabs = await Promise.all(savedLayout.sessionIds.map(async (sessionId) => {
+    const restoredTabs = await mapWithConcurrency(savedLayout.sessionIds, RESTORE_TAB_CONCURRENCY, async (sessionId) => {
       const tabNumber = savedLayout.tabNumbers?.[sessionId];
       const tabNumberOption = tabNumber !== undefined ? { tabNumber } : {};
       const [runtime, sessionData] = await Promise.all([
@@ -1515,15 +1518,16 @@ export async function initTaskpane(opts: {
         sessions.loadSession(sessionId),
       ]);
       return { sessionId, runtime, sessionData, tabNumberOption };
-    }));
+    });
 
     for (const { runtime, tabNumberOption } of restoredTabs) {
       runtimeManager.registerRuntime(runtime, { activate: false, ...tabNumberOption });
     }
 
-    await Promise.all(restoredTabs.map(({ runtime, sessionData }) => sessionData
-      ? runtime.persistence.applyLoadedSession(sessionData)
-      : runtime.persistence.saveSession({ force: true })));
+    for (const { runtime, sessionData } of restoredTabs) {
+      if (sessionData) await runtime.persistence.applyLoadedSession(sessionData);
+      else await runtime.persistence.saveSession({ force: true });
+    }
 
     const firstRuntime = restoredTabs[0]?.runtime;
     if (!firstRuntime) return null;

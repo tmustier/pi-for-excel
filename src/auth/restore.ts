@@ -70,10 +70,9 @@ async function restoreFromPiAuth(
 
     console.log(`[auth] Found pi auth.json with ${Object.keys(authData).length} provider(s)`);
 
-    await Promise.all(Object.entries(authData).map(async ([providerId, cred]) => {
+    type AuthEntry = [providerId: string, cred: (typeof authData)[string]];
+    const restoreEntry = async ([providerId, cred]: AuthEntry, apiProvider: string): Promise<void> => {
       try {
-        const apiProvider = mapToApiProvider(providerId);
-
         if (isApiKeyCredential(cred)) {
           await providerKeys.set(apiProvider, cred.key);
           restoredProviders.add(apiProvider);
@@ -109,6 +108,15 @@ async function restoreFromPiAuth(
       } catch (e) {
         console.warn(`[auth] ${providerId}: failed (${getErrorMessage(e)})`);
       }
+    };
+
+    const entriesByApiProvider = new Map<string, AuthEntry[]>();
+    for (const entry of Object.entries(authData)) {
+      const apiProvider = mapToApiProvider(entry[0]);
+      entriesByApiProvider.set(apiProvider, [...(entriesByApiProvider.get(apiProvider) ?? []), entry]);
+    }
+    await Promise.all([...entriesByApiProvider].map(async ([apiProvider, entries]) => {
+      for (const entry of entries) await restoreEntry(entry, apiProvider);
     }));
 
     return restoredProviders;

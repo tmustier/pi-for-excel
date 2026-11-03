@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import type { Agent, AgentMessage } from "@earendil-works/pi-agent-core";
 import type {
   Api,
@@ -48,6 +49,8 @@ interface ImageNormalizationOptions {
   processor?: ImageInputProcessor;
   signal?: AbortSignal;
 }
+
+const IMAGE_CONCURRENCY = 2;
 
 function createAbortError(): DOMException {
   return new DOMException("Image processing aborted.", "AbortError");
@@ -190,9 +193,9 @@ function processContentImages(
   model: ImageLimitModel,
   options: ImageNormalizationOptions,
 ): Promise<({ block: TextContent; processed: null } | { block: ImageContent; processed: ProcessedImageInput })[]> {
-  return Promise.all(content.map(async (block) => block.type === "image"
+  return mapWithConcurrency(content, IMAGE_CONCURRENCY, async (block) => block.type === "image"
     ? { block, processed: await processWithModel(block, model, options) }
-    : { block, processed: null }));
+    : { block, processed: null });
 }
 
 async function normalizePromptContent(
@@ -238,12 +241,12 @@ async function normalizePromptMessage(
   const hints: string[] = [];
   if (message.attachments?.some((attachment) => attachment.type === "image")) {
     const attachments: Attachment[] = [];
-    const processedAttachments = await Promise.all(message.attachments.map(async (attachment) => ({
+    const processedAttachments = await mapWithConcurrency(message.attachments, IMAGE_CONCURRENCY, async (attachment) => ({
       attachment,
       processed: attachment.type === "image"
         ? await processWithModel({ type: "image", data: attachment.content, mimeType: attachment.mimeType }, model, options)
         : null,
-    })));
+    }));
     for (const { attachment, processed } of processedAttachments) {
       if (!processed) {
         attachments.push(attachment);

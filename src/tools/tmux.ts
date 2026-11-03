@@ -347,7 +347,7 @@ async function defaultGetBridgeConfig(): Promise<TmuxBridgeConfig | null> {
 
     const [urlValue, tokenValue] = await Promise.all([
       settings.get(TMUX_BRIDGE_URL_SETTING_KEY),
-      settings.get(TMUX_BRIDGE_TOKEN_SETTING_KEY),
+      settings.get(TMUX_BRIDGE_TOKEN_SETTING_KEY).catch(() => null),
     ]);
     const configuredUrl = typeof urlValue === "string" ? urlValue.trim() : "";
     if (configuredUrl.length > 0) {

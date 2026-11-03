@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 function isToolsMcpPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -486,13 +487,11 @@ export function createMcpTool(
     servers: readonly McpServerConfig[];
     proxyBaseUrl?: string;
     signal: AbortSignal | undefined;
-  }): Promise<ServerToolList[]> => Promise.all(args.servers
-    .filter((server) => server.enabled)
-    .map((server) => ensureServerTools({
-      server,
-      ...proxyBaseUrlArg(args.proxyBaseUrl),
-      signal: args.signal,
-    })));
+  }): Promise<ServerToolList[]> => mapWithConcurrency(
+    args.servers.filter((server) => server.enabled),
+    4,
+    (server) => ensureServerTools({ server, ...proxyBaseUrlArg(args.proxyBaseUrl), signal: args.signal }),
+  );
 
   return {
     name: "mcp",

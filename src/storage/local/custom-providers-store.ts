@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../../utils/concurrency.js";
 /**
  * Vendored from @earendil-works/pi-web-ui 0.75.3 (MIT, © Mario Zechner,
  * https://github.com/badlogic/pi-mono).
@@ -47,7 +48,7 @@ export class CustomProvidersStore extends Store {
 
   async getAll(): Promise<CustomProvider[]> {
     const keys = await this.getBackend().keys("custom-providers");
-    const providers = await Promise.all(keys.map((key) => this.get(key)));
+    const providers = await mapWithConcurrency(keys, 8, (key) => this.get(key));
     return providers.filter((provider) => provider !== null);
   }
 

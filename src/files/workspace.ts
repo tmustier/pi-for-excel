@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import { t } from "../language/index.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
@@ -527,8 +528,8 @@ export class FilesWorkspace {
       return;
     }
 
-    const deletions = await Promise.allSettled(staleScratchPaths.map((path) => backend.deleteFile(path)));
-    const deletedPaths = staleScratchPaths.filter((_, index) => deletions[index]?.status === "fulfilled");
+    const deleted = await mapWithConcurrency(staleScratchPaths, 8, (path) => backend.deleteFile(path).then(() => true, () => false));
+    const deletedPaths = staleScratchPaths.filter((_, index) => deleted[index]);
 
     if (deletedPaths.length === 0) {
       return;
