@@ -19,6 +19,8 @@ import {
   getBuiltinModelDataGeneratedAt,
 } from "@earendil-works/pi-ai/providers/all";
 
+import { createConcurrencyLimit, type ConcurrencyLimit } from "../utils/concurrency.js";
+
 import { originalFetch } from "../auth/cors-proxy.js";
 import { isOpenAiGatewayProvider } from "../auth/custom-gateways.js";
 import { normalizeProxyUrl } from "../auth/proxy-validation.js";
@@ -253,6 +255,7 @@ function sanitizeCatalogEntry(
 class BrowserModelCatalogsStore implements ModelsStore {
   private readonly persisted: ModelsStore;
   private readonly specs = new Map<string, DynamicProviderCatalogSpec>();
+  private readonly operations = new Map<string, ConcurrencyLimit>();
 
   constructor(persisted: ModelsStore) {
     this.persisted = persisted;
@@ -266,22 +269,31 @@ class BrowserModelCatalogsStore implements ModelsStore {
     this.specs.delete(providerId);
   }
 
-  async read(providerId: string): Promise<ModelsStoreEntry | undefined> {
-    const entry = await this.persisted.read(providerId);
-    const spec = this.specs.get(providerId);
-    return entry && spec ? sanitizeCatalogEntry(providerId, spec, entry) : entry;
+  private operation(providerId: string): ConcurrencyLimit {
+    let operation = this.operations.get(providerId);
+    if (!operation) {
+      operation = createConcurrencyLimit(1);
+      this.operations.set(providerId, operation);
+    }
+    return operation;
+  }
+
+  read(providerId: string): Promise<ModelsStoreEntry | undefined> {
+    return this.operation(providerId)(async () => {
+      const entry = await this.persisted.read(providerId);
+      const spec = this.specs.get(providerId);
+      return entry && spec ? sanitizeCatalogEntry(providerId, spec, entry) : entry;
+    });
   }
 
   write(providerId: string, entry: ModelsStoreEntry): Promise<void> {
     const spec = this.specs.get(providerId);
-    return this.persisted.write(
-      providerId,
-      spec ? sanitizeCatalogEntry(providerId, spec, entry) : entry,
-    );
+    const sanitized = spec ? sanitizeCatalogEntry(providerId, spec, entry) : entry;
+    return this.operation(providerId)(() => this.persisted.write(providerId, sanitized));
   }
 
   delete(providerId: string): Promise<void> {
-    return this.persisted.delete(providerId);
+    return this.operation(providerId)(() => this.persisted.delete(providerId));
   }
 }
 
@@ -572,7 +584,10 @@ export class BrowserModelRuntime {
     return this.dynamicProviderRevision;
   }
 
-  private createDynamicProvider(registration: BrowserProviderRegistration): Provider {
+  private createDynamicProvider(registration: BrowserProviderRegistration): {
+    provider: Provider;
+    controller: AbortController;
+  } {
     const controller = new AbortController();
     const provider = createRegisteredProvider(
       registration,
@@ -581,10 +596,21 @@ export class BrowserModelRuntime {
       controller.signal,
     );
 
+    return { provider, controller };
+  }
+
+  private setDynamicProvider(
+    registration: BrowserProviderRegistration,
+    { provider, controller }: { provider: Provider; controller: AbortController },
+  ): void {
     this.dynamicProviderAbortControllers.get(provider.id)?.abort();
     this.dynamicProviderAbortControllers.set(provider.id, controller);
     this.dynamicProviderRevision += 1;
-    return provider;
+    this.modelCatalogs.configure(provider.id, {
+      api: registration.api,
+      baseUrl: provider.baseUrl ?? normalizeHttpUrl(registration.baseUrl, "Provider baseUrl"),
+    });
+    this.models.setProvider(provider);
   }
 
   private stopDynamicProvider(providerId: string): void {
@@ -594,44 +620,37 @@ export class BrowserModelRuntime {
   }
 
   async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
-    const nextIds = new Set<string>();
-    const nextDirectIds = new Set<string>();
-
-    for (const customProvider of customProviders) {
-      for (const registration of customProviderRegistrations(customProvider)) {
+    const prepared = customProviders.flatMap((customProvider) =>
+      customProviderRegistrations(customProvider).map((registration) => {
         if (this.builtinProviderIds.has(registration.id)) {
           throw new Error(`Custom provider id conflicts with built-in provider: ${registration.id}`);
         }
         if (this.extensionProviderOwners.has(registration.id)) {
           throw new Error(`Custom provider id conflicts with extension provider: ${registration.id}`);
         }
+        return { registration, ...this.createDynamicProvider(registration), direct: customProvider.connectDirectly === true };
+      }),
+    );
+    const nextIds = new Set(prepared.map(({ provider }) => provider.id));
 
-        const provider = this.createDynamicProvider(registration);
-        this.modelCatalogs.configure(provider.id, {
-          api: registration.api,
-          baseUrl: provider.baseUrl ?? normalizeHttpUrl(registration.baseUrl, "Provider baseUrl"),
-        });
-        this.models.setProvider(provider);
-        nextIds.add(registration.id);
-        if (customProvider.connectDirectly === true) nextDirectIds.add(registration.id);
-      }
+    for (const { registration, provider, controller, direct } of prepared) {
+      this.setDynamicProvider(registration, { provider, controller });
+      this.customProviderIds.add(provider.id);
+      if (direct) this.directCustomProviderIds.add(provider.id);
+      else this.directCustomProviderIds.delete(provider.id);
     }
 
+    const deletions: Promise<void>[] = [];
     for (const previousId of this.customProviderIds) {
       if (nextIds.has(previousId)) continue;
       this.stopDynamicProvider(previousId);
       this.models.deleteProvider(previousId);
-      try {
-        await this.modelCatalogs.delete(previousId);
-      } finally {
-        this.modelCatalogs.unconfigure(previousId);
-      }
+      this.customProviderIds.delete(previousId);
+      this.directCustomProviderIds.delete(previousId);
+      this.modelCatalogs.unconfigure(previousId);
+      deletions.push(this.modelCatalogs.delete(previousId));
     }
-
-    this.customProviderIds.clear();
-    for (const providerId of nextIds) this.customProviderIds.add(providerId);
-    this.directCustomProviderIds.clear();
-    for (const providerId of nextDirectIds) this.directCustomProviderIds.add(providerId);
+    await Promise.all(deletions);
   }
 
   registerExtensionProvider(ownerId: string, registration: BrowserProviderRegistration): void {
@@ -645,12 +664,7 @@ export class BrowserModelRuntime {
       throw new Error(`Provider id is already registered by another extension: ${providerId}`);
     }
 
-    const provider = this.createDynamicProvider(registration);
-    this.modelCatalogs.configure(provider.id, {
-      api: registration.api,
-      baseUrl: provider.baseUrl ?? normalizeHttpUrl(registration.baseUrl, "Provider baseUrl"),
-    });
-    this.models.setProvider(provider);
+    this.setDynamicProvider(registration, this.createDynamicProvider(registration));
     this.extensionProviderOwners.set(providerId, ownerId);
   }
 
@@ -674,11 +688,8 @@ export class BrowserModelRuntime {
     this.extensionProviderOwners.delete(providerId);
     this.stopDynamicProvider(providerId);
     this.models.deleteProvider(providerId);
-    try {
-      await this.modelCatalogs.delete(providerId);
-    } finally {
-      this.modelCatalogs.unconfigure(providerId);
-    }
+    this.modelCatalogs.unconfigure(providerId);
+    await this.modelCatalogs.delete(providerId);
   }
 
   async unregisterExtensionProviders(ownerId: string): Promise<void> {
@@ -686,9 +697,7 @@ export class BrowserModelRuntime {
       .filter(([, owner]) => owner === ownerId)
       .map(([providerId]) => providerId);
 
-    for (const providerId of ownedIds) {
-      await this.unregisterExtensionProvider(ownerId, providerId);
-    }
+    await Promise.all(ownedIds.map((providerId) => this.unregisterExtensionProvider(ownerId, providerId)));
   }
 
   refresh(options?: ModelsRefreshOptions): Promise<ModelsRefreshResult> {
