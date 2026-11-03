@@ -202,8 +202,11 @@ void test("the slash-command menu and status bar work while startup is still loa
   const { page } = opened;
   try {
     await held.promise;
-    await page.locator("#pi-status-bar .pi-status-mode").waitFor({ state: "visible", timeout: 3_000 });
+    await page.locator("#pi-status-bar .pi-status-mode").click({ timeout: 3_000 });
+    await page.locator(".pi-status-popover--mode").waitFor({ state: "visible", timeout: 3_000 });
     const input = page.locator("pi-input textarea");
+    await input.click();
+    await page.locator(".pi-status-popover--mode").waitFor({ state: "detached", timeout: 3_000 });
     await input.fill("/");
     const menu = page.locator("#pi-command-menu");
     await menu.locator(".pi-cmd-item").first().waitFor({ state: "visible", timeout: 3_000 });
