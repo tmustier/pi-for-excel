@@ -42,9 +42,10 @@ export function createOfficeDocumentInstanceIdentity(
 ): DocumentInstanceIdentity {
   const getSettings = dependencies.getSettings ?? defaultGetSettings;
   const createToken = dependencies.createToken ?? defaultCreateToken;
-  let inFlight: Promise<string | null> | null = null;
+  let state: { kind: "idle" } | { kind: "saving"; promise: Promise<string | null> } = { kind: "idle" };
 
   const read = (): string | null => {
+    if (state.kind === "saving") return null;
     const stored = getSettings()?.get(OFFICE_DOCUMENT_INSTANCE_SETTING);
     return isDocumentInstanceToken(stored) ? stored : null;
   };
@@ -57,26 +58,28 @@ export function createOfficeDocumentInstanceIdentity(
     if (!isDocumentInstanceToken(token)) return null;
 
     settings.set(OFFICE_DOCUMENT_INSTANCE_SETTING, token);
-    const saved = await new Promise<boolean>((resolve) => {
-      settings.saveAsync((result) => resolve(result.succeeded));
-    });
-    if (saved) return token;
-
-    settings.remove(OFFICE_DOCUMENT_INSTANCE_SETTING);
-    return null;
+    let saved = false;
+    try {
+      saved = await new Promise<boolean>((resolve) => {
+        settings.saveAsync((result) => resolve(result.succeeded));
+      });
+      return saved ? token : null;
+    } finally {
+      if (!saved) settings.remove(OFFICE_DOCUMENT_INSTANCE_SETTING);
+    }
   };
 
   return {
     read,
     ensure(): Promise<string | null> {
+      if (state.kind === "saving") return state.promise;
       const existing = read();
       if (existing) return Promise.resolve(existing);
-      if (!inFlight) {
-        inFlight = persistNewToken().finally(() => {
-          inFlight = null;
-        });
-      }
-      return inFlight;
+      const promise = persistNewToken().finally(() => {
+        state = { kind: "idle" };
+      });
+      state = { kind: "saving", promise };
+      return promise;
     },
   };
 }

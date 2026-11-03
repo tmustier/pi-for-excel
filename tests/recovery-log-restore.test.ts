@@ -313,3 +313,24 @@ void test("a restore that times out sends nothing more to Excel", async () => {
     else Reflect.deleteProperty(globalThis, "Excel");
   }
 });
+
+void test("restore without an inverse consumes the source backup in the captured workbook scope", async () => {
+  const settings = createInMemorySettingsStore();
+  let workbookId = "url_sha256:source";
+  const log = new WorkbookRecoveryLog({
+    getStore: () => Promise.resolve(settings.recovery),
+    getWorkbookContext: () => Promise.resolve({ workbookId, workbookName: "Book.xlsx", source: "document.url" }),
+    applySnapshot: () => {
+      workbookId = "url_sha256:other";
+      return Promise.resolve({ values: [], formulas: [] });
+    },
+  });
+  const snapshot = await log.append({
+    toolName: "write_cells", toolCallId: "source", address: "Sheet1!A1",
+    beforeValues: [[1]], beforeFormulas: [[1]],
+  });
+  assert.ok(snapshot);
+  const result = await log.restore(snapshot.id);
+  assert.equal(result.inverseSnapshotId, null);
+  assert.equal(await settings.recovery.read(snapshot.id, "url_sha256:source"), null, "used source backup must be deleted from its captured scope");
+});

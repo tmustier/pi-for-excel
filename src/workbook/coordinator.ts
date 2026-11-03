@@ -78,8 +78,7 @@ interface QueuedWriteOperation {
 
 interface WorkbookQueueState {
   revision: number;
-  running: boolean;
-  activeWrite: WorkbookOperationContext | null;
+  phase: { kind: "idle" } | { kind: "running"; activeWrite: WorkbookOperationContext };
   queue: QueuedWriteOperation[];
 }
 
@@ -106,8 +105,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
 
     const created: WorkbookQueueState = {
       revision: 0,
-      running: false,
-      activeWrite: null,
+      phase: { kind: "idle" },
       queue: [],
     };
     states.set(key, created);
@@ -116,7 +114,10 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
 
   function emit(event: WorkbookCoordinatorEvent): void {
     for (const listener of listeners) {
-      listener(event);
+      try {
+        listener(event);
+      } catch {
+      }
     }
   }
 
@@ -154,28 +155,25 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
 
   function processQueue(workbookId: string): void {
     const state = ensureState(workbookId);
-    if (state.running) return;
+    if (state.phase.kind === "running") return;
 
     const next = state.queue.shift();
     if (!next) return;
 
-    state.running = true;
-    state.activeWrite = next.context;
-
-    emit({
-      type: "started",
-      operationType: "write",
-      context: next.context,
-      queuedWrites: state.queue.length,
-      revision: state.revision,
-    });
+    state.phase = { kind: "running", activeWrite: next.context };
 
     void (async () => {
       try {
+        emit({
+          type: "started",
+          operationType: "write",
+          context: next.context,
+          queuedWrites: state.queue.length,
+          revision: state.revision,
+        });
         await next.execute();
       } finally {
-        state.running = false;
-        state.activeWrite = null;
+        state.phase = { kind: "idle" };
         processQueue(workbookId);
       }
     })();
@@ -213,7 +211,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
         },
       };
 
-      const mustWait = state.running || state.queue.length > 0;
+      const mustWait = state.phase.kind === "running" || state.queue.length > 0;
       state.queue.push(operation);
       if (mustWait) {
         emit({
@@ -238,7 +236,7 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
     return {
       revision: state.revision,
       queuedWrites: state.queue.length,
-      activeWrite: state.activeWrite,
+      activeWrite: state.phase.kind === "running" ? state.phase.activeWrite : null,
       queued: state.queue.map((op) => op.context),
     };
   }

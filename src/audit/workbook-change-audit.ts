@@ -199,6 +199,7 @@ function clampLimit(limit: number): number {
 export class WorkbookChangeAuditLog {
   private readonly dependencies: WorkbookChangeAuditLogDependencies;
   private pendingEntries: WorkbookChangeAuditEntry[] = [];
+  private clearGeneration = 0;
 
   constructor(dependencies: Partial<WorkbookChangeAuditLogDependencies> = {}) {
     const getSettingsStore = dependencies.settings !== undefined
@@ -215,14 +216,14 @@ export class WorkbookChangeAuditLog {
   }
 
   private async persistPending(): Promise<void> {
-    const settings = await this.dependencies.getSettingsStore();
-    if (!settings || this.pendingEntries.length === 0) return;
-
+    const generation = this.clearGeneration;
     const pending = this.pendingEntries;
+    const settings = await this.dependencies.getSettingsStore();
+    if (!settings || pending.length === 0 || generation !== this.clearGeneration) return;
     try {
       await settings.update(AUDIT_SETTING_KEY, parsePersistedEntries, (stored): PersistedWorkbookChangeAuditPayload => ({
         version: 1,
-        entries: mergeEntries(pending, stored),
+        entries: generation === this.clearGeneration ? mergeEntries(pending, stored) : stored,
       }));
       this.pendingEntries = this.pendingEntries.filter((entry) => !pending.includes(entry));
     } catch (error) {
@@ -283,6 +284,7 @@ export class WorkbookChangeAuditLog {
   }
 
   async clear(): Promise<void> {
+    this.clearGeneration += 1;
     this.pendingEntries = [];
 
     const settings = await this.dependencies.getSettingsStore();

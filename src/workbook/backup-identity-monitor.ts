@@ -16,6 +16,7 @@ const defaultScopeResolver = createRecoveryScopeResolver();
 export class BackupIdentityMonitor {
   private readonly dependencies: BackupIdentityMonitorDependencies;
   private lastObservedWorkbookId: string | null = null;
+  private checkInFlight: Promise<void> | null = null;
 
   constructor(dependencies: Pick<BackupIdentityMonitorDependencies, "rescopeBackups"> & Partial<BackupIdentityMonitorDependencies>) {
     this.dependencies = {
@@ -24,9 +25,18 @@ export class BackupIdentityMonitor {
     };
   }
 
-  async checkOnce(): Promise<void> {
+  checkOnce(signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.resolve();
+    if (this.checkInFlight) return this.checkInFlight;
+    this.checkInFlight = this.check(signal).finally(() => {
+      this.checkInFlight = null;
+    });
+    return this.checkInFlight;
+  }
+
+  private async check(signal?: AbortSignal): Promise<void> {
     const scope = await this.dependencies.resolveScope();
-    if (!scope) return;
+    if (!scope || signal?.aborted) return;
 
     const previous = this.lastObservedWorkbookId;
 
@@ -42,7 +52,7 @@ export class BackupIdentityMonitor {
         workbookLabel: scope.workbookLabel,
       });
     }
-    this.lastObservedWorkbookId = scope.workbookId;
+    if (!signal?.aborted) this.lastObservedWorkbookId = scope.workbookId;
   }
 }
 
@@ -52,10 +62,10 @@ export function startBackupIdentityPolling(args: {
 }): () => void {
   const intervalMs = args.intervalMs ?? DEFAULT_POLL_INTERVAL_MS;
 
-  let stopped = false;
+  const controller = new AbortController();
   const tick = () => {
-    if (stopped) return;
-    void args.monitor.checkOnce().catch((error) => {
+    if (controller.signal.aborted) return;
+    void args.monitor.checkOnce(controller.signal).catch((error) => {
       console.warn("[pi] Backup identity check failed:", error);
     });
   };
@@ -64,8 +74,8 @@ export function startBackupIdentityPolling(args: {
   const interval = setInterval(tick, intervalMs);
 
   return () => {
-    if (stopped) return;
-    stopped = true;
+    if (controller.signal.aborted) return;
+    controller.abort();
     clearInterval(interval);
   };
 }

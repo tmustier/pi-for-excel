@@ -24,7 +24,11 @@ function dispatchStorageEvent(type: string): void {
 }
 
 export class IndexedDBStorageBackend implements StorageBackend {
-  private dbPromise: Promise<IDBDatabase> | null = null;
+  private state:
+    | { kind: "unopened" }
+    | { kind: "opening"; promise: Promise<IDBDatabase> }
+    | { kind: "open"; db: IDBDatabase }
+    | { kind: "closed-for-upgrade" } = { kind: "unopened" };
   private readonly config: IndexedDBConfig;
 
   constructor(config: IndexedDBConfig) {
@@ -32,41 +36,51 @@ export class IndexedDBStorageBackend implements StorageBackend {
   }
 
   private async getDB(): Promise<IDBDatabase> {
-    if (!this.dbPromise) {
-      this.dbPromise = new Promise((resolve, reject) => {
-        const request = indexedDB.open(this.config.dbName, this.config.version);
-        request.onerror = () => reject(toIdbError(request.error));
-        request.onblocked = () => dispatchStorageEvent(STORAGE_UPGRADE_BLOCKED_EVENT);
-        request.onsuccess = () => {
-          const db = request.result;
-          db.onversionchange = () => {
-            db.close();
-            dispatchStorageEvent(STORAGE_VERSION_CHANGED_EVENT);
-          };
-          resolve(db);
+    if (this.state.kind === "closed-for-upgrade") throw new Error("Storage changed in another pane; reload required.");
+    if (this.state.kind === "open") return this.state.db;
+    if (this.state.kind === "opening") return this.state.promise;
+
+    const promise = new Promise<IDBDatabase>((resolve, reject) => {
+      const request = indexedDB.open(this.config.dbName, this.config.version);
+      request.onerror = () => reject(toIdbError(request.error));
+      request.onblocked = () => dispatchStorageEvent(STORAGE_UPGRADE_BLOCKED_EVENT);
+      request.onsuccess = () => {
+        const db = request.result;
+        db.onversionchange = () => {
+          db.close();
+          this.state = { kind: "closed-for-upgrade" };
+          dispatchStorageEvent(STORAGE_VERSION_CHANGED_EVENT);
         };
-        request.onupgradeneeded = () => {
-          const db = request.result;
-          for (const storeConfig of this.config.stores) {
-            if (db.objectStoreNames.contains(storeConfig.name)) continue;
+        resolve(db);
+      };
+      request.onupgradeneeded = () => {
+        const db = request.result;
+        for (const storeConfig of this.config.stores) {
+          if (db.objectStoreNames.contains(storeConfig.name)) continue;
 
-            const params: IDBObjectStoreParameters = {};
-            if (storeConfig.keyPath !== undefined) params.keyPath = storeConfig.keyPath;
-            if (storeConfig.autoIncrement !== undefined) {
-              params.autoIncrement = storeConfig.autoIncrement;
-            }
-            const store = db.createObjectStore(storeConfig.name, params);
-
-            for (const indexConfig of storeConfig.indices ?? []) {
-              const indexParams: IDBIndexParameters = {};
-              if (indexConfig.unique !== undefined) indexParams.unique = indexConfig.unique;
-              store.createIndex(indexConfig.name, indexConfig.keyPath, indexParams);
-            }
+          const params: IDBObjectStoreParameters = {};
+          if (storeConfig.keyPath !== undefined) params.keyPath = storeConfig.keyPath;
+          if (storeConfig.autoIncrement !== undefined) {
+            params.autoIncrement = storeConfig.autoIncrement;
           }
-        };
-      });
-    }
-    return this.dbPromise;
+          const store = db.createObjectStore(storeConfig.name, params);
+
+          for (const indexConfig of storeConfig.indices ?? []) {
+            const indexParams: IDBIndexParameters = {};
+            if (indexConfig.unique !== undefined) indexParams.unique = indexConfig.unique;
+            store.createIndex(indexConfig.name, indexConfig.keyPath, indexParams);
+          }
+        }
+      };
+    }).then((db) => {
+      this.state = { kind: "open", db };
+      return db;
+    }, (error) => {
+      this.state = { kind: "unopened" };
+      throw error;
+    });
+    this.state = { kind: "opening", promise };
+    return promise;
   }
 
   private promisifyRequest<T>(request: IDBRequest<T>): Promise<T> {
@@ -93,15 +107,15 @@ export class IndexedDBStorageBackend implements StorageBackend {
   }
 
   async set<T = unknown>(storeName: string, key: string, value: T): Promise<void> {
-    const db = await this.getDB();
-    const store = db.transaction(storeName, "readwrite").objectStore(storeName);
-    await this.putIntoStore(store, key, value);
+    await this.indexedTransaction([storeName], "readwrite", async (tx) => {
+      await this.putIntoStore(tx.objectStore(storeName), key, value);
+    });
   }
 
   async delete(storeName: string, key: string): Promise<void> {
-    const db = await this.getDB();
-    const store = db.transaction(storeName, "readwrite").objectStore(storeName);
-    await this.promisifyRequest(store.delete(key));
+    await this.indexedTransaction([storeName], "readwrite", async (tx) => {
+      await this.promisifyRequest(tx.objectStore(storeName).delete(key));
+    });
   }
 
   async keys(storeName: string, prefix?: string): Promise<string[]> {
@@ -141,9 +155,9 @@ export class IndexedDBStorageBackend implements StorageBackend {
   }
 
   async clear(storeName: string): Promise<void> {
-    const db = await this.getDB();
-    const store = db.transaction(storeName, "readwrite").objectStore(storeName);
-    await this.promisifyRequest(store.clear());
+    await this.indexedTransaction([storeName], "readwrite", async (tx) => {
+      await this.promisifyRequest(tx.objectStore(storeName).clear());
+    });
   }
 
   async has(storeName: string, key: string): Promise<boolean> {

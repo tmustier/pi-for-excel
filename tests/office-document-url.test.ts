@@ -68,3 +68,21 @@ void test("a stalled host with nothing known falls back to the static URL within
   assert.equal(await reader.read(), null);
   assert.ok(Date.now() - startedAt < 1000, "did not wait on the stalled host");
 });
+
+void test("an older live URL read cannot overwrite the latest-started observation", async () => {
+  let finishOld: ((url: string | null) => void) | undefined;
+  let calls = 0;
+  const reader = createOfficeDocumentUrlReader({
+    readStaticUrl: () => null,
+    readLiveUrl: () => {
+      calls += 1;
+      if (calls === 1) return new Promise((resolve) => { finishOld = resolve; });
+      return Promise.resolve(calls === 2 ? "/new.xlsx" : null);
+    },
+  });
+  const old = reader.read();
+  assert.equal(await reader.read(), "/new.xlsx");
+  finishOld?.("/old.xlsx");
+  await old;
+  assert.equal(await reader.read(), "/new.xlsx", "latest-started URL must remain cached");
+});

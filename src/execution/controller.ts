@@ -1,3 +1,4 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
 import {
   dispatchExecutionModeChanged,
   getStoredExecutionMode,
@@ -29,27 +30,35 @@ export async function createExecutionModeController(
   let mode = await getStoredExecutionMode(options.settings);
   const channel = options.channel === undefined ? defaultChannel() : options.channel;
 
-  const readMode = async (): Promise<ExecutionMode> => {
-    const stored = await getStoredExecutionMode(options.settings);
-    if (stored !== mode) {
-      mode = stored;
-      dispatchExecutionModeChanged(mode);
-    }
-    return mode;
+  const serialize = createConcurrencyLimit(1);
+  let generation = 0;
+
+  const readMode = (): Promise<ExecutionMode> => {
+    const currentGeneration = ++generation;
+    return serialize(async () => {
+      const stored = await getStoredExecutionMode(options.settings);
+      if (currentGeneration === generation && stored !== mode) {
+        mode = stored;
+        dispatchExecutionModeChanged(mode);
+      }
+      return mode;
+    });
   };
 
   channel?.addEventListener("message", () => {
     void readMode().catch(() => {});
   });
 
-  const applyMode = async (nextMode: ExecutionMode): Promise<void> => {
-    if (mode === nextMode) {
-      return;
-    }
-
-    mode = await setStoredExecutionMode(options.settings, nextMode);
-    dispatchExecutionModeChanged(mode);
-    channel?.postMessage(mode);
+  const applyMode = (nextMode: ExecutionMode): Promise<void> => {
+    const currentGeneration = ++generation;
+    return serialize(async () => {
+      const stored = await setStoredExecutionMode(options.settings, nextMode);
+      if (currentGeneration === generation) {
+        mode = stored;
+        dispatchExecutionModeChanged(mode);
+      }
+      channel?.postMessage(stored);
+    });
   };
 
   return {

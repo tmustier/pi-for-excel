@@ -105,3 +105,33 @@ void test("without a cryptographic token source no token is stored", async () =>
   assert.equal(doc.stored, undefined);
   assert.equal(doc.saveCalls, 0);
 });
+
+void test("read hides a saving token and concurrent ensure waits for durability", async () => {
+  const doc = createSettings();
+  let finishSave: ((result: { succeeded: boolean }) => void) | undefined;
+  doc.settings.saveAsync = (callback) => { finishSave = callback; };
+  const identity = createOfficeDocumentInstanceIdentity({
+    getSettings: () => doc.settings,
+    createToken: () => TOKEN_A,
+  });
+  const first = identity.ensure();
+  let joinedSettled = false;
+  const joined = identity.ensure().then((token) => { joinedSettled = true; return token; });
+  await Promise.resolve();
+  assert.equal(identity.read(), null, "unsaved identity must not be readable");
+  assert.equal(joinedSettled, false, "ensure must wait for the save callback");
+  finishSave?.({ succeeded: false });
+  assert.deepEqual(await Promise.all([first, joined]), [null, null]);
+  assert.equal(identity.read(), null);
+});
+
+void test("a synchronous Office save failure cannot leave an unsaved identity readable", async () => {
+  const doc = createSettings();
+  doc.settings.saveAsync = () => { throw new Error("save unavailable"); };
+  const identity = createOfficeDocumentInstanceIdentity({
+    getSettings: () => doc.settings,
+    createToken: () => TOKEN_A,
+  });
+  await assert.rejects(identity.ensure(), /save unavailable/u);
+  assert.equal(identity.read(), null, "failed synchronous saves must remove the unsaved token");
+});

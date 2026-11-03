@@ -119,10 +119,16 @@ export interface ChangeTrackerOptions {
   getPiWriteAddresses?: (toolCallIds: readonly string[]) => Promise<ReadonlyMap<string, readonly string[]>>;
 }
 
+type ChangeTrackerRegistrationState =
+  | { kind: "not-started" }
+  | { kind: "starting"; promise: Promise<void> }
+  | { kind: "started" }
+  | { kind: "failed"; cleanup: () => Promise<void> };
+
 export class ChangeTracker {
   private log: LoggedChange[] = [];
   private seq = 0;
-  private started = false;
+  private registration: ChangeTrackerRegistrationState = { kind: "not-started" };
   private readonly sheetNames = new Map<string, string>();
   private readonly writes: PiWrite[] = [];
   private readonly onStructureChange: () => void;
@@ -133,26 +139,45 @@ export class ChangeTracker {
     this.getPiWriteAddresses = options.getPiWriteAddresses ?? (() => Promise.resolve(new Map()));
   }
 
-  async start(): Promise<void> {
-    if (this.started) return;
-    this.started = true;
+  start(): Promise<void> {
+    if (this.registration.kind === "started") return Promise.resolve();
+    if (this.registration.kind === "starting") return this.registration.promise;
+    const cleanup = this.registration.kind === "failed" ? this.registration.cleanup : undefined;
+    const promise = this.registerListeners(cleanup).then((registration) => {
+      this.registration = registration;
+    });
+    this.registration = { kind: "starting", promise };
+    return promise;
+  }
 
+  private async registerListeners(
+    previousCleanup?: () => Promise<void>,
+  ): Promise<Exclude<ChangeTrackerRegistrationState, { kind: "starting" } | { kind: "not-started" }>> {
+    let cleanup = previousCleanup ?? (() => Promise.resolve());
+    const controller = new AbortController();
     try {
+      await previousCleanup?.();
       await excelRun(async (context) => {
         const sheets = context.workbook.worksheets;
         sheets.load("items/id,items/name");
         await context.sync();
+        if (controller.signal.aborted) return;
         for (const sheet of sheets.items) this.sheetNames.set(sheet.id, sheet.name);
 
-        sheets.onChanged.add((event) => this.handleChanged(event));
-        sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId));
-        sheets.onDeleted.add(() => this.structureChanged());
+        const registrations: Array<{ remove: () => void }> = [];
+        cleanup = () => Excel.run(context, async (cleanupContext) => {
+          for (const registration of registrations) registration.remove();
+          await cleanupContext.sync();
+        });
+        registrations.push(sheets.onChanged.add((event) => this.handleChanged(event)));
+        registrations.push(sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId)));
+        registrations.push(sheets.onDeleted.add(() => this.structureChanged()));
         await context.sync();
       });
     } catch (error) {
-      this.started = false;
+      controller.abort();
       console.warn("[change-tracker] Failed to register workbook listeners:", getErrorMessage(error));
-      return;
+      return { kind: "failed", cleanup };
     }
 
     try {
@@ -169,6 +194,7 @@ export class ChangeTracker {
     } catch (error) {
       console.warn("[change-tracker] Sheet rename/move/visibility events unavailable:", getErrorMessage(error));
     }
+    return { kind: "started" };
   }
 
   notePiWrite(window: PiWriteWindow, origin: PiWriteOrigin): void {
