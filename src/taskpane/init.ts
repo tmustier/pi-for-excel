@@ -838,7 +838,7 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
 
     const modelSignature = runtimeManager.listRuntimes()
-      .map((runtime) => `${runtime.runtimeId}:${runtime.agent.state.model.provider}/${runtime.agent.state.model.id}`)
+      .map((runtime) => `${runtime.runtimeId}:${runtime.agent.state.model.provider}/${runtime.agent.state.model.id}:${runtime.actionQueue.isBusy()}`)
       .join("|");
     if (modelSignature !== lastReconciledModelSignature) {
       lastReconciledModelSignature = modelSignature;
@@ -1413,8 +1413,6 @@ export async function initTaskpane(opts: {
       }
 
       if (ev.type !== "agent_end") return;
-
-      window.setTimeout(() => modelRefreshOwner.reconcileRuntimes(), 0);
 
       const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
       const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
