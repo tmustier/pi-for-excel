@@ -1,3 +1,4 @@
+import { mapWithConcurrency } from "../utils/concurrency.js";
 import { t } from "../language/index.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
@@ -527,15 +528,8 @@ export class FilesWorkspace {
       return;
     }
 
-    const deletedPaths: string[] = [];
-
-    for (const path of staleScratchPaths) {
-      try {
-        await backend.deleteFile(path);
-        deletedPaths.push(path);
-      } catch {
-      }
-    }
+    const deleted = await mapWithConcurrency(staleScratchPaths, 8, (path) => backend.deleteFile(path).then(() => true, () => false));
+    const deletedPaths = staleScratchPaths.filter((_, index) => deleted[index]);
 
     if (deletedPaths.length === 0) {
       return;
@@ -1042,16 +1036,17 @@ export class FilesWorkspace {
   async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
     const { activeBackend, workspaceBackend, nativeBackend } = await this.resolveSourceBackends();
 
-    const workspaceFiles = await workspaceBackend.listFiles();
+    const [workspaceFiles, nativeFiles] = await Promise.all([
+      workspaceBackend.listFiles(),
+      nativeBackend ? nativeBackend.listFiles() : [],
+    ]);
     const taggedWorkspaceFiles = await this.withWorkbookTags(workspaceFiles);
     const workspaceEntries = this.withLocationKind(taggedWorkspaceFiles, "workspace");
 
     const currentPaths = new Set(taggedWorkspaceFiles.map((file) => file.path));
     await this.pruneStaleWorkbookTags(currentPaths);
 
-    const nativeEntries = nativeBackend
-      ? this.withLocationKind(await nativeBackend.listFiles(), "native-directory")
-      : [];
+    const nativeEntries = this.withLocationKind(nativeFiles, "native-directory");
 
     const occupiedPaths = new Set([
       ...workspaceEntries.map((file) => file.path),

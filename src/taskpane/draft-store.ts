@@ -20,10 +20,12 @@ export function createDraftStore(settings: SettingsAccess): DraftStore {
   const write = async (sessionId: string, draft: string, held: readonly string[], attachments: readonly string[]): Promise<void> => {
     const draftKey = `${DRAFT_KEY_PREFIX}${sessionId}`;
     const heldKey = `${HELD_KEY_PREFIX}${sessionId}`;
-    await (draft.trim().length > 0 ? settings.set(draftKey, draft) : settings.delete(draftKey));
-    await (held.length > 0 ? settings.set(heldKey, [...held]) : settings.delete(heldKey));
     const attachmentsKey = `${ATTACHMENTS_KEY_PREFIX}${sessionId}`;
-    await (attachments.length > 0 ? settings.set(attachmentsKey, [...attachments]) : settings.delete(attachmentsKey));
+    await Promise.all([
+      draft.trim().length > 0 ? settings.set(draftKey, draft) : settings.delete(draftKey),
+      held.length > 0 ? settings.set(heldKey, [...held]) : settings.delete(heldKey),
+      attachments.length > 0 ? settings.set(attachmentsKey, [...attachments]) : settings.delete(attachmentsKey),
+    ]);
   };
 
   return {

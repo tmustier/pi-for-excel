@@ -219,8 +219,10 @@ import {
 } from "./runtime-utils.js";
 import { bindRuntimeSidebar } from "./runtime-sidebar-binding.js";
 import { doesOverlayClaimEscape } from "../utils/escape-guard.js";
+import { mapWithConcurrency } from "../utils/concurrency.js";
 
 const RUNTIME_SYSTEM_PROMPT_SECTION = "pi-for-excel-runtime";
+const RESTORE_TAB_CONCURRENCY = 4;
 
 export async function initTaskpane(opts: {
   appEl: HTMLElement;
@@ -251,25 +253,30 @@ export async function initTaskpane(opts: {
     (error: Error) => console.warn("[pi] Persistent storage request failed:", error),
   );
 
-  initLanguage(await readTaskpaneLanguage(settings));
+  const migrateLegacyConnectionStore = async (): Promise<void> => {
+    try {
+      await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
+    } catch (error) {
+      console.warn("[pi] Failed to migrate legacy web-search API keys:", error);
+    }
 
-  await ensureDefaultProxyUrl(settings, spreadsheetHost.kind);
+    try {
+      await migrateLegacyMcpTokensToConnectionStore(settings);
+    } catch (error) {
+      console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
+    }
+  };
 
-  try {
-    await migrateLegacyWebSearchApiKeysToConnectionStore(settings);
-  } catch (error) {
-    console.warn("[pi] Failed to migrate legacy web-search API keys:", error);
-  }
+  const [language, proxySettings, autoCompactEnabled, executionModeController] = await Promise.all([
+    readTaskpaneLanguage(settings),
+    ensureDefaultProxyUrl(settings, spreadsheetHost.kind).then(() => readTaskpaneProxySettings(settings)),
+    readAutoCompactionEnabled(settings),
+    createExecutionModeController({ settings }),
+    migrateLegacyConnectionStore(),
+  ]);
+  initLanguage(language);
 
-  try {
-    await migrateLegacyMcpTokensToConnectionStore(settings);
-  } catch (error) {
-    console.warn("[pi] Failed to migrate legacy MCP bearer tokens:", error);
-  }
-
-  const autoCompactEnabled = await readAutoCompactionEnabled(settings);
-
-  if (needsRemoteProxyWarning(await readTaskpaneProxySettings(settings))) {
+  if (needsRemoteProxyWarning(proxySettings)) {
     showToast(t("init.securityWarning"));
   }
 
@@ -385,10 +392,6 @@ export async function initTaskpane(opts: {
     document.dispatchEvent(new CustomEvent("pi:status-update"));
   };
 
-  const executionModeController = await createExecutionModeController({
-    settings,
-  });
-
   const getExecutionMode = (): ExecutionMode => executionModeController.getMode();
 
   const setExecutionMode = async (mode: ExecutionMode): Promise<void> => {
@@ -416,40 +419,36 @@ export async function initTaskpane(opts: {
     sessionId: string;
     workbookId: string | null;
   }): Promise<string[]> => {
-    const configuredIntegrationIds = await resolveConfiguredIntegrationIds({
-      settings,
-      sessionId: args.sessionId,
-      workbookId: args.workbookId,
-      knownIntegrationIds: INTEGRATION_IDS,
-    });
-
-    const externalToolsEnabled = await getExternalToolsEnabled(settings);
+    const [configuredIntegrationIds, externalToolsEnabled] = await Promise.all([
+      resolveConfiguredIntegrationIds({
+        settings,
+        sessionId: args.sessionId,
+        workbookId: args.workbookId,
+        knownIntegrationIds: INTEGRATION_IDS,
+      }),
+      getExternalToolsEnabled(settings),
+    ]);
     return externalToolsEnabled ? configuredIntegrationIds : [];
   };
 
   const resolveAvailableSkills = async () => {
     const bundledSkills = listAgentSkills();
-
-    let mergedSkills = bundledSkills;
-
-    try {
-      const discoverableSkills = await loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace());
-      mergedSkills = mergeAgentSkillDefinitions(bundledSkills, discoverableSkills);
-    } catch (error) {
-      console.warn("[skills] Failed to load discoverable workspace skills:", error);
-    }
-
-    try {
-      const disabledSkillNames = await loadDisabledSkillNamesFromSettings(settings);
-      const enabledSkills = filterAgentSkillsByEnabledState({
-        skills: mergedSkills,
-        disabledSkillNames,
-      });
-      return buildAgentSkillPromptEntries(enabledSkills);
-    } catch (error) {
-      console.warn("[skills] Failed to load skill activation state:", error);
-      return buildAgentSkillPromptEntries(mergedSkills);
-    }
+    const [discoverableSkills, disabledSkillNames] = await Promise.all([
+      loadDiscoverableAgentSkillsFromWorkspace(getFilesWorkspace()).catch((error: unknown) => {
+        console.warn("[skills] Failed to load discoverable workspace skills:", error);
+        return null;
+      }),
+      loadDisabledSkillNamesFromSettings(settings).catch((error: unknown) => {
+        console.warn("[skills] Failed to load skill activation state:", error);
+        return null;
+      }),
+    ]);
+    const mergedSkills = discoverableSkills
+      ? mergeAgentSkillDefinitions(bundledSkills, discoverableSkills)
+      : bundledSkills;
+    return buildAgentSkillPromptEntries(disabledSkillNames
+      ? filterAgentSkillsByEnabledState({ skills: mergedSkills, disabledSkillNames })
+      : mergedSkills);
   };
 
   let localServicesSnapshot: LocalServiceEntry[] = [];
@@ -460,16 +459,21 @@ export async function initTaskpane(opts: {
     activeIntegrationIds: readonly string[];
     requiredConnectionIds: readonly string[];
   }): Promise<string> => {
-    await localServicesReady;
-
-    const availableSkills = await resolveAvailableSkills();
-    const activeConnections = await connectionManager.listPromptEntries(args.requiredConnectionIds);
+    const rules = Promise.all([
+      getUserRules(settings),
+      getWorkbookRules(settings, args.workbookId),
+      getResolvedConventions(settings),
+    ]);
+    rules.catch(() => {});
+    const [availableSkills, activeConnections] = await Promise.all([
+      resolveAvailableSkills(),
+      connectionManager.listPromptEntries(args.requiredConnectionIds),
+      localServicesReady,
+    ]);
 
     try {
-      const userRules = await getUserRules(settings);
-      const workbookRules = await getWorkbookRules(settings, args.workbookId);
+      const [userRules, workbookRules, conventions] = await rules;
       setRulesActive(hasAnyRules({ userRules, workbookRules }));
-      const conventions = await getResolvedConventions(settings);
       const activeIntegrations = buildIntegrationPromptEntries(args.activeIntegrationIds);
       return buildSystemPrompt({
         userInstructions: userRules,
@@ -1035,17 +1039,18 @@ export async function initTaskpane(opts: {
       systemPrompt: string;
       extensionToolRevision: number;
     }> => {
-      const workbookId = await resolveWorkbookId();
-      let activeIntegrationIds = await resolveRuntimeIntegrationIds({
-        sessionId,
-        workbookId,
-      });
       const model = modelRuntime.models.getModel(
         runtimeAgent?.state.model.provider ?? initialModel.provider,
         runtimeAgent?.state.model.id ?? initialModel.id,
       ) ?? initialModel;
-      const searchConfig = await loadWebSearchProviderConfig(settings);
-      const nativeAvailable = supportsNativeWebSearch(model) && Boolean(await providerKeys.get(model.provider));
+      const workbookIdPromise = resolveWorkbookId();
+      const [workbookId, configuredIntegrationIds, searchConfig, nativeAvailable] = await Promise.all([
+        workbookIdPromise,
+        workbookIdPromise.then((workbookId) => resolveRuntimeIntegrationIds({ sessionId, workbookId })),
+        loadWebSearchProviderConfig(settings),
+        supportsNativeWebSearch(model) ? providerKeys.get(model.provider).then(Boolean) : false,
+      ]);
+      let activeIntegrationIds = configuredIntegrationIds;
       if (!nativeAvailable && !getApiKeyForProvider(searchConfig) && !getApiKeyForProvider(searchConfig, "jina")) {
         activeIntegrationIds = activeIntegrationIds.filter((id) => id !== "web_search");
       }
@@ -1505,41 +1510,30 @@ export async function initTaskpane(opts: {
     if (!savedLayout) return null;
 
     runtimeManager.seedNextTabNumber(savedLayout.nextTabNumber ?? 1);
-    const runtimesBySessionId = new Map<string, SessionRuntime>();
-    let firstRuntime: SessionRuntime | null = null;
-
-    for (const sessionId of savedLayout.sessionIds) {
+    const restoredTabs = await mapWithConcurrency(savedLayout.sessionIds, RESTORE_TAB_CONCURRENCY, async (sessionId) => {
       const tabNumber = savedLayout.tabNumbers?.[sessionId];
-      const runtime = await runtimeManager.createRuntime({
-        activate: false,
-        autoRestoreLatest: false,
-        sessionId,
-        ...(tabNumber !== undefined ? { tabNumber } : {}),
-      });
+      const tabNumberOption = tabNumber !== undefined ? { tabNumber } : {};
+      const [runtime, sessionData] = await Promise.all([
+        buildSessionRuntime({ activate: false, autoRestoreLatest: false, sessionId, ...tabNumberOption }),
+        sessions.loadSession(sessionId),
+      ]);
+      return { sessionId, runtime, sessionData, tabNumberOption };
+    });
 
-      const sessionData = await sessions.loadSession(sessionId);
-      if (sessionData) {
-        await runtime.persistence.applyLoadedSession(sessionData);
-      } else {
-        await runtime.persistence.saveSession({ force: true });
-      }
-
-      if (!firstRuntime) {
-        firstRuntime = runtime;
-      }
-
-      if (!runtimesBySessionId.has(sessionId)) {
-        runtimesBySessionId.set(sessionId, runtime);
-      }
+    for (const { runtime, tabNumberOption } of restoredTabs) {
+      runtimeManager.registerRuntime(runtime, { activate: false, ...tabNumberOption });
     }
 
+    for (const { runtime, sessionData } of restoredTabs) {
+      if (sessionData) await runtime.persistence.applyLoadedSession(sessionData);
+      else await runtime.persistence.saveSession({ force: true });
+    }
+
+    const firstRuntime = restoredTabs[0]?.runtime;
     if (!firstRuntime) return null;
 
-    const preferredActiveRuntime = savedLayout.activeSessionId
-      ? runtimesBySessionId.get(savedLayout.activeSessionId) ?? null
-      : null;
-
-    const nextActiveRuntime = preferredActiveRuntime ?? firstRuntime;
+    const nextActiveRuntime = restoredTabs.find((tab) => tab.sessionId === savedLayout.activeSessionId)?.runtime
+      ?? firstRuntime;
     runtimeManager.switchRuntime(nextActiveRuntime.runtimeId);
     return nextActiveRuntime;
   };
@@ -2242,9 +2236,8 @@ export async function initTaskpane(opts: {
             workbookLabel: formatWorkbookLabel(await resolveWorkbookContext()),
           });
         }
-        for (const tab of runtimeManager.snapshotTabs()) {
-          await moveSessionToWorkbook(settings, tab.sessionId, from, to);
-        }
+        await Promise.all(runtimeManager.snapshotTabs()
+          .map((tab) => moveSessionToWorkbook(settings, tab.sessionId, from, to)));
         maybePersistTabLayout();
         if (recentlyClosedWritable) await saveRecentlyClosed(settings, to, recentlyClosed.snapshot());
         await tabLayoutPersistence.flush();

@@ -15,7 +15,7 @@ import {
   CHECKPOINT_SKIPPED_REASON,
 } from "./recovery-metadata.js";
 import { describeExcelFailure, parseExcelError, unchangedClause } from "./mutation/excel-failure.js";
-import { finalizeMutationOperation, finalizeMutationRecoveryStep } from "./mutation/finalize.js";
+import { finalizeMutationOperation } from "./mutation/finalize.js";
 import { appendMutationResultNote } from "./mutation/result-note.js";
 import type { MutationFinalizeDependencies } from "./mutation/types.js";
 import type { BorderWeight, CellStyle, ResolvedCellStyle } from "../conventions/index.js";
@@ -574,26 +574,6 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
           ? CHECKPOINT_SKIPPED_REASON
           : (checkpointCapture.reason ?? CHECKPOINT_SKIPPED_REASON);
 
-        await finalizeMutationRecoveryStep({
-          result: toolResult,
-          appendRecoverySnapshot: () => {
-            if (!checkpointCapture.supported || !checkpointCapture.state) {
-              return Promise.resolve(null);
-            }
-
-            return getWorkbookRecoveryLog().appendFormatCells({
-              ...recoveryTurn(attribution, toolCallId),
-              toolName: "format_cells",
-              toolCallId,
-              address: fullAddr,
-              changedCount: result.cellCount,
-              formatRangeState: checkpointCapture.state,
-            });
-          },
-          appendResultNote: appendMutationResultNote,
-          unavailableReason: recoveryUnavailableReason,
-        });
-
         await finalizeMutationOperation(mutationFinalizeDependencies, {
           auditEntry: {
             toolName: "format_cells",
@@ -604,6 +584,25 @@ export function createFormatCellsTool(attribution: RecoveryAttribution = {}): Ag
             changes: [],
             summary: `formatted ${result.cellCount} cell(s)` +
               (result.warnings.length > 0 ? ` with ${result.warnings.length} warning(s)` : ""),
+          },
+          recovery: {
+            result: toolResult,
+            appendRecoverySnapshot: () => {
+              if (!checkpointCapture.supported || !checkpointCapture.state) {
+                return Promise.resolve(null);
+              }
+
+              return getWorkbookRecoveryLog().appendFormatCells({
+                ...recoveryTurn(attribution, toolCallId),
+                toolName: "format_cells",
+                toolCallId,
+                address: fullAddr,
+                changedCount: result.cellCount,
+                formatRangeState: checkpointCapture.state,
+              });
+            },
+            appendResultNote: appendMutationResultNote,
+            unavailableReason: recoveryUnavailableReason,
           },
         });
 

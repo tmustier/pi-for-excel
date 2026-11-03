@@ -265,10 +265,14 @@ export function createSearchWorkbookTool(): AgentTool<typeof schema> {
             throw new Error(`Sheet "${params.sheet}" not found. Sheets in this workbook: ${names}.`);
           }
 
-          sheetLoop: for (const sheet of targetSheets) {
+          const targetRanges = targetSheets.map((sheet) => {
             const used = sheet.getUsedRangeOrNullObject(true);
             used.load("rowIndex,columnIndex,rowCount,columnCount");
-            await context.sync();
+            return { sheet, used };
+          });
+          await context.sync();
+
+          sheetLoop: for (const { sheet, used } of targetRanges) {
             if (used.isNullObject) continue;
 
             let chunkRows = Math.max(1, Math.floor(SEARCH_CHUNK_CELLS / used.columnCount));

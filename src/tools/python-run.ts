@@ -223,14 +223,16 @@ export async function getDefaultPythonBridgeConfig(): Promise<PythonBridgeConfig
   try {
     const settings = await getSettingsStore();
 
-    const urlValue = await settings.get(PYTHON_BRIDGE_URL_SETTING_KEY);
+    const [urlValue, tokenValue] = await Promise.all([
+      settings.get(PYTHON_BRIDGE_URL_SETTING_KEY),
+      settings.get(PYTHON_BRIDGE_TOKEN_SETTING_KEY).catch(() => null),
+    ]);
     const configuredUrl = typeof urlValue === "string" ? urlValue.trim() : "";
     if (configuredUrl.length > 0) {
       rawUrl = configuredUrl;
       configured = true;
     }
 
-    const tokenValue = await settings.get(PYTHON_BRIDGE_TOKEN_SETTING_KEY);
     token = typeof tokenValue === "string" && tokenValue.trim().length > 0
       ? tokenValue.trim()
       : undefined;

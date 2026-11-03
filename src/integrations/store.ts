@@ -173,15 +173,15 @@ export async function resolveConfiguredIntegrationIds(args: {
 }): Promise<string[]> {
   const { settings, sessionId, workbookId, knownIntegrationIds } = args;
 
-  const sessionIntegrationIds = await getSessionIntegrationIds(
-    settings,
-    sessionId,
-    knownIntegrationIds,
-    { applyDefaultsWhenUnconfigured: workbookId === null },
-  );
-  const workbookIntegrationIds = workbookId
-    ? await getWorkbookIntegrationIds(settings, workbookId, knownIntegrationIds)
-    : [];
+  const [sessionIntegrationIds, workbookIntegrationIds] = await Promise.all([
+    getSessionIntegrationIds(
+      settings,
+      sessionId,
+      knownIntegrationIds,
+      { applyDefaultsWhenUnconfigured: workbookId === null },
+    ),
+    workbookId ? getWorkbookIntegrationIds(settings, workbookId, knownIntegrationIds) : [],
+  ]);
 
   const enabledSet = new Set<string>([...workbookIntegrationIds, ...sessionIntegrationIds]);
 

@@ -18,18 +18,14 @@ export async function finalizeMutationOperation<TDetails extends MutationResultD
   dependencies: MutationFinalizeDependencies,
   operation: MutationFinalizeOperation<TDetails>,
 ): Promise<MutationFinalizeRecoveryResult | null> {
-  try {
-    await dependencies.appendAuditEntry(operation.auditEntry);
-  } catch {
+  const auditAppended = dependencies.appendAuditEntry(operation.auditEntry).catch(() => {
     console.warn("[pi] Failed to append workbook mutation audit entry.");
-  }
-
-  const recovery = operation.recovery;
-  if (!recovery) {
-    return null;
-  }
-
-  return finalizeMutationRecoveryStep(recovery);
+  });
+  const [, recovery] = await Promise.all([
+    auditAppended,
+    operation.recovery ? finalizeMutationRecoveryStep(operation.recovery) : null,
+  ]);
+  return recovery;
 }
 
 export async function finalizeMutationRecoveryStep<TDetails extends MutationResultDetails>(

@@ -91,12 +91,17 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
   async function collectNotes(messages: readonly AgentMessage[]): Promise<AutoContextMessage[]> {
     const notes: AutoContextMessage[] = [];
     const compacted = messages.some((message) => message.role === "compactionSummary");
-    const workbookId = await attempt("workbook identity", loadWorkbookId, WORKBOOK_ID_TIMEOUT_MS);
     const midTurn = messages.length > 0 && !isPrompt(messages[messages.length - 1]);
     const deferStructure = midTurn && ownStructureChangePending;
     if (!midTurn) ownStructureChangePending = false;
 
-    const blueprint = await attempt("workbook blueprint", () => loadBlueprint(workbookId), BLUEPRINT_TIMEOUT_MS);
+    const workbookIdPromise = attempt("workbook identity", loadWorkbookId, WORKBOOK_ID_TIMEOUT_MS);
+    const [workbookId, blueprint, files, changes] = await Promise.all([
+      workbookIdPromise,
+      workbookIdPromise.then((id) => attempt("workbook blueprint", () => loadBlueprint(id), BLUEPRINT_TIMEOUT_MS)),
+      workbookIdPromise.then((id) => attempt("Files workspace summary", () => loadFilesSummary(id), FILES_TIMEOUT_MS)),
+      sources.changeTracker.describeSince(changeCursor, sources.runtimeId),
+    ]);
     if (blueprint && blueprint.trim().length > 0) {
       const key = `${workbookId ?? "unknown"}:${hashText(blueprint)}`;
       const last = latestNote(messages, "workbook");
@@ -112,7 +117,6 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
       }
     }
 
-    const files = await attempt("Files workspace summary", () => loadFilesSummary(workbookId), FILES_TIMEOUT_MS);
     if (files) {
       const last = latestNote(messages, "files");
       let reason: string | null = null;
@@ -123,7 +127,6 @@ export function createAutoContext(sources: AutoContextSources): AutoContext {
       }
     }
 
-    const changes = await sources.changeTracker.describeSince(changeCursor, sources.runtimeId);
     changeCursor = changes.cursor;
     if (changes.text) notes.push(note("changes", changes.text));
 

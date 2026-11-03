@@ -1,3 +1,4 @@
+import { createConcurrencyLimit, type ConcurrencyLimit } from "../utils/concurrency.js";
 import { t } from "../language/index.js";
 import { base64ToBytes, bytesToBase64, decodeTextUtf8, encodeTextUtf8 } from "./encoding.js";
 import { inferFileKind, inferMimeType } from "./mime.js";
@@ -115,29 +116,26 @@ async function removeFileHandle(root: FileSystemDirectoryHandle, path: string): 
   await parent.removeEntry(fileName, { recursive: false });
 }
 
-async function listDirectoryRecursively(args: {
-  root: FileSystemDirectoryHandle;
-  pathPrefix: string;
-  out: WorkspaceFileEntry[];
-}): Promise<void> {
-  for await (const [name, handle] of args.root.entries()) {
-    const path = args.pathPrefix.length > 0 ? `${args.pathPrefix}/${name}` : name;
-
-    if (handle.kind === "file") {
-      const file = await handle.getFile();
-      args.out.push(mapFileToEntry(path, file));
-      continue;
+async function listDirectoryRecursively(
+  root: FileSystemDirectoryHandle,
+  limit: ConcurrencyLimit = createConcurrencyLimit(LIST_FILES_CONCURRENCY),
+  pathPrefix = "",
+): Promise<WorkspaceFileEntry[]> {
+  const children = await limit(async () => {
+    const entries: { path: string; handle: FileSystemFileHandle | FileSystemDirectoryHandle }[] = [];
+    for await (const [name, handle] of root.entries()) {
+      entries.push({ path: pathPrefix.length > 0 ? `${pathPrefix}/${name}` : name, handle });
     }
+    return entries;
+  });
 
-    if (handle.kind === "directory") {
-      await listDirectoryRecursively({
-        root: handle,
-        pathPrefix: path,
-        out: args.out,
-      });
-    }
-  }
+  const listed = await Promise.all(children.map(async ({ path, handle }) => handle.kind === "file"
+    ? [mapFileToEntry(path, await limit(() => handle.getFile()))]
+    : listDirectoryRecursively(handle, limit, path)));
+  return listed.flat();
 }
+
+const LIST_FILES_CONCURRENCY = 8;
 
 function sortEntries(entries: WorkspaceFileEntry[]): WorkspaceFileEntry[] {
   return entries.sort((a, b) => a.path.localeCompare(b.path));
@@ -154,14 +152,7 @@ export class NativeDirectoryBackend implements WorkspaceBackend {
   }
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
-    const out: WorkspaceFileEntry[] = [];
-    await listDirectoryRecursively({
-      root: this.root,
-      pathPrefix: "",
-      out,
-    });
-
-    return sortEntries(out);
+    return sortEntries(await listDirectoryRecursively(this.root));
   }
 
   async readFile(path: string): Promise<WorkspaceFileReadResult> {
@@ -231,16 +222,7 @@ export class OpfsBackend implements WorkspaceBackend {
   readonly label = t("files-backend.sandboxedWorkspace");
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
-    const root = await getOpfsRoot();
-    const out: WorkspaceFileEntry[] = [];
-
-    await listDirectoryRecursively({
-      root,
-      pathPrefix: "",
-      out,
-    });
-
-    return sortEntries(out);
+    return sortEntries(await listDirectoryRecursively(await getOpfsRoot()));
   }
 
   async readFile(path: string): Promise<WorkspaceFileReadResult> {
