@@ -77,6 +77,7 @@ function formatBytes(bytes: number): string {
 export interface ManualFullBackupSummary {
   id: string;
   sizeBytes: number;
+  kept: boolean;
 }
 
 export interface BackupsPageCallbacks {
@@ -159,7 +160,10 @@ async function renderBackupsContent(
         statusText.textContent = t("recovery.capturing");
         try {
           const backup = await createManualFullBackup();
-          showToast(t("recovery.toast.backupDownloaded", { id: backup.id, size: formatBytes(backup.sizeBytes) }));
+          const size = formatBytes(backup.sizeBytes);
+          showToast(backup.kept
+            ? t("recovery.toast.backupDownloaded", { id: backup.id, size })
+            : t("recovery.toast.backupDownloadedNotKept", { id: backup.id, size }));
           renderList();
         } catch (error) {
           const message = error instanceof Error ? error.message : "Unknown error";

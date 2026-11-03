@@ -107,7 +107,7 @@ void test("command-layer contract: workspace commands complete, preserve failure
     openRecoveryDialog: () => Promise.resolve(),
     reopenLastClosed: () => Promise.resolve(),
     revertLatestCheckpoint: () => Promise.resolve(),
-    createManualFullBackup: () => Promise.resolve({ id: "backup", createdAt: 0, sizeBytes: 0 }),
+    createManualFullBackup: () => Promise.resolve({ id: "backup", createdAt: 0, sizeBytes: 0, kept: true }),
     listManualFullBackups: () => Promise.resolve([]),
     restoreManualFullBackup: () => Promise.resolve(null),
     clearManualFullBackups: () => Promise.resolve(0),
@@ -310,7 +310,7 @@ void test("command-layer contract: recovery commands expose completion, errors, 
         throw new Error("backup disk unavailable");
       }
       createBackupCount += 1;
-      return { id: "backup-created", createdAt: 1, sizeBytes: 2048 };
+      return { id: "backup-created", createdAt: 1, sizeBytes: 2048, kept: true };
     },
     listManualFullBackups: () => Promise.resolve([]),
     restoreManualFullBackup: async (backupId) => {

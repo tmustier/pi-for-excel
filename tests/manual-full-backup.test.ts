@@ -34,9 +34,13 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[], workbookId:
   store: ManualFullWorkbookBackupStore;
   downloads: string[];
   deletes: string[];
+  writes: string[];
+  saved: { fileName: string; type: string; bytes: number[] }[];
 } {
   const downloads: string[] = [];
   const deletes: string[] = [];
+  const writes: string[] = [];
+  const saved: { fileName: string; type: string; bytes: number[] }[] = [];
 
   const store = new ManualFullWorkbookBackupStore({
     getWorkbookContext: (): Promise<WorkbookContext> => Promise.resolve({
@@ -46,7 +50,10 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[], workbookId:
     }),
     getWorkspace: () => ({
       listFiles: () => Promise.resolve(files),
-      writeBase64File: () => Promise.resolve(),
+      writeBase64File: (path: string) => {
+        writes.push(path);
+        return Promise.resolve();
+      },
       beginDownload: () => ({
         download: (path: string) => {
           downloads.push(path);
@@ -60,11 +67,14 @@ function createManualBackupStoreForTest(files: WorkspaceFileEntry[], workbookId:
       },
     }),
     captureWorkbookBytes: () => Promise.resolve(new Uint8Array([1])),
+    saveFile: (file: Blob, fileName: string) => {
+      void file.arrayBuffer().then((buffer) => saved.push({ fileName, type: file.type, bytes: [...new Uint8Array(buffer)] }));
+    },
     now: () => 0,
     createSuffix: () => "suffix",
   });
 
-  return { store, downloads, deletes };
+  return { store, downloads, deletes, writes, saved };
 }
 
 void test("manual backup creates a downloadable copy of the current Office workbook", async () => {
@@ -132,9 +142,9 @@ void test("manual backup creates a downloadable copy of the current Office workb
 
     assert.deepEqual(created, {
       id: "2023-11-14T22-13-20-000Z_workbook.xlsx_office",
-      path: "manual-backups/full-workbook/v1/wb-1/2023-11-14T22-13-20-000Z_workbook.xlsx_office.xlsx",
       createdAt: 1_700_000_000_000,
       sizeBytes: 2,
+      kept: true,
     });
     assert.equal(
       writtenFiles.get("manual-backups/full-workbook/v1/wb-1/2023-11-14T22-13-20-000Z_workbook.xlsx_office.xlsx"),
@@ -220,4 +230,68 @@ void test("clearing manual backups checks identity and counts before asking", as
   assert.equal(await declined.store.clearForCurrentWorkbook(confirm), 0);
   assert.deepEqual(asked, [3]);
   assert.deepEqual(declined.deletes, []);
+});
+
+void test("a backup of a workbook Pi cannot identify is downloaded but not kept", async () => {
+  const { store, downloads, writes, saved } = createManualBackupStoreForTest([], null);
+  let captures = 0;
+
+  const created = await store.createAndDownload({
+    runCapture: (capture) => {
+      captures += 1;
+      return capture();
+    },
+  });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  assert.deepEqual(created, { id: "1970-01-01T00-00-00-000Z_workbook.xlsx_suffix", createdAt: 0, sizeBytes: 1, kept: false });
+  assert.equal(captures, 1);
+  assert.deepEqual(saved, [{
+    fileName: "1970-01-01T00-00-00-000Z_workbook.xlsx_suffix.xlsx",
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    bytes: [1],
+  }]);
+  assert.deepEqual(writes, []);
+  assert.deepEqual(downloads, []);
+  assert.deepEqual(await store.listForCurrentWorkbook(), []);
+});
+
+void test("a backup reads the workbook identity once it holds the workbook lock", async () => {
+  let context: WorkbookContext = { workbookId: "wb-old", workbookName: "Old.xlsx", source: "document.url" };
+  const writes: string[] = [];
+  const downloads: string[] = [];
+  const store = new ManualFullWorkbookBackupStore({
+    getWorkbookContext: () => Promise.resolve(context),
+    getWorkspace: () => ({
+      listFiles: () => Promise.resolve([]),
+      writeBase64File: (path: string) => {
+        writes.push(path);
+        return Promise.resolve();
+      },
+      beginDownload: () => ({
+        download: (path: string) => {
+          downloads.push(path);
+          return Promise.resolve();
+        },
+        cancel: () => {},
+      }),
+      deleteFile: () => Promise.resolve(),
+    }),
+    captureWorkbookBytes: () => Promise.resolve(new Uint8Array([1])),
+    saveFile: () => assert.fail("an identified workbook is kept, not saved directly"),
+    now: () => 0,
+    createSuffix: () => "suffix",
+  });
+
+  const created = await store.createAndDownload({
+    runCapture: (capture) => {
+      context = { workbookId: "wb-new", workbookName: "New.xlsx", source: "document.url" };
+      return capture();
+    },
+  });
+
+  const path = "manual-backups/full-workbook/v1/wb-new/1970-01-01T00-00-00-000Z_new.xlsx_suffix.xlsx";
+  assert.deepEqual(created, { id: "1970-01-01T00-00-00-000Z_new.xlsx_suffix", createdAt: 0, sizeBytes: 1, kept: true });
+  assert.deepEqual(writes, [path]);
+  assert.deepEqual(downloads, [path]);
 });
