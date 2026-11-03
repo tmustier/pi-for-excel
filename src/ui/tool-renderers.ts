@@ -970,8 +970,8 @@ const TOOL_DESCRIPTION_HANDLERS = {
     return toolDescWithAddress(label, range ? compactRange(range) + (mode === "csv" ? " (CSV)" : "") : "range", range);
   },
   get_workbook_overview: ({ params }) => ({
-    action: t("tools.action.overview"),
-    detail: (params.sheet as string | undefined) ?? "",
+    action: "Overview",
+    detail: (params.sheet as string | undefined) ?? t("tool-card.overview.workbook"),
   }),
   write_cells: describeWriteCells,
   fill_formula: describeFillFormula,
@@ -985,11 +985,12 @@ const TOOL_DESCRIPTION_HANDLERS = {
       resolved,
     );
   },
-  conditional_format: ({ details, range }) => toolDescWithAddress(
-    "Cond. format",
-    (range ? compactRange(range) : "cells") + recoveryBadgeForDetails(details),
-    range,
-  ),
+  conditional_format: ({ details, params, range }) => {
+    const target = (range ? compactRange(range) : "cells") + recoveryBadgeForDetails(details);
+    return params.action === "clear"
+      ? toolDescWithAddress("Clear", t("tool-card.conditionalFormat.clear", { target }), range)
+      : toolDescWithAddress("Cond. format", target, range);
+  },
   modify_structure: describeModifyStructure,
   search_workbook: ({ params, resultText }) => {
     const summary = resultText ? resultSummary(resultText) : null;
@@ -1031,7 +1032,7 @@ const TOOL_DESCRIPTION_HANDLERS = {
   files: ({ params }) => {
     const action = params.action as string | undefined;
     const path = params.path as string | undefined;
-    if (action === "list") return { action: "Files", detail: "list" };
+    if (action === "list") return { action: "Files", detail: "" };
     if (action === "read") return { action: "Read file", detail: path ?? "path" };
     if (action === "write") return { action: "Write file", detail: path ?? "path" };
     if (action === "delete") return { action: "Delete file", detail: path ?? "path" };
@@ -1046,14 +1047,14 @@ const TOOL_DESCRIPTION_HANDLERS = {
     }
     if (action === "reload") return { action: "Reload extension", detail: target ?? "extension" };
     if (action === "uninstall") return { action: "Uninstall extension", detail: target ?? "extension" };
-    return { action: "Extensions", detail: "list" };
+    return { action: "Extensions", detail: "" };
   },
   execute_office_js: ({ params }) => ({
-    action: t("tools.action.runOfficeJs"),
+    action: "Run Office.js",
     detail: (params.explanation as string | undefined) ?? "code",
   }),
   execute_wps_js: ({ params }) => ({
-    action: t("tools.action.runWpsJs"),
+    action: "Run WPS JSAPI",
     detail: (params.explanation as string | undefined) ?? "code",
   }),
 } satisfies Record<SupportedToolName, ToolDescriptionHandler>;

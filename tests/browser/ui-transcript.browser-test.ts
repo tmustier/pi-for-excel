@@ -427,6 +427,8 @@ for (const { name, language, toolName, args, sentence, button } of [
     sentence: "Delete chart 'Sales'", button: "Delete" },
   { name: "conditional format", language: "en", toolName: "conditional_format", args: { action: "add", range: "Sheet1!A1:A5", type: "cell_value", operator: "GreaterThan", value: 10, fill_color: "#FFC7CE" },
     sentence: "Conditionally format Sheet1!A1:A5", button: "Conditionally format" },
+  { name: "conditional format clear", language: "en", toolName: "conditional_format", args: { action: "clear", range: "Sheet1!A1:A5" },
+    sentence: "Clear conditional formats in Sheet1!A1:A5", button: "Clear" },
   { name: "Chinese chart delete", language: "zh-CN", toolName: "charts", args: { action: "delete", sheet: "Sheet1", name: "Sales" },
     sentence: "删除 图表“Sales”", button: "删除" },
   { name: "Chinese chart create", language: "zh-CN", toolName: "charts", args: { action: "create", sheet: "Sheet1", name: "Sales", source_range: "Sheet1!A1:B12" },
@@ -475,6 +477,38 @@ for (const { name, language, toolName, args, sentence, button } of [
     }
   });
 }
+
+void test("Chinese transcript rows conjugate overview and Office.js actions", async () => {
+  const opened = await openBrowserPage(env, { path: "src/ui-gallery.html", viewport });
+  const { page } = opened;
+  try {
+    await page.locator('[data-gallery="turn-changes"] message-list').waitFor();
+    await page.evaluate(async () => {
+      const languagePath = "/src/language/index.ts";
+      const { initLanguage } = await import(languagePath);
+      initLanguage("zh-CN");
+      const fauxPath = "/node_modules/@earendil-works/pi-ai/dist/providers/faux.js";
+      const { fauxAssistantMessage } = await import(fauxPath);
+      const list = document.querySelector('[data-gallery="turn-changes"] message-list');
+      const calls = [
+        { type: "toolCall", id: "overview", name: "get_workbook_overview", arguments: { sheet: "Sheet1" } },
+        { type: "toolCall", id: "office", name: "execute_office_js", arguments: { explanation: "Sum totals", code: "return 1;" } },
+      ];
+      list.messages = [
+        { role: "user", content: "Look", timestamp: 0 },
+        fauxAssistantMessage(calls, { stopReason: "toolUse" }),
+        ...calls.map((call) => ({ role: "toolResult", toolCallId: call.id, toolName: call.name,
+          content: [{ type: "text", text: "Done" }], isError: false, timestamp: 0 })),
+        fauxAssistantMessage("Done."),
+      ];
+    });
+    const group = page.locator('[data-gallery="turn-changes"] turn-group');
+    await group.locator(".pi-turn__header").click();
+    assert.deepEqual(await group.locator(".pi-turn-row__sentence").allInnerTexts(), ["已读取概览 Sheet1", "已运行 Office.js Sum totals"]);
+  } finally {
+    await opened.finish();
+  }
+});
 
 for (const source of ["audit", "backup"] as const) {
   void test(`transcript receipts distinguish chart and mixed changes from cells using ${source}`, async () => {
