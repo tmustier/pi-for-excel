@@ -346,3 +346,44 @@ void test("MCP refuses configuration changed while approval was open", async () 
   assert.equal((await pending).details.ok, false, "approval must not authorize a now-disabled server");
   assert.equal(calls, 0);
 });
+
+void test("MCP rechecks configuration after pending session rediscovery", async () => {
+  let approve = (_approved: boolean): void => {};
+  let approvalStarted = (): void => {};
+  const started = new Promise<void>((resolve) => { approvalStarted = resolve; });
+  const approval = new Promise<boolean>((resolve) => { approve = resolve; });
+  let discoveryStarted = (): void => {};
+  const rediscovering = new Promise<void>((resolve) => { discoveryStarted = resolve; });
+  let releaseDiscovery = (): void => {};
+  const discoveryGate = new Promise<void>((resolve) => { releaseDiscovery = resolve; });
+  let enabled = true;
+  let discoveries = 0;
+  let calls = 0;
+  const tool = createMcpTool({
+    getRuntimeConfig: () => Promise.resolve({ servers: [{ ...TEST_SERVER, enabled }] }),
+    requestToolApproval: () => { approvalStarted(); return approval; },
+    callJsonRpc: async ({ method }) => {
+      if (method === "tools/list") {
+        discoveries += 1;
+        if (discoveries === 2) {
+          discoveryStarted();
+          await discoveryGate;
+        }
+        return { proxied: false, result: { result: { tools: [{ name: "echo" }] } } };
+      }
+      if (method === "tools/call") calls += 1;
+      return { proxied: false, result: { result: {} } };
+    },
+  });
+  const pending = tool.execute("pending", { tool: "echo" });
+  await started;
+  const refresh = tool.execute("refresh", { connect: "local" });
+  await rediscovering;
+  approve(true);
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  enabled = false;
+  releaseDiscovery();
+  await refresh;
+  assert.equal((await pending).details.ok, false, "rediscovery must not bypass a server disabled after approval");
+  assert.equal(calls, 0);
+});

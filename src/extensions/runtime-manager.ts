@@ -208,7 +208,7 @@ export class ExtensionRuntimeManager {
   private readonly commandOwners = new Map<string, LoadedExtensionState>();
 
   private entries: StoredExtensionEntry[] = [];
-  private initialization: { kind: "idle" } | { kind: "running"; promise: Promise<void> } | { kind: "ready" } = { kind: "idle" };
+  private initialization: Promise<void> | null = null;
   private extensionToolRevision = 0;
 
   constructor(options: ExtensionRuntimeManagerOptions) {
@@ -278,39 +278,30 @@ export class ExtensionRuntimeManager {
   }
 
   initialize(): Promise<void> {
-    if (this.initialization.kind === "ready") return Promise.resolve();
-    if (this.initialization.kind === "running") return this.initialization.promise;
-    const promise = this.initializeEntries().then(() => {
-      this.initialization = { kind: "ready" };
-    }, (error: unknown) => {
-      this.initialization = { kind: "idle" };
+    this.initialization ??= (async () => {
+      if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
+        const installedIds = await readIntactStoredExtensionIds(this.settings);
+        if (installedIds) {
+          await this.connectionManager.deleteStoredRecords((connectionId) =>
+            connectionId.startsWith("ext.")
+            && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
+        }
+        await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
+      }
+      this.entries = await loadStoredExtensions(this.settings);
+
+      for (const entry of this.entries) {
+        if (entry.enabled) {
+          await this.runLifecycle(entry.id, () => this.tryActivateEntry(entry));
+        }
+      }
+
+      this.notify();
+    })().catch((error: unknown) => {
+      this.initialization = null;
       throw error;
     });
-    this.initialization = { kind: "running", promise };
-    return promise;
-  }
-
-  private async initializeEntries(): Promise<void> {
-    if ((await this.settings.get(ORPHANED_CONNECTIONS_CLEANED_KEY)) !== true) {
-      const installedIds = await readIntactStoredExtensionIds(this.settings);
-      if (installedIds) {
-        await this.connectionManager.deleteStoredRecords((connectionId) =>
-          connectionId.startsWith("ext.")
-          && !installedIds.some((entryId) => isExtensionOwnedId(entryId, connectionId)));
-      }
-      await this.settings.set(ORPHANED_CONNECTIONS_CLEANED_KEY, true);
-    }
-    this.entries = await loadStoredExtensions(this.settings);
-
-    for (const entry of this.entries) {
-      if (!entry.enabled) {
-        continue;
-      }
-
-      await this.runLifecycle(entry.id, () => this.tryActivateEntry(entry));
-    }
-
-    this.notify();
+    return this.initialization;
   }
 
   async reloadExtension(entryId: string): Promise<void> {
@@ -378,8 +369,6 @@ export class ExtensionRuntimeManager {
       if (entry.enabled) {
         await this.deactivateEntry(entry.id);
         await this.tryActivateEntry(entry);
-        this.notify();
-        return;
       }
 
       this.notify();
@@ -388,8 +377,7 @@ export class ExtensionRuntimeManager {
 
   async uninstallExtension(entryId: string): Promise<void> {
     return this.runLifecycle(entryId, async () => {
-      const entryIndex = this.entries.findIndex((entry) => entry.id === entryId);
-      if (entryIndex < 0) {
+      if (!this.getEntryById(entryId)) {
         throw new Error("Extension not found");
       }
 
@@ -721,12 +709,6 @@ export class ExtensionRuntimeManager {
       }
     };
 
-    const validatePendingToolConnectionChecks = (): void => {
-      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks.entries()) {
-        assertToolConnectionOwnership(toolName, requiredConnectionIds);
-      }
-    };
-
     const assertModelProviderConnection = (definition: ExtensionModelProviderDefinition): void => {
       const connectionId = definition.connection;
       if (!connectionId) {
@@ -761,12 +743,6 @@ export class ExtensionRuntimeManager {
             `Model provider "${definition.id}" host "${host}" is not allowed by connection "${connectionId}".`,
           );
         }
-      }
-    };
-
-    const validatePendingModelProviderChecks = (): void => {
-      for (const definition of pendingModelProviderChecks.values()) {
-        assertModelProviderConnection(definition);
       }
     };
 
@@ -1057,8 +1033,12 @@ export class ExtensionRuntimeManager {
         state.handle = await this.loadExtensionFromSource(api, loadSource);
       }
 
-      validatePendingToolConnectionChecks();
-      validatePendingModelProviderChecks();
+      for (const [toolName, requiredConnectionIds] of pendingToolConnectionChecks) {
+        assertToolConnectionOwnership(toolName, requiredConnectionIds);
+      }
+      for (const definition of pendingModelProviderChecks.values()) {
+        assertModelProviderConnection(definition);
+      }
       pendingToolConnectionChecks.clear();
       pendingModelProviderChecks.clear();
 

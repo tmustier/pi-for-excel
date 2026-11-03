@@ -416,48 +416,46 @@ class SandboxRuntimeHost {
   }
 
   dispose(gracefulDeactivate: boolean): Promise<void> {
-    this.disposal ??= Promise.resolve().then(() => this.teardown(gracefulDeactivate));
+    this.disposal ??= Promise.resolve().then(async () => {
+      if (gracefulDeactivate) {
+        try {
+          await this.callSandbox("deactivate", {}, { allowWhenDisposed: true });
+        } catch (error) {
+          console.warn(`[pi] Sandbox deactivate failed: ${getErrorMessage(error)}`);
+        }
+      }
+
+      for (const unsubscribe of this.eventSubscriptions.values()) {
+        try {
+          unsubscribe();
+        } catch {
+        }
+      }
+      this.eventSubscriptions.clear();
+
+      for (const pending of this.pendingRequests.values()) {
+        clearTimeout(pending.timeoutId);
+        pending.reject(new Error("Sandbox runtime disposed before response."));
+      }
+      this.pendingRequests.clear();
+
+      this.overlayActionIds.clear();
+      this.widgetActionIdsByWidgetId.clear();
+
+      dismissOverlay();
+      if (this.widgetApiV2Enabled) {
+        clearExtensionWidgets(this.widgetOwnerId);
+      } else {
+        dismissWidget();
+      }
+
+      this.port?.removeEventListener("message", this.onPortMessage);
+      this.port?.close();
+      this.port = null;
+
+      this.iframe.remove();
+    });
     return this.disposal;
-  }
-
-  private async teardown(gracefulDeactivate: boolean): Promise<void> {
-    if (gracefulDeactivate) {
-      try {
-        await this.callSandbox("deactivate", {}, { allowWhenDisposed: true });
-      } catch (error) {
-        console.warn(`[pi] Sandbox deactivate failed: ${getErrorMessage(error)}`);
-      }
-    }
-
-    for (const unsubscribe of this.eventSubscriptions.values()) {
-      try {
-        unsubscribe();
-      } catch {
-      }
-    }
-    this.eventSubscriptions.clear();
-
-    for (const pending of this.pendingRequests.values()) {
-      clearTimeout(pending.timeoutId);
-      pending.reject(new Error("Sandbox runtime disposed before response."));
-    }
-    this.pendingRequests.clear();
-
-    this.overlayActionIds.clear();
-    this.widgetActionIdsByWidgetId.clear();
-
-    dismissOverlay();
-    if (this.widgetApiV2Enabled) {
-      clearExtensionWidgets(this.widgetOwnerId);
-    } else {
-      dismissWidget();
-    }
-
-    this.port?.removeEventListener("message", this.onPortMessage);
-    this.port?.close();
-    this.port = null;
-
-    this.iframe.remove();
   }
 
   private bootstrapSandboxPort(): void {

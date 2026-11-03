@@ -633,16 +633,21 @@ export function createMcpTool(
           if (!currentList.tools.some((tool) => tool.name === targetTool.name)) {
             throw new Error(`MCP tool not found: ${targetTool.name}`);
           }
+          const dispatchConfig = await getRuntimeConfig();
+          const dispatchServer = dispatchConfig.servers.find((server) => server.id === targetServer.id);
+          if (!dispatchServer?.enabled || !matchesConnection(currentList, dispatchServer, dispatchConfig.proxyBaseUrl)) {
+            throw new Error("MCP server configuration changed while awaiting approval. Retry the tool call.");
+          }
           signal?.throwIfAborted();
           const callResult = await currentList.callJsonRpc({
-            server: targetServer,
+            server: dispatchServer,
             method: "tools/call",
             params: {
               name: targetTool.name,
               arguments: parsedArgs,
             },
             signal,
-            ...proxyBaseUrlArg(currentConfig.proxyBaseUrl),
+            ...proxyBaseUrlArg(dispatchConfig.proxyBaseUrl),
           });
 
           if (!callResult) {

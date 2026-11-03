@@ -87,36 +87,26 @@ export function createLoadedExtensionHandle(
 ): LoadedExtensionHandle {
   let teardown: Promise<void> | null = null;
   let remaining = [...cleanups].reverse();
-  let deactivateModule = moduleDeactivate;
-
-  const runCleanups = async (): Promise<void> => {
-    const failures: string[] = [];
-    const retry: ExtensionCleanup[] = [];
-    for (const cleanup of remaining) {
-      try {
-        await cleanup();
-      } catch (error) {
-        retry.push(cleanup);
-        failures.push(toErrorMessage(error));
-      }
-    }
-    remaining = retry;
-    if (deactivateModule) {
-      try {
-        await deactivateModule();
-        deactivateModule = null;
-      } catch (error) {
-        failures.push(toErrorMessage(error));
-      }
-    }
-    if (failures.length > 0) {
-      throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
-    }
-  };
+  if (moduleDeactivate) remaining.push(moduleDeactivate);
 
   return {
     deactivate: () => {
-      teardown ??= runCleanups().catch((error: unknown) => {
+      teardown ??= (async () => {
+        const failures: string[] = [];
+        const retry: ExtensionCleanup[] = [];
+        for (const cleanup of remaining) {
+          try {
+            await cleanup();
+          } catch (error) {
+            retry.push(cleanup);
+            failures.push(toErrorMessage(error));
+          }
+        }
+        remaining = retry;
+        if (failures.length > 0) {
+          throw new Error(`Extension cleanup failed:\n- ${failures.join("\n- ")}`);
+        }
+      })().catch((error: unknown) => {
         teardown = null;
         throw error;
       });
