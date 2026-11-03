@@ -6,8 +6,7 @@ import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
-import type { StoppedToolDetails } from "./tool-details.js";
-import { isStop, ToolStoppedError } from "./tool-stopped.js";
+import { ToolStoppedError } from "./tool-stopped.js";
 import {
   getToolApprovalRequirement,
   getToolContextImpact,
@@ -111,7 +110,6 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
 
 export const STOP_GRACE_MS: Readonly<Record<"read" | "write", number>> = { read: 500, write: 10_000 };
 
-
 function settleOnStop<T>(
   work: Promise<T>,
   signal: AbortSignal | undefined,
@@ -147,39 +145,24 @@ function wrapTool<TParameters extends TSchema, TDetails>(
   mutationObserver: WorkbookMutationObserver | undefined,
   executionPolicy: WorkbookExecutionPolicy,
   pendingMutations: PendingMutations,
-): AgentTool<TParameters, TDetails | StoppedToolDetails> {
+): AgentTool<TParameters, TDetails> {
   return {
     ...tool,
-    execute: async (toolCallId, params, signal, onUpdate) => {
-      try {
-        return await execute(toolCallId, params, signal, onUpdate);
-      } catch (error) {
-        if (!isStop(error, signal)) throw error;
-        const text = error instanceof ToolStoppedError ? error.message : new ToolStoppedError().message;
-        return { content: [{ type: "text", text }], details: { kind: "stopped" }, isError: true };
+    execute: (toolCallId, params, signal, onUpdate) => {
+      const mode = getToolExecutionMode(tool.name, params);
+      if (mode === "read") {
+        const earlierMutations = [...pendingMutations];
+        if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
+        return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
       }
+
+      const running = run(mode, toolCallId, params, signal, onUpdate);
+      const settled = running.then(() => undefined, () => undefined);
+      pendingMutations.add(settled);
+      void settled.then(() => pendingMutations.delete(settled));
+      return running;
     },
   };
-
-  function execute(
-    toolCallId: string,
-    params: Static<TParameters>,
-    signal: AbortSignal | undefined,
-    onUpdate: AgentToolUpdateCallback<TDetails> | undefined,
-  ): Promise<AgentToolResult<TDetails>> {
-    const mode = getToolExecutionMode(tool.name, params);
-    if (mode === "read") {
-      const earlierMutations = [...pendingMutations];
-      if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
-      return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
-    }
-
-    const running = run(mode, toolCallId, params, signal, onUpdate);
-    const settled = running.then(() => undefined, () => undefined);
-    pendingMutations.add(settled);
-    void settled.then(() => pendingMutations.delete(settled));
-    return running;
-  }
 
   async function run(
     mode: ReturnType<typeof getToolExecutionMode>,

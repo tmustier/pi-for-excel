@@ -59,6 +59,7 @@ import {
   buildOfficeJsExecuteApprovalMessage,
   buildPythonBridgeApprovalMessage,
 } from "../tools/experimental-tool-gates.js";
+import { withStopResults } from "../tools/tool-stopped.js";
 import {
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
@@ -1211,10 +1212,10 @@ export async function initTaskpane(opts: {
         connectionManager,
       });
 
-      const tools = applyToolOutputTruncation(preflightTools, {
+      const tools = withStopResults(applyToolOutputTruncation(preflightTools, {
         limits: () => effectiveToolOutputLimits(runtimeAgent?.state.model.contextWindow),
         saveTruncatedOutput: saveTruncatedToolOutputToWorkspace,
-      });
+      }));
 
       const systemPrompt = await buildRuntimeSystemPrompt({
         workbookId,

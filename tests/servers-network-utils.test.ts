@@ -12,7 +12,6 @@ void test("fetch_page preserves HTTP, completion, timeout, and caller-abort sema
   const rows: ReadonlyArray<{
     name: string;
     dependencies: FetchPageToolDependencies;
-    signal?: AbortSignal;
     expected: RegExp;
     ok: boolean;
   }> = [
@@ -41,15 +40,6 @@ void test("fetch_page preserves HTTP, completion, timeout, and caller-abort sema
       expected: /fetch_page timed out after 5ms/u,
       ok: false,
     },
-    {
-      name: "preserves caller abort semantics",
-      dependencies: {
-        executeFetch: () => new Promise(() => {}),
-      },
-      signal: AbortSignal.abort(),
-      expected: /^Error: Aborted$/u,
-      ok: false,
-    },
   ];
 
   for (const [index, row] of rows.entries()) {
@@ -61,10 +51,12 @@ void test("fetch_page preserves HTTP, completion, timeout, and caller-abort sema
     const result = await tool.execute(
       `network-${index}`,
       { url: `https://network-${index}.example/page` },
-      row.signal,
     );
 
     assert.match(resultText(result.content), row.expected, row.name);
     assert.equal(result.details?.ok, row.ok, row.name);
   }
+
+  const stopped = createFetchPageTool({ getConfig: () => Promise.resolve({}), executeFetch: () => new Promise(() => {}) });
+  await assert.rejects(stopped.execute("network-stopped", { url: "https://network-stopped.example/page" }, AbortSignal.abort()), { name: "AbortError" });
 });

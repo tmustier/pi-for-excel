@@ -11,6 +11,7 @@ import type {
   FilesGateFileInfo,
   LocalChangeApprovalRequest,
 } from "./types.js";
+import { ToolStoppedError } from "../tool-stopped.js";
 
 const FilesGateParamsSchema = Type.Object({
   action: Type.String(),
@@ -32,7 +33,7 @@ function nonEmpty(value: string | undefined): string | undefined {
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
-  if (signal?.aborted) throw new Error("Aborted");
+  if (signal?.aborted) throw new ToolStoppedError();
 }
 
 async function defaultInspectWorkspaceFile(path: string): Promise<FilesGateFileInfo | null> {

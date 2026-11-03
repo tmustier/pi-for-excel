@@ -94,6 +94,8 @@ function sendToWorker(
   return new Promise<PyodideWorkerResponse>((resolve, reject) => {
     const instance = getOrCreateWorker();
     const abort = (): void => {
+      cleanup();
+      reject(new ToolStoppedError());
       if (instance.phase.kind === "running" && instance.phase.pending.request.id === request.id) {
         terminateInstance(instance, new Error("Aborted"));
       } else {
@@ -150,7 +152,7 @@ export async function callPyodideRuntime(
     if (workerResponse.error !== undefined) response.error = workerResponse.error;
     return response;
   } catch (error) {
-    if (signal?.aborted) throw new ToolStoppedError();
+    if (error instanceof ToolStoppedError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,

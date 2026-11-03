@@ -33,6 +33,7 @@ import type {
   TmuxBridgeDetails,
 } from "../tool-details.js";
 import { isUnsupportedHostTool } from "../unsupported-host-tool.js";
+import { ToolStoppedError } from "../tool-stopped.js";
 
 function isExperimentalGateParamsShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -48,7 +49,7 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
     return;
   }
 
-  throw new Error("Aborted");
+  throw new ToolStoppedError();
 }
 
 function getTmuxActionFromParams(params: unknown): string {

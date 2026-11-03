@@ -55,16 +55,6 @@ interface Response {
   lastCall: number;
 }
 
-const PI_AGENT_CORE_PRE_RUN_ABORT = "Operation aborted";
-
-function isStoppedResult(result: ToolResultMessage): boolean {
-  const details = decodeToolDetails(result.details);
-  const [first] = result.content;
-  return details?.kind === "stopped"
-    || (details !== undefined && "stopped" in details && details.stopped === true)
-    || (result.isError && first?.type === "text" && first.text === PI_AGENT_CORE_PRE_RUN_ABORT);
-}
-
 export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlock[] {
   const { messages, streamingMessage, tools, results, pendingToolCalls, running } = options;
   const blocks: TranscriptBlock[] = [];
@@ -146,8 +136,13 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
         if (!chunk) break;
         if (chunk.type === "toolCall") {
           const result = results.get(chunk.id);
+          const details = decodeToolDetails(result?.details);
+          const [firstContent] = result?.content ?? [];
+          const stopped = details?.kind === "stopped"
+            || (details !== undefined && "stopped" in details && details.stopped === true)
+            || (result?.isError === true && firstContent?.type === "text" && firstContent.text === "Operation aborted");
           const state: ToolRowTense = result
-            ? (isStoppedResult(result) ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
+            ? (stopped ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
             : assistant.stopReason === "error" ? "failed"
             : assistant.stopReason === "aborted" ? "stopped"
             : active && (streaming || pendingToolCalls.has(chunk.id) || assistant.stopReason === "toolUse") ? "live"

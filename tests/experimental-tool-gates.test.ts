@@ -150,7 +150,7 @@ void test("execute_office_js aborts if cancellation happens during approval", as
       explanation: "Rebuild totals",
       code: "return { ok: true };",
     }, abortController.signal),
-    /aborted/i,
+    { name: "ToolStoppedError" },
   );
 
   assert.equal(executeCount, 0);
@@ -569,6 +569,6 @@ void test("stopping the turn withdraws a pending files consent request and the c
   const pending = gated.execute("call", { action: "delete", path: "a.txt" }, controller.signal);
   await asked;
   controller.abort();
-  await assert.rejects(pending, /Aborted/);
+  await assert.rejects(pending, { name: "ToolStoppedError" });
   assert.equal(ran, false);
 });
