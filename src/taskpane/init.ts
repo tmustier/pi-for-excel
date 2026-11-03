@@ -387,16 +387,6 @@ export async function initTaskpane(opts: {
   appEl.replaceChildren();
   appEl.appendChild(sidebar);
 
-  const wireTextarea = () => {
-    const composer = sidebar.getInput();
-    if (composer) {
-      wireCommandMenu(composer);
-    } else {
-      requestAnimationFrame(wireTextarea);
-    }
-  };
-  requestAnimationFrame(wireTextarea);
-
   let rulesActive = false;
 
   const setRulesActive = (next: boolean) => {
@@ -2214,6 +2204,76 @@ export async function initTaskpane(opts: {
   };
 
 
+  const wireTextarea = () => {
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
+    } else {
+      requestAnimationFrame(wireTextarea);
+    }
+  };
+  requestAnimationFrame(wireTextarea);
+
+  installKeyboardShortcuts({
+    getActiveAgent,
+    isActiveTabBusy: () => {
+      const runtime = getActiveRuntime();
+      return runtime !== null && runtime.actionQueue.isBusy();
+    },
+    sidebar,
+    stopActiveTab,
+    editLastQueued: () => {
+      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
+      if (edited) focusChatInputSoon();
+      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
+      return edited;
+    },
+    onCreateTab: () => {
+      void createRuntimeFromUi();
+    },
+    onCloseActiveTab: () => {
+      const activeRuntime = getActiveRuntime();
+      if (!activeRuntime) {
+        showToast(t("init.noActiveSession"));
+        return;
+      }
+
+      void closeRuntimeWithRecovery(activeRuntime.runtimeId);
+    },
+    onReopenLastClosed: () => {
+      void reopenLastClosed();
+    },
+    onSwitchAdjacentTab: (direction: -1 | 1) => {
+      const tabs = runtimeManager.snapshotTabs();
+      if (tabs.length <= 1) {
+        return;
+      }
+
+      const activeIndex = tabs.findIndex((tab) => tab.isActive);
+      if (activeIndex < 0) {
+        return;
+      }
+
+      const nextIndex = (activeIndex + direction + tabs.length) % tabs.length;
+
+      suppressNextInputAutofocus = true;
+      const nextTab = tabs[nextIndex];
+      if (!nextTab) {
+        return;
+      }
+
+      focusSoon(() => sidebar.focusTabNavigationAnchor());
+      runtimeManager.switchRuntime(nextTab.runtimeId);
+    },
+  });
+
+  injectStatusBar({
+    getActiveAgent,
+    getLockState: getActiveLockState,
+    getExecutionMode,
+    autoCompactionEnabled: autoCompactEnabled,
+  });
+
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
     const autoRestoreLatest = usesSharedUnidentifiedState || (await resolveWorkbookId()) !== null;
@@ -2292,66 +2352,6 @@ export async function initTaskpane(opts: {
   } catch (error) {
     console.warn("[pi] Extension initialization did not complete during startup:", error);
   }
-
-  installKeyboardShortcuts({
-    getActiveAgent,
-    isActiveTabBusy: () => {
-      const runtime = getActiveRuntime();
-      return runtime !== null && runtime.actionQueue.isBusy();
-    },
-    sidebar,
-    stopActiveTab,
-    editLastQueued: () => {
-      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
-      if (edited) focusChatInputSoon();
-      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
-      return edited;
-    },
-    onCreateTab: () => {
-      void createRuntimeFromUi();
-    },
-    onCloseActiveTab: () => {
-      const activeRuntime = getActiveRuntime();
-      if (!activeRuntime) {
-        showToast(t("init.noActiveSession"));
-        return;
-      }
-
-      void closeRuntimeWithRecovery(activeRuntime.runtimeId);
-    },
-    onReopenLastClosed: () => {
-      void reopenLastClosed();
-    },
-    onSwitchAdjacentTab: (direction: -1 | 1) => {
-      const tabs = runtimeManager.snapshotTabs();
-      if (tabs.length <= 1) {
-        return;
-      }
-
-      const activeIndex = tabs.findIndex((tab) => tab.isActive);
-      if (activeIndex < 0) {
-        return;
-      }
-
-      const nextIndex = (activeIndex + direction + tabs.length) % tabs.length;
-
-      suppressNextInputAutofocus = true;
-      const nextTab = tabs[nextIndex];
-      if (!nextTab) {
-        return;
-      }
-
-      focusSoon(() => sidebar.focusTabNavigationAnchor());
-      runtimeManager.switchRuntime(nextTab.runtimeId);
-    },
-  });
-
-  injectStatusBar({
-    getActiveAgent,
-    getLockState: getActiveLockState,
-    getExecutionMode,
-    autoCompactionEnabled: autoCompactEnabled,
-  });
 
   startProxyPolling(settings);
 
