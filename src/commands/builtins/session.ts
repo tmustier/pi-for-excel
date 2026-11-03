@@ -16,7 +16,7 @@ export interface SessionCommandActions {
   openRecoveryDialog: () => Promise<void>;
   reopenLastClosed: () => Promise<void>;
   revertLatestCheckpoint: () => Promise<void>;
-  createManualFullBackup: () => Promise<ManualFullBackupSummary>;
+  createManualFullBackup: () => Promise<ManualFullBackupSummary & { kept: boolean }>;
   listManualFullBackups: (limit?: number) => Promise<ManualFullBackupSummary[]>;
   restoreManualFullBackup: (backupId?: string) => Promise<ManualFullBackupSummary | null>;
   clearManualFullBackups: (confirm: (count: number) => Promise<boolean>) => Promise<number>;
@@ -112,9 +112,10 @@ export function createSessionLifecycleCommands(actions: SessionCommandActions): 
 
           if (action === "create") {
             const backup = await actions.createManualFullBackup();
-            showToast(
-              t("session.toast.backup_created", { id: backup.id, size: formatBytes(backup.sizeBytes) }),
-            );
+            const size = formatBytes(backup.sizeBytes);
+            showToast(backup.kept
+              ? t("session.toast.backup_created", { id: backup.id, size })
+              : t("recovery.toast.backupDownloadedNotKept", { id: backup.id, size }));
             return;
           }
 

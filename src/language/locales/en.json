@@ -835,6 +835,7 @@
   "recovery.subtitle": "Snapshots saved before Pi modifies data",
   "recovery.title": "Backups",
   "recovery.toast.backupDownloaded": "Backup downloaded: #{id} ({size})",
+  "recovery.toast.backupDownloadedNotKept": "Backup downloaded: #{id} ({size}). Pi couldn't tell which workbook this is, so it didn't keep a copy to download again.",
   "recovery.toast.backupFailed": "Backup failed: {message}",
   "recovery.toast.clearFailed": "Clear failed: {message}",
   "recovery.toast.cleared": "Cleared {count} backup{plural}",

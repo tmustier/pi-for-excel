@@ -136,6 +136,7 @@ import { createRecoveryScopeResolver } from "../workbook/recovery-scope.js";
 import {
   getManualFullWorkbookBackupStore,
   ManualFullWorkbookBackupStore,
+  type DownloadedFullWorkbookBackup,
   type ManualFullWorkbookBackup,
 } from "../workbook/manual-full-backup.js";
 import {
@@ -1643,16 +1644,9 @@ export async function initTaskpane(opts: {
     await restoreAfterConfirmation(preview);
   };
 
-  const createManualFullBackup = async (): Promise<{
-    id: string;
-    createdAt: number;
-    sizeBytes: number;
-  }> => {
-    const backup = await manualFullBackupStore.createAndDownload({
-      runCapture: (capture) => runUserWorkbookOperation("manual_backup", capture),
-    });
-    return toManualFullBackupSummary(backup);
-  };
+  const createManualFullBackup = (): Promise<DownloadedFullWorkbookBackup> => manualFullBackupStore.createAndDownload({
+    runCapture: (capture) => runUserWorkbookOperation("manual_backup", capture),
+  });
 
   const listManualFullBackups = async (limit = 5): Promise<Array<{
     id: string;
