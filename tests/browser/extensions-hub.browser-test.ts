@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 
-import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { openTaskpane, startTaskpaneServer, type TaskpaneServer, waitForBrowserSignal } from "./harness.ts";
 
 let env: TaskpaneServer;
 
@@ -52,12 +52,7 @@ void test("an inline extension installed through the runtime appears enabled in 
   const input = page.locator("pi-input textarea");
 
   try {
-    await Promise.race([
-      installed,
-      new Promise<void>((_resolve, reject) => {
-        setTimeout(() => reject(new Error("inline extension installation did not complete")), 10_000);
-      }),
-    ]);
+    await waitForBrowserSignal(installed, "inline extension installation did not complete");
 
     await input.fill("/plugins");
     await input.press("Enter");

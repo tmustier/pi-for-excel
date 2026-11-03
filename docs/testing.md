@@ -43,7 +43,7 @@ Behavior changes still require the model-driven acceptance described in `coding-
 
 ## Browser contracts
 
-Run `npm run test:browser` for taskpane behavior in real headless Chromium (files run serially: each boots its own Vite server and Chromium, and parallel boots contend on the Vite dependency optimizer and time out), or `npm run test:all` for the deterministic and browser suites together. Install the pinned browser once with `npx playwright install chromium` if it is not already cached. The recording contract also requires system `ffmpeg` and `ffprobe`.
+Run `npm run test:browser` for taskpane behavior in real headless Chromium (files run serially: each boots its own Vite server and Chromium, and parallel boots contend on the Vite dependency optimizer and time out), or `npm run test:all` for the deterministic and browser suites together. CI splits the files across four runners with `NODE_OPTIONS=--test-shard=N/4`; the flag must reach Node before the file glob, so it cannot be appended after `npm run test:browser --`. Install the pinned browser once with `npx playwright install chromium` if it is not already cached. The recording contract also requires system `ffmpeg` and `ffprobe`.
 
 Add a browser contract under `tests/browser/` when the capability depends on real DOM entry, event propagation, focus, accessibility or rendered visibility. Use the `*.browser-test.ts` suffix so `npm test` remains browser-free. Enter through user-visible controls and assert the visible outcome rather than implementation names.
 

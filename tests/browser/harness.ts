@@ -172,6 +172,21 @@ export async function openTaskpane(
   }
 }
 
+export async function waitForBrowserSignal(signal: Promise<void>, timeoutMessage: string): Promise<void> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((_resolve, reject) => {
+    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), 10_000);
+  });
+
+  try {
+    await Promise.race([signal, timeout]);
+  } finally {
+    if (timeoutId !== undefined) {
+      clearTimeout(timeoutId);
+    }
+  }
+}
+
 export async function enterInput(page: Page, text: string): Promise<void> {
   const input = page.locator("pi-input textarea");
   await input.fill(text);
