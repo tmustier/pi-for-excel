@@ -200,3 +200,13 @@ void test("a Pyodide failure that settles before Stop stays a failure", async (t
   controller.abort();
   assert.equal((await result).error, "Worker dispatch failed");
 });
+
+void test("one Stop shows every Pyodide call sharing the turn's signal as stopped", async (t) => {
+  installSilentHost(t);
+  const controller = new AbortController();
+  const running = callPyodideRuntime({ code: "running" }, controller.signal);
+  const queued = callPyodideRuntime({ code: "queued" }, controller.signal);
+  controller.abort();
+  const outcomes = await Promise.allSettled([running, queued]);
+  assert.deepEqual(outcomes.map((outcome) => outcome.status === "rejected" && outcome.reason instanceof Error ? outcome.reason.name : outcome.status), ["ToolStoppedError", "ToolStoppedError"]);
+});

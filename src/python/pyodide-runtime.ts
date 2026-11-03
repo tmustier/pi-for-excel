@@ -107,7 +107,7 @@ function sendToWorker(
     instance.queue.push({
       request, timeoutMs,
       resolve: (response) => { cleanup(); resolve(response); },
-      reject: (error) => { cleanup(); reject(error); },
+      reject: (error) => { cleanup(); reject(signal?.aborted ? new ToolStoppedError() : error); },
     });
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
