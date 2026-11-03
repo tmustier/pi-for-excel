@@ -83,6 +83,7 @@ void test("Ctrl+Alt arrows switch tabs from tab or composer focus, and tab short
     await page.locator("pi-input textarea").focus();
     await page.keyboard.press("Control+Alt+ArrowLeft");
     await active.filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
+    await page.waitForFunction(() => document.activeElement?.matches(".pi-session-tab.is-active .pi-session-tab__main") === true);
 
     await page.locator("pi-input textarea").fill("/settings");
     await page.locator("pi-input textarea").press("Enter");
@@ -93,6 +94,38 @@ void test("Ctrl+Alt arrows switch tabs from tab or composer focus, and tab short
     assert.equal(await page.locator(".pi-session-tab").count(), 2);
     assert.equal(await active.innerText(), "Chat 2");
   });
+});
+
+void test("switching tabs from the composer keeps focus on a control the user moved to while the tab rendered", async () => {
+  const switches = [
+    { name: "tab click", run: (page: Page) => page.locator(".pi-session-tab__main").first().evaluate((tab: HTMLElement) => tab.click()) },
+    { name: "Ctrl+Alt+Left", run: (page: Page) => page.keyboard.press("Control+Alt+ArrowLeft") },
+  ];
+  for (const { name, run } of switches) {
+    await withTaskpane(async (page) => {
+      await page.getByRole("button", { name: "New tab" }).click();
+      await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
+      await page.locator("pi-input textarea").focus();
+
+      await page.evaluate(() => {
+        const sidebar = document.querySelector("pi-sidebar");
+        const target = document.querySelector(".pi-session-tab");
+        const settings = document.querySelector<HTMLElement>(".pi-utilities-btn");
+        if (!sidebar || !target || !settings) throw new Error("taskpane controls missing");
+        const observer = new MutationObserver(() => {
+          if (!target.classList.contains("is-active")) return;
+          observer.disconnect();
+          settings.focus();
+        });
+        observer.observe(sidebar, { subtree: true, attributes: true, childList: true });
+      });
+      await run(page);
+      await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: "Chat 1" }).waitFor({ state: "visible" });
+      await page.waitForTimeout(300);
+
+      assert.equal(await page.evaluate(() => document.activeElement?.className), "pi-utilities-btn", name);
+    });
+  }
 });
 
 void test("visible tab titles follow default numbering and explicit renames", async () => {

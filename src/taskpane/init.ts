@@ -775,13 +775,19 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const focusChatInputSoon = (): void => {
-    const focusedAtRequest = document.activeElement;
+  const focusedControl = (): Element | null => document.activeElement?.closest("pi-input") ?? document.activeElement;
+
+  const focusSoon = (focus: () => void): void => {
+    const focusedAtRequest = focusedControl();
     requestAnimationFrame(() => {
-      const focused = document.activeElement;
+      const focused = focusedControl();
       if (focused !== focusedAtRequest && focused !== null && focused !== document.body) return;
-      focusChatInput();
+      focus();
     });
+  };
+
+  const focusChatInputSoon = (): void => {
+    focusSoon(focusChatInput);
   };
 
   document.addEventListener(PI_REQUEST_INPUT_FOCUS_EVENT, () => {
@@ -2326,10 +2332,8 @@ export async function initTaskpane(opts: {
         return;
       }
 
+      focusSoon(() => sidebar.focusTabNavigationAnchor());
       runtimeManager.switchRuntime(nextTab.runtimeId);
-      requestAnimationFrame(() => {
-        sidebar.focusTabNavigationAnchor();
-      });
     },
   });
 

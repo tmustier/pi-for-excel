@@ -57,7 +57,7 @@ export class PiInput extends LitElement {
       if (!ta) return;
       ta.value = this._value;
       this._autoGrow();
-      if (hadFocus) ta.focus();
+      if (hadFocus && (document.activeElement === null || document.activeElement === document.body)) ta.focus();
     });
   }
 
