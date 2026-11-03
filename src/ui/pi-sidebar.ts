@@ -16,6 +16,7 @@ import {
 } from "./messages/transcript-state.js";
 import { focusInitialMenuItem, handleMenuKeydown } from "./menu-keyboard.js";
 import type { PiInput } from "./pi-input.js";
+import type { SessionLockState } from "../workbook/coordinator.js";
 import { isDebugEnabled, formatK } from "../debug/debug.js";
 import {
   getPayloadStats,
@@ -54,14 +55,12 @@ export interface EmptyHint {
   prompt: string;
 }
 
-export type SessionTabLockState = "idle" | "waiting_for_lock" | "holding_lock";
-
 export interface SessionTabView {
   runtimeId: string;
   title: string;
   isActive: boolean;
   isBusy: boolean;
-  lockState: SessionTabLockState;
+  lockState: SessionLockState;
   attention: "none" | "finished" | "failed";
 }
 

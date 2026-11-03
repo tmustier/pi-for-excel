@@ -25,3 +25,30 @@ export function mapWithConcurrency<T, R>(
   const limit = createConcurrencyLimit(maxConcurrent);
   return Promise.all(items.map((item) => limit(() => map(item))));
 }
+
+export function createAsyncCoalescer(task: () => Promise<void>): () => Promise<void> {
+  let inFlight: Promise<void> | null = null;
+  let rerunRequested = false;
+
+  const run = async (): Promise<void> => {
+    do {
+      rerunRequested = false;
+      await task();
+    } while (rerunRequested);
+  };
+
+  return async (): Promise<void> => {
+    if (inFlight) {
+      rerunRequested = true;
+      await inFlight;
+      return;
+    }
+
+    inFlight = run();
+    try {
+      await inFlight;
+    } finally {
+      inFlight = null;
+    }
+  };
+}

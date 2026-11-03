@@ -1,4 +1,4 @@
-import { mapWithConcurrency } from "../utils/concurrency.js";
+import { createAsyncCoalescer, mapWithConcurrency } from "../utils/concurrency.js";
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { clampThinkingLevel } from "@earendil-works/pi-ai";
 
@@ -9,8 +9,7 @@ import type { SessionData } from "../storage/local/types.js";
 import { countVisibleSessionMessages, type SessionPersistenceController } from "./sessions.js";
 import { resolveTabTitle } from "./session-title.js";
 import type { TabState } from "./tab-state.js";
-
-export type RuntimeLockState = "idle" | "waiting_for_lock" | "holding_lock";
+import type { SessionLockState } from "../workbook/coordinator.js";
 
 export type RuntimeRunOutcome = "finished" | "failed";
 
@@ -30,7 +29,7 @@ export interface SessionRuntime {
   queueDisplay: QueueDisplay;
   tab: TabState;
   persistence: SessionPersistenceController;
-  lockState: RuntimeLockState;
+  lockState: SessionLockState;
   refreshCapabilities: () => Promise<void>;
   dispose: () => void;
 }
@@ -50,7 +49,7 @@ export interface RuntimeTabSnapshot {
   isActive: boolean;
   isStreaming: boolean;
   isBusy: boolean;
-  lockState: RuntimeLockState;
+  lockState: SessionLockState;
   attention: RuntimeAttention;
 }
 
@@ -98,9 +97,12 @@ export class SessionRuntimeManager {
 
   private activeRuntimeId: string | null = null;
   private nextDefaultTabNumber = 1;
-  private refreshPromise: Promise<void> | null = null;
-  private refreshRequested = false;
-  private refreshPassRunning = false;
+  private readonly refreshAllCapabilities = createAsyncCoalescer(async () => {
+    await mapWithConcurrency(this.listRuntimes(), 4, (runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
+      this.warnCapabilityRefresh(error);
+    }));
+    this.emit();
+  });
 
   constructor(opts: {
     createRuntime: SessionRuntimeFactory;
@@ -266,7 +268,7 @@ export class SessionRuntimeManager {
     return true;
   }
 
-  setRuntimeLockState(runtimeId: string, lockState: RuntimeLockState): void {
+  setRuntimeLockState(runtimeId: string, lockState: SessionLockState): void {
     const runtime = this.runtimes.get(runtimeId);
     if (!runtime || runtime.lockState === lockState) return;
 
@@ -298,12 +300,7 @@ export class SessionRuntimeManager {
   }
 
   refreshCapabilities(): Promise<void> {
-    this.refreshRequested = true;
-    if (this.refreshPromise) return this.refreshPromise;
-
-    const pass = this.runCapabilityRefreshes();
-    if (this.refreshPassRunning) this.refreshPromise = pass;
-    return pass;
+    return this.refreshAllCapabilities();
   }
 
   findRuntimeBySessionId(sessionId: string): SessionRuntime | null {
@@ -368,25 +365,6 @@ export class SessionRuntimeManager {
     return () => {
       this.listeners.delete(listener);
     };
-  }
-
-  private async runCapabilityRefreshes(): Promise<void> {
-    this.refreshPassRunning = true;
-    try {
-      while (this.refreshRequested) {
-        this.refreshRequested = false;
-        const runtimes = this.listRuntimes();
-
-        await mapWithConcurrency(runtimes, 4, (runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
-          this.warnCapabilityRefresh(error);
-        }));
-      }
-    } finally {
-      this.refreshPromise = null;
-      this.refreshPassRunning = false;
-    }
-
-    this.emit();
   }
 
   private emit(): void {

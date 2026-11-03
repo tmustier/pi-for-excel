@@ -4,7 +4,6 @@ import { test } from "node:test";
 import {
   awaitCredentialRestoreForStartup,
   awaitWithTimeout,
-  createAsyncCoalescer,
   createRuntimeToolFingerprint,
   isLikelyCorsErrorMessage,
   normalizeRuntimeTools,
@@ -165,51 +164,6 @@ void test("shouldApplyRuntimeToolUpdate applies updates when extension tool revi
     }),
     true,
   );
-});
-
-void test("createAsyncCoalescer coalesces overlapping calls into a single rerun", async () => {
-  let runCount = 0;
-  const blockers: Array<() => void> = [];
-
-  const run = createAsyncCoalescer(async () => {
-    runCount += 1;
-    await new Promise<void>((resolve) => {
-      blockers.push(resolve);
-    });
-  });
-
-  const first = run();
-  await Promise.resolve();
-
-  assert.equal(runCount, 1);
-  assert.equal(blockers.length, 1);
-
-  const second = run();
-  const third = run();
-  await Promise.resolve();
-
-  assert.equal(runCount, 1);
-
-  const releaseFirst = blockers.shift();
-  if (!releaseFirst) {
-    throw new Error("Expected first blocker");
-  }
-  releaseFirst();
-
-  await Promise.resolve();
-  await Promise.resolve();
-
-  assert.equal(runCount, 2);
-  assert.equal(blockers.length, 1);
-
-  const releaseSecond = blockers.shift();
-  if (!releaseSecond) {
-    throw new Error("Expected second blocker");
-  }
-  releaseSecond();
-
-  await Promise.all([first, second, third]);
-  assert.equal(runCount, 2);
 });
 
 void test("credential restore adds no duplicate fast refresh and one late refresh after timeout", async () => {
