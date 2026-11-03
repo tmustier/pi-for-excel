@@ -622,13 +622,15 @@ export class BrowserModelRuntime {
   async syncCustomProviders(customProviders: readonly CustomProvider[]): Promise<void> {
     const prepared = customProviders.flatMap((customProvider) =>
       customProviderRegistrations(customProvider).map((registration) => {
-        if (this.builtinProviderIds.has(registration.id)) {
-          throw new Error(`Custom provider id conflicts with built-in provider: ${registration.id}`);
+        const dynamicProvider = this.createDynamicProvider(registration);
+        const { id } = dynamicProvider.provider;
+        if (this.builtinProviderIds.has(id)) {
+          throw new Error(`Custom provider id conflicts with built-in provider: ${id}`);
         }
-        if (this.extensionProviderOwners.has(registration.id)) {
-          throw new Error(`Custom provider id conflicts with extension provider: ${registration.id}`);
+        if (this.extensionProviderOwners.has(id)) {
+          throw new Error(`Custom provider id conflicts with extension provider: ${id}`);
         }
-        return { registration, ...this.createDynamicProvider(registration), direct: customProvider.connectDirectly === true };
+        return { registration, ...dynamicProvider, direct: customProvider.connectDirectly === true };
       }),
     );
     const nextIds = new Set(prepared.map(({ provider }) => provider.id));

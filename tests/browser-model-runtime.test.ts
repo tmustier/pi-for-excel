@@ -1315,6 +1315,25 @@ void test("invalid custom-provider sync leaves the prior registry and ownership 
   assert.equal(runtime.models.getProvider("first-custom"), undefined);
 });
 
+for (const providerId of ["openai", "extension-owned"]) {
+  void test(`custom-provider sync rejects a normalized id owned by ${providerId}`, async () => {
+    const runtime = createRuntime();
+    runtime.registerExtensionProvider("owner", {
+      id: "extension-owned", name: "Extension", api: "openai-completions",
+      baseUrl: "https://extension.example/v1", models: [{ id: "baseline" }],
+      resolveApiKey: () => Promise.resolve(undefined),
+    });
+    const original = runtime.models.getProvider(providerId);
+    await assert.rejects(runtime.syncCustomProviders([
+      gatewayProvider(),
+      gatewayProvider({ providerId: ` ${providerId} ` }),
+    ]), /conflicts with/);
+    assert.equal(runtime.models.getProvider(providerId), original);
+    assert.equal(runtime.models.getProvider("Gateway · Acme"), undefined);
+    assert.equal(runtime.providerRoute("Gateway · Acme"), undefined);
+  });
+}
+
 void test("catalogue deletion failure does not leave custom-provider ownership behind", async () => {
   const catalogs = new MemoryCatalogs();
   catalogs.delete = () => Promise.reject(new Error("catalogue deletion failed"));

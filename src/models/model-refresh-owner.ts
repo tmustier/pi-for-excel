@@ -163,7 +163,34 @@ export class ModelRefreshOwner {
       return state.promise;
     }
 
-    const promise = Promise.resolve().then(() => this.runRefreshes(state));
+    const promise = Promise.resolve().then(async () => {
+      try {
+        do {
+          const { syncConfiguredProviders, allowNetwork } = state.requested;
+          state.requested = { syncConfiguredProviders: false, allowNetwork: false };
+          state.activeNetwork = allowNetwork;
+
+          if (syncConfiguredProviders) {
+            const customProviders = await this.loadCustomProviders();
+            await this.modelRuntime.syncCustomProviders(customProviders);
+            this.customProviders = customProviders;
+          }
+          state.providerRevision = this.modelRuntime.providerRevision;
+
+          const cached = await this.modelRuntime.refresh({ allowNetwork: false });
+          await this.publish(Array.from(cached.errors.keys()).sort());
+          if (allowNetwork) {
+            const discovered = await this.modelRuntime.refresh({ allowNetwork: true, force: true });
+            await this.publish(Array.from(discovered.errors.keys()).sort());
+          }
+
+          state.activeNetwork = false;
+        } while (state.requested.syncConfiguredProviders || state.requested.allowNetwork
+          || this.modelRuntime.providerRevision !== state.providerRevision);
+      } finally {
+        this.refreshState = { kind: "idle" };
+      }
+    });
     const state: Extract<RefreshState, { kind: "running" }> = {
       kind: "running",
       promise,
@@ -173,41 +200,6 @@ export class ModelRefreshOwner {
     };
     this.refreshState = state;
     return promise;
-  }
-
-  private async runRefreshes(state: Extract<RefreshState, { kind: "running" }>): Promise<void> {
-    try {
-      do {
-        const { syncConfiguredProviders, allowNetwork } = state.requested;
-        state.requested = { syncConfiguredProviders: false, allowNetwork: false };
-        state.activeNetwork = allowNetwork;
-
-        if (syncConfiguredProviders) {
-          const customProviders = await this.loadCustomProviders();
-          await this.modelRuntime.syncCustomProviders(customProviders);
-          this.customProviders = customProviders;
-        }
-        state.providerRevision = this.modelRuntime.providerRevision;
-
-        await this.publishCachedCatalogues();
-        if (allowNetwork) await this.publishDiscoveredCatalogues();
-
-        state.activeNetwork = false;
-      } while (state.requested.syncConfiguredProviders || state.requested.allowNetwork
-        || this.modelRuntime.providerRevision !== state.providerRevision);
-    } finally {
-      this.refreshState = { kind: "idle" };
-    }
-  }
-
-  private async publishCachedCatalogues(): Promise<void> {
-    const cached = await this.modelRuntime.refresh({ allowNetwork: false });
-    await this.publish(Array.from(cached.errors.keys()).sort());
-  }
-
-  private async publishDiscoveredCatalogues(): Promise<void> {
-    const discovered = await this.modelRuntime.refresh({ allowNetwork: true, force: true });
-    await this.publish(Array.from(discovered.errors.keys()).sort());
   }
 
   private async publish(providerErrors: readonly string[]): Promise<void> {
