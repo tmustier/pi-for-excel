@@ -1304,11 +1304,10 @@ export async function initTaskpane(opts: {
     const turns = trackTurns(agent);
 
     agent.getApiKey = async (provider: string) => {
+      const turn = turns.running();
       if (await oauthRefresher.ensureFresh(provider) === "expired") {
         // Sending the stale token would only surface the provider's 401, and
         // returning no key lets pi-ai fall back to that same stored token.
-        // Throwing fails the turn; the banner tells the user to sign in again.
-        const turn = turns.running();
         if (turn) turn.expiredLoginFor = modelRuntime.models.getProvider(provider)?.name ?? provider;
         throw new Error(`The ${provider} login has expired and could not be refreshed.`);
       }
@@ -1327,7 +1326,6 @@ export async function initTaskpane(opts: {
         return (await getAppStorage().providerKeys.get(provider)) ?? undefined;
       }
 
-      const turn = turns.running();
       if (turn) turn.missingCredentialsFor = provider;
       return undefined;
     };
@@ -1420,19 +1418,16 @@ export async function initTaskpane(opts: {
       const lastAssistant = [...agent.state.messages].reverse().find((message) => message.role === "assistant");
       const stopReason = lastAssistant?.role === "assistant" ? lastAssistant.stopReason : undefined;
       runOutcomes.set(runtimeId, stopReason === "aborted" ? null : stopReason === "error" ? "failed" : "finished");
-      const endedTurn = turns.current();
-      const endedTurnId = endedTurn.id;
-      const endedTurnCalls = endedTurn.toolCallIds;
-      const officeJsCalls = endedTurn.officeJsCallIds;
+      const { id: turnId, toolCallIds, officeJsCallIds } = turns.current();
       try {
-        const backups = await readTurnBackups(workbookRecoveryLog, endedTurnId);
+        const backups = await readTurnBackups(workbookRecoveryLog, turnId);
         const summary = summarizeTurnChanges({
-          turnId: endedTurnId,
+          turnId,
           timestamp: Date.now(),
           outcome: signal.aborted || stopReason === "aborted" ? "stopped" : stopReason === "error" ? "failed" : "finished",
-          toolCallIds: endedTurnCalls,
-          ranOfficeJs: officeJsCalls.size > 0,
-          officeJsRanges: officeJsCalls.size > 0 ? await changeTracker.rangesChangedBy(officeJsCalls) : [],
+          toolCallIds,
+          ranOfficeJs: officeJsCallIds.size > 0,
+          officeJsRanges: officeJsCallIds.size > 0 ? await changeTracker.rangesChangedBy(officeJsCallIds) : [],
           audit: await getWorkbookChangeAuditLog().list(500),
           backups,
         });

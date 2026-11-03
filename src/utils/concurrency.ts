@@ -30,25 +30,22 @@ export function createAsyncCoalescer(task: () => Promise<void>): () => Promise<v
   let inFlight: Promise<void> | null = null;
   let rerunRequested = false;
 
-  const run = async (): Promise<void> => {
-    do {
-      rerunRequested = false;
-      await task();
-    } while (rerunRequested);
-  };
-
-  return async (): Promise<void> => {
+  return () => {
     if (inFlight) {
       rerunRequested = true;
-      await inFlight;
-      return;
+      return inFlight;
     }
 
-    inFlight = run();
-    try {
-      await inFlight;
-    } finally {
+    inFlight = (async () => {
+      do {
+        rerunRequested = false;
+        await task();
+      } while (rerunRequested);
       inFlight = null;
-    }
+    })().catch((error: unknown) => {
+      inFlight = null;
+      throw error;
+    });
+    return inFlight;
   };
 }

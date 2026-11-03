@@ -25,6 +25,39 @@ void test("a rejected task frees its slot for the next one", async () => {
   assert.equal(await next, "ran");
 });
 
+void test("createAsyncCoalescer does not lose a request as the previous task settles", async () => {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let runCount = 0;
+  const run = createAsyncCoalescer(() => {
+    runCount += 1;
+    return gate;
+  });
+
+  const first = run();
+  await Promise.resolve();
+  const atSettlement = gate.then(run);
+  release();
+  await Promise.all([first, atSettlement]);
+
+  assert.equal(runCount, 2);
+});
+
+void test("createAsyncCoalescer can run again after a task throws before returning a promise", async () => {
+  let attempts = 0;
+  const run = createAsyncCoalescer(() => {
+    attempts += 1;
+    if (attempts === 1) throw new Error("failed to start");
+    return Promise.resolve();
+  });
+
+  await assert.rejects(run(), /failed to start/u);
+  await run();
+  assert.equal(attempts, 2);
+});
+
 void test("createAsyncCoalescer coalesces overlapping calls into a single rerun", async () => {
   let runCount = 0;
   const blockers: Array<() => void> = [];

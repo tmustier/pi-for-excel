@@ -280,38 +280,36 @@ export async function setupSessionPersistence(opts: {
   }
 
   function applyLoadedSession(sessionData: SessionData): Promise<void> {
-    return serially(() => applyLoadedSessionNow(sessionData));
-  }
+    return serially(async () => {
+      titleRequest?.abort();
+      titleRequest = null;
+      titleGenerationAttempted = sessionData.titleGenerationAttempted === true;
+      canWriteLatestSessionPointer = true;
 
-  async function applyLoadedSessionNow(sessionData: SessionData): Promise<void> {
-    titleRequest?.abort();
-    titleRequest = null;
-    titleGenerationAttempted = sessionData.titleGenerationAttempted === true;
-    canWriteLatestSessionPointer = true;
+      if (isSessionId(sessionData.id)) {
+        sessionId = sessionData.id;
+      } else {
+        sessionId = crypto.randomUUID();
+      }
 
-    if (isSessionId(sessionData.id)) {
-      sessionId = sessionData.id;
-    } else {
-      sessionId = crypto.randomUUID();
-    }
+      sessionTitle = sessionData.title || "";
+      explicitTitle = sessionData.titleChosen === true && sessionTitle.trim().length > 0;
+      sessionCreatedAt = sessionData.createdAt;
+      baseRevision = sessionData.revision;
 
-    sessionTitle = sessionData.title || "";
-    explicitTitle = sessionData.titleChosen === true && sessionTitle.trim().length > 0;
-    sessionCreatedAt = sessionData.createdAt;
-    baseRevision = sessionData.revision;
+      agent.sessionId = sessionId;
+      agent.state.messages = sessionData.messages;
 
-    agent.sessionId = sessionId;
-    agent.state.messages = sessionData.messages;
+      if (sessionData.model) {
+        agent.state.model = opts.resolveModel(sessionData.model) ?? sessionData.model;
+      }
+      if (sessionData.thinkingLevel) {
+        agent.state.thinkingLevel = clampThinkingLevel(agent.state.model, sessionData.thinkingLevel);
+      }
 
-    if (sessionData.model) {
-      agent.state.model = opts.resolveModel(sessionData.model) ?? sessionData.model;
-    }
-    if (sessionData.thinkingLevel) {
-      agent.state.thinkingLevel = clampThinkingLevel(agent.state.model, sessionData.thinkingLevel);
-    }
-
-    await updateWorkbookAssociation(sessionId);
-    emitChange();
+      await updateWorkbookAssociation(sessionId);
+      emitChange();
+    });
   }
 
   async function restoreLatestSession(): Promise<boolean> {

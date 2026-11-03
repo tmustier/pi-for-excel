@@ -233,20 +233,6 @@ export function createActionQueue(opts: {
     opts.onLeftUnsent?.(leftovers.length);
   }
 
-  async function runCommand(command: Extract<QueuedAction, { type: "command" }>, signal: AbortSignal): Promise<void> {
-    try {
-      if (command.name === "compact") {
-        await runCompactWithIndicator(command.args, signal);
-        return;
-      }
-      const cmd = commandRegistry.get(command.name);
-      if (!cmd) throw new Error(`Unknown command: /${command.name}`);
-      await cmd.execute(command.args);
-    } catch (error) {
-      console.warn(`[pi] Queued /${command.name} failed:`, error);
-    }
-  }
-
   async function runTurn(input: { kind: "retry" } | { kind: "prompt"; text: string }, signal: AbortSignal): Promise<void> {
     try {
       if (input.kind === "retry") {
@@ -305,7 +291,17 @@ export function createActionQueue(opts: {
         if (next.type === "command") {
           actions.shift();
           syncDisplay();
-          await runCommand(next, signal);
+          try {
+            if (next.name === "compact") {
+              await runCompactWithIndicator(next.args, signal);
+            } else {
+              const cmd = commandRegistry.get(next.name);
+              if (!cmd) throw new Error(`Unknown command: /${next.name}`);
+              await cmd.execute(next.args);
+            }
+          } catch (error) {
+            console.warn(`[pi] Queued /${next.name} failed:`, error);
+          }
           continue;
         }
 
