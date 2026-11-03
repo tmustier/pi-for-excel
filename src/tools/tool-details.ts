@@ -544,7 +544,12 @@ export type FilesToolDetails =
   | FilesWriteDetails
   | FilesDeleteDetails;
 
+const stoppedToolDetailsSchema = Type.Object({ kind: Type.Literal("stopped") });
+
+export type StoppedToolDetails = Static<typeof stoppedToolDetailsSchema>;
+
 const toolDetailsSchemasByKind = {
+  stopped: stoppedToolDetailsSchema,
   write_cells: writeCellsDetailsSchema,
   fill_formula: fillFormulaDetailsSchema,
   format_cells: formatCellsDetailsSchema,

@@ -137,7 +137,10 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
         if (chunk.type === "toolCall") {
           const result = results.get(chunk.id);
           const details = decodeToolDetails(result?.details);
-          const stopped = details !== undefined && "stopped" in details && details.stopped === true;
+          const [firstContent] = result?.content ?? [];
+          const stopped = details?.kind === "stopped"
+            || (details !== undefined && "stopped" in details && details.stopped === true)
+            || (result?.isError === true && firstContent?.type === "text" && firstContent.text === "Operation aborted");
           const state: ToolRowTense = result
             ? (stopped ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
             : assistant.stopReason === "error" ? "failed"

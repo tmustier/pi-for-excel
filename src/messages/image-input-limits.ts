@@ -390,11 +390,13 @@ export function installImageInputNormalization(
   agent.afterToolCall = async (context, signal) => {
     const previousResult = await previousAfterToolCall?.(context, signal);
     const content = previousResult?.content ?? context.result.content;
-    const normalized = await normalizeToolResultImages(
-      content,
-      agent.state.model,
-      processingOptions(signal),
-    );
+    let normalized: typeof content;
+    try {
+      normalized = await normalizeToolResultImages(content, agent.state.model, processingOptions(signal));
+    } catch (error) {
+      if (signal?.aborted) return previousResult;
+      throw error;
+    }
     normalizedToolResultContent.add(normalized);
     return normalized === content ? previousResult : { ...previousResult, content: normalized };
   };

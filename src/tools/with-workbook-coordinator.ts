@@ -6,6 +6,7 @@ import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { ToolStoppedError } from "./tool-stopped.js";
 import {
   getToolApprovalRequirement,
   getToolContextImpact,
@@ -91,7 +92,7 @@ function makeContext(args: {
 function throwIfAborted(signal: AbortSignal | undefined, mutation = false): void {
   if (!signal?.aborted) return;
 
-  throw new Error(mutation ? "Stopped before running; nothing changed in the workbook." : "Aborted");
+  throw new ToolStoppedError(mutation ? "Stopped before running; nothing changed in the workbook." : undefined);
 }
 
 export interface StopReporting {
@@ -123,7 +124,7 @@ function settleOnStop<T>(
         work.catch(() => {});
         reject(mode === "write"
           ? Object.assign(new Error("Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it."), { outcomeUnknown: true })
-          : new Error("Stopped by the user before Excel answered."));
+          : new ToolStoppedError("Stopped by the user before Excel answered."));
       }, STOP_GRACE_MS[mode]);
     };
     if (signal.aborted) onAbort();

@@ -66,7 +66,7 @@ export async function runWithTimeoutAbort<TResult>(args: {
   } catch (error) {
     if (isAbortError(error)) {
       if (callerSignal?.aborted) {
-        throw new Error("Aborted");
+        throw new DOMException("Aborted", "AbortError");
       }
 
       throw new Error(args.timeoutErrorMessage);

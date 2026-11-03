@@ -29,6 +29,7 @@ import {
   postMcpJsonRpc,
   type McpSession,
 } from "./mcp-transport.js";
+import { isStop, ToolStoppedError } from "./tool-stopped.js";
 
 const MCP_CLIENT_NAME = APP_NAME;
 const MCP_CLIENT_VERSION = APP_VERSION;
@@ -373,7 +374,7 @@ async function waitForServerTools(
   if (!signal) return promise;
   let onAbort = (): void => {};
   const aborted = new Promise<never>((_resolve, reject) => {
-    onAbort = () => reject(new Error("Aborted"));
+    onAbort = () => reject(new ToolStoppedError());
     signal.addEventListener("abort", onAbort, { once: true });
   });
   try {
@@ -837,6 +838,7 @@ export function createMcpTool(
           },
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         const message = getErrorMessage(error);
         const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
         const displayMessage = proxyDown

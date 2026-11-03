@@ -20,6 +20,7 @@ import {
   DEFAULT_PYTHON_BRIDGE_URL,
   PYTHON_BRIDGE_URL_SETTING_KEY,
 } from "./experimental-tool-gates.js";
+import { isStop, ToolStoppedError } from "./tool-stopped.js";
 
 const PYTHON_BRIDGE_API_PATH = "/v1/python-run";
 const DEFAULT_BRIDGE_TIMEOUT_MS = 20_000;
@@ -340,7 +341,7 @@ export async function callDefaultPythonBridge(
   } catch (error) {
     if (isAbortError(error)) {
       if (signal?.aborted) {
-        throw new Error("Aborted");
+        throw new ToolStoppedError();
       }
       throw new Error(`Python bridge request timed out after ${timeoutMs}ms.`);
     }
@@ -585,6 +586,7 @@ export function createPythonRunTool(
           },
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         const message = getErrorMessage(error);
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"

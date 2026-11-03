@@ -7,6 +7,7 @@ import type {
   PyodideWorkerRequest,
   PyodideWorkerResponse,
 } from "./pyodide-worker.js";
+import { ToolStoppedError } from "../tools/tool-stopped.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
@@ -93,6 +94,8 @@ function sendToWorker(
   return new Promise<PyodideWorkerResponse>((resolve, reject) => {
     const instance = getOrCreateWorker();
     const abort = (): void => {
+      cleanup();
+      reject(new ToolStoppedError());
       if (instance.phase.kind === "running" && instance.phase.pending.request.id === request.id) {
         terminateInstance(instance, new Error("Aborted"));
       } else {
@@ -104,7 +107,7 @@ function sendToWorker(
     instance.queue.push({
       request, timeoutMs,
       resolve: (response) => { cleanup(); resolve(response); },
-      reject: (error) => { cleanup(); reject(error); },
+      reject: (error) => { cleanup(); reject(signal?.aborted ? new ToolStoppedError() : error); },
     });
     signal?.addEventListener("abort", abort, { once: true });
     if (signal?.aborted) abort();
@@ -116,13 +119,7 @@ export async function callPyodideRuntime(
   request: PythonBridgeRequest,
   signal?: AbortSignal,
 ): Promise<PythonBridgeResponse> {
-  if (signal?.aborted) {
-    return {
-      ok: false,
-      action: "run_python",
-      error: "Aborted",
-    };
-  }
+  if (signal?.aborted) throw new ToolStoppedError();
 
   const id = `pyodide-${++requestCounter}`;
   const timeoutMs = request.timeout_ms ?? DEFAULT_TIMEOUT_MS;
@@ -155,6 +152,7 @@ export async function callPyodideRuntime(
     if (workerResponse.error !== undefined) response.error = workerResponse.error;
     return response;
   } catch (error) {
+    if (error instanceof ToolStoppedError) throw error;
     const message = error instanceof Error ? error.message : String(error);
     return {
       ok: false,

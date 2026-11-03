@@ -15,6 +15,7 @@ import { getWorkbookContext } from "../workbook/context.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { t } from "../language/index.js";
 import { approveGuidanceChange, showGuidanceUndo, type GuidanceChangeDependencies } from "./guidance-change.js";
+import { isStop } from "./tool-stopped.js";
 
 const schema = Type.Object({
   action: Type.Union([
@@ -160,6 +161,7 @@ export function createInstructionsTool(dependencies: GuidanceChangeDependencies 
           details: undefined,
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         return {
           content: [{ type: "text", text: `Error updating rules: ${getErrorMessage(error)}` }],
           details: undefined,
