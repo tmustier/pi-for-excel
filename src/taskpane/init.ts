@@ -775,12 +775,10 @@ export async function initTaskpane(opts: {
     }
   };
 
-  const focusedControl = (): Element | null => document.activeElement?.closest("pi-input") ?? document.activeElement;
-
   const focusSoon = (focus: () => void): void => {
-    const focusedAtRequest = focusedControl();
+    const focusedAtRequest = document.activeElement;
     requestAnimationFrame(() => {
-      const focused = focusedControl();
+      const focused = document.activeElement;
       if (focused !== focusedAtRequest && focused !== null && focused !== document.body) return;
       focus();
     });

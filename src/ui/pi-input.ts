@@ -48,7 +48,6 @@ export class PiInput extends LitElement {
   getTextarea(): HTMLTextAreaElement { return this._textarea; }
 
   loadDraft(text: string): void {
-    const hadFocus = this._textarea !== null && document.activeElement === this._textarea;
     this._draftOwner += 1;
     this._value = text;
     this.requestUpdate();
@@ -57,7 +56,6 @@ export class PiInput extends LitElement {
       if (!ta) return;
       ta.value = this._value;
       this._autoGrow();
-      if (hadFocus && (document.activeElement === null || document.activeElement === document.body)) ta.focus();
     });
   }
 

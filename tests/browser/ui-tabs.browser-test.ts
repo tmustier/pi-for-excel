@@ -101,29 +101,29 @@ void test("switching tabs from the composer keeps focus on a control the user mo
     { name: "tab click", run: (page: Page) => page.locator(".pi-session-tab__main").first().evaluate((tab: HTMLElement) => tab.click()) },
     { name: "Ctrl+Alt+Left", run: (page: Page) => page.keyboard.press("Control+Alt+ArrowLeft") },
   ];
-  for (const { name, run } of switches) {
+  const targets = [".pi-utilities-btn", ".pi-input-btn--attach"];
+  for (const { name, run } of switches) for (const target of targets) {
     await withTaskpane(async (page) => {
       await page.getByRole("button", { name: "New tab" }).click();
       await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: "Chat 2" }).waitFor({ state: "visible" });
       await page.locator("pi-input textarea").focus();
 
-      await page.evaluate(() => {
+      await page.evaluate((selector) => {
         const sidebar = document.querySelector("pi-sidebar");
-        const target = document.querySelector(".pi-session-tab");
-        const settings = document.querySelector<HTMLElement>(".pi-utilities-btn");
-        if (!sidebar || !target || !settings) throw new Error("taskpane controls missing");
+        const tab = document.querySelector(".pi-session-tab");
+        if (!sidebar || !tab || !document.querySelector(selector)) throw new Error("taskpane controls missing");
         const observer = new MutationObserver(() => {
-          if (!target.classList.contains("is-active")) return;
+          if (!tab.classList.contains("is-active")) return;
           observer.disconnect();
-          settings.focus();
+          document.querySelector<HTMLElement>(selector)?.focus();
         });
         observer.observe(sidebar, { subtree: true, attributes: true, childList: true });
-      });
+      }, target);
       await run(page);
       await page.locator(".pi-session-tab.is-active .pi-session-tab__title").filter({ hasText: "Chat 1" }).waitFor({ state: "visible" });
       await page.waitForTimeout(300);
 
-      assert.equal(await page.evaluate(() => document.activeElement?.className), "pi-utilities-btn", name);
+      assert.equal(await page.evaluate((selector) => document.activeElement?.matches(selector), target), true, `${name} -> ${target}`);
     });
   }
 });
