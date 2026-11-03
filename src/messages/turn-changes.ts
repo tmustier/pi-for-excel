@@ -1,8 +1,8 @@
 import { Type, type Static } from "typebox";
 import { t } from "../language/index.js";
 import { StringEnum } from "../tools/string-enum.js";
-import type { WorkbookChangeAuditEntry } from "../audit/workbook-change-audit.js";
-import type { WorkbookRecoverySnapshot } from "../workbook/recovery-log.js";
+import type { WorkbookAuditToolName, WorkbookChangeAuditEntry } from "../audit/workbook-change-audit.js";
+import type { WorkbookRecoverySnapshot, WorkbookRecoveryToolName } from "../workbook/recovery-log.js";
 import type { RecoveryMetadata, RecoveryPage, RecoveryPageOptions } from "../workbook/recovery/log-store.js";
 
 export async function readTurnBackups(
@@ -29,6 +29,7 @@ export const turnChangesSchema = Type.Object({
   changes: Type.Array(Type.Object({
     address: Type.String(),
     changedCount: Type.Number(),
+    unit: Type.Optional(StringEnum(["cells", "changes"])),
     backupIds: Type.Array(Type.String()),
   })),
 });
@@ -46,6 +47,12 @@ declare module "@earendil-works/pi-agent-core" {
   }
 }
 
+const CELL_TOOLS: ReadonlySet<WorkbookAuditToolName | WorkbookRecoveryToolName> = new Set([
+  "write_cells", "fill_formula", "python_transform_range", "format_cells", "conditional_format",
+] as const);
+
+const unitOf = (toolName: WorkbookAuditToolName | WorkbookRecoveryToolName) => CELL_TOOLS.has(toolName) ? "cells" : "changes";
+
 export function summarizeTurnChanges(args: {
   turnId: string;
   timestamp: number;
@@ -54,7 +61,7 @@ export function summarizeTurnChanges(args: {
   ranOfficeJs?: boolean;
   officeJsRanges?: readonly string[];
   audit: readonly WorkbookChangeAuditEntry[];
-  backups: readonly Pick<WorkbookRecoverySnapshot, "id" | "at" | "toolCallId" | "address" | "changedCount">[];
+  backups: readonly Pick<WorkbookRecoverySnapshot, "id" | "at" | "toolCallId" | "toolName" | "address" | "changedCount">[];
 }): TurnChangesMessage | null {
   const changes: TurnChangesMessage["changes"] = [];
   for (const callId of args.toolCallIds) {
@@ -63,9 +70,11 @@ export function summarizeTurnChanges(args: {
     const entry = args.audit.find((item) => item.toolCallId === callId && !item.blocked && item.changedCount > 0);
     if (entry) {
       changes.push({ address: entry.outputAddress ?? entry.inputAddress ?? entry.toolName,
-        changedCount: entry.changedCount, backupIds: saved.map((backup) => backup.id) });
+        changedCount: entry.changedCount, unit: unitOf(entry.toolName), backupIds: saved.map((backup) => backup.id) });
     } else {
-      for (const backup of saved) changes.push({ address: backup.address, changedCount: backup.changedCount, backupIds: [backup.id] });
+      for (const backup of saved) {
+        changes.push({ address: backup.address, changedCount: backup.changedCount, unit: unitOf(backup.toolName), backupIds: [backup.id] });
+      }
     }
   }
   return changes.length === 0 && !args.ranOfficeJs ? null : {

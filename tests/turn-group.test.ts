@@ -8,6 +8,9 @@ import type { TemplateResult } from "lit";
 
 import { buildTranscriptBlocks } from "../src/ui/messages/turn-model.ts";
 import { describeToolRow, toolActionVerb } from "../src/ui/tool-rows.ts";
+import { describePendingToolCall } from "../src/ui/tool-renderers.ts";
+import { summarizeTurnChanges } from "../src/messages/turn-changes.ts";
+import { renderTurnChangesReceipt } from "../src/ui/messages/turn-changes-receipt.ts";
 
 const usage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } };
 
@@ -208,4 +211,32 @@ void test("approval buttons name the action, falling back for extension tools", 
   assert.equal(toolActionVerb("modify_structure", { action: "delete_rows", sheet: "Summary", position: 40, count: 13 }), "Delete");
   assert.equal(toolActionVerb("write_cells", { start_cell: "A1", values: [[1]] }), "Write");
   assert.equal(toolActionVerb("sum_rows", {}), null);
+});
+
+void test("chart approvals name the chart action", () => {
+  const cases = [
+    [{ action: "create", name: "Sales", source_range: "Sheet1!A1:B12" }, "Create", "Create chart 'Sales' — Sheet1!A1:B12"],
+    [{ action: "update", name: "Sales", source_range: "Sheet1!A1:C12" }, "Update", "Update chart 'Sales' — Sheet1!A1:C12"],
+    [{ action: "delete", name: "Sales" }, "Delete", "Delete chart 'Sales'"],
+  ] as const;
+  for (const [params, verb, headline] of cases) {
+    assert.equal(toolActionVerb("charts", params), verb);
+    assert.equal(describePendingToolCall("charts", params), headline);
+  }
+});
+
+void test("turn receipts count cells only when every change was to cells", () => {
+  const entry = (toolCallId: string, toolName: "write_cells" | "charts", changedCount: number) => ({
+    id: toolCallId, at: 0, toolName, toolCallId, blocked: false, outputAddress: "Sheet1!A1", changedCount, changes: [],
+  });
+  const receipt = (...audit: ReturnType<typeof entry>[]) => {
+    const summary = summarizeTurnChanges({ turnId: "turn", timestamp: 0, outcome: "finished",
+      toolCallIds: new Set(audit.map((item) => item.toolCallId)), audit, backups: [] });
+    assert.ok(summary);
+    return textOf(renderTurnChangesReceipt(summary, "footer")).replace(/\s+/gu, " ").trim();
+  };
+
+  assert.match(receipt(entry("write", "write_cells", 40)), /^Changed 40 cells Undo/u);
+  assert.match(receipt(entry("chart", "charts", 1)), /^Made 1 change Undo/u);
+  assert.match(receipt(entry("write", "write_cells", 40), entry("chart", "charts", 1)), /^Made 2 changes Undo/u);
 });

@@ -59,7 +59,7 @@ const VERBS: Record<string, VerbForms> = {
   "Trace precedents": { base: "Trace precedents of", past: "Traced precedents of", live: "Tracing precedents of" },
   "Trace dependents": { base: "Trace dependents of", past: "Traced dependents of", live: "Tracing dependents of" },
   "Explain formula": { base: "Explain the formula in", past: "Explained the formula in", live: "Explaining the formula in" },
-  Chart: { base: "Chart", past: "Chart", live: "Charting" },
+  Create: { base: "Create", past: "Created", live: "Creating" },
   Charts: { base: "List charts in", past: "Listed charts in", live: "Listing charts in" },
   "Chart image": { base: "Capture chart", past: "Captured chart", live: "Capturing chart" },
   Comments: { base: "Read comments on", past: "Read comments on", live: "Reading comments on" },

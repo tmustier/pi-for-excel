@@ -844,18 +844,15 @@ function describeCharts(context: ToolDescriptionContext): ToolDesc {
     const count = chartDetails?.count !== undefined ? ` (${chartDetails.count})` : "";
     return { action: "Charts", detail: `${(params.sheet as string | undefined) ?? "workbook"}${count}` };
   }
+  const chart = chartName ? `chart '${chartName}'` : "chart";
   if (operation === "create" || operation === "update") {
-    const status = operation === "create" ? "created" : "updated";
-    const fallback = operation === "create" ? "new" : "chart";
     return toolDescWithAddress(
-      "Chart",
-      `'${chartName ?? fallback}' ${status}${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
+      operation === "create" ? "Create" : "Update",
+      `${chart}${source ? ` — ${compactRange(source)}` : ""}${recovery}`,
       source,
     );
   }
-  if (operation === "delete") {
-    return { action: "Chart", detail: `'${chartName ?? "chart"}' deleted${recovery}` };
-  }
+  if (operation === "delete") return { action: "Delete", detail: `${chart}${recovery}` };
   if (operation === "get_image") {
     const size = chartDetails?.image
       ? ` (${chartDetails.image.width}×${chartDetails.image.height}px)`
