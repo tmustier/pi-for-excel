@@ -2,7 +2,7 @@ import type { AgentMessage, AgentTool } from "@earendil-works/pi-agent-core";
 import type { AssistantMessage, TextContent, ThinkingContent, ToolCall, ToolResultMessage } from "@earendil-works/pi-ai";
 
 import type { TurnChangesMessage } from "../../messages/turn-changes.js";
-import { decodeToolDetails, reportsStop } from "../../tools/tool-details.js";
+import { decodeToolDetails } from "../../tools/tool-details.js";
 import { isFailedToolResult } from "../tool-renderers.js";
 import type { ToolRowTense } from "../tool-rows.js";
 import { thinkingKey } from "./transcript-state.js";
@@ -53,6 +53,16 @@ interface Response {
   index: number;
   firstCall: number;
   lastCall: number;
+}
+
+const PI_AGENT_CORE_PRE_RUN_ABORT = "Operation aborted";
+
+function isStoppedResult(result: ToolResultMessage): boolean {
+  const details = decodeToolDetails(result.details);
+  const [first] = result.content;
+  return details?.kind === "stopped"
+    || (details !== undefined && "stopped" in details && details.stopped === true)
+    || (result.isError && first?.type === "text" && first.text === PI_AGENT_CORE_PRE_RUN_ABORT);
 }
 
 export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlock[] {
@@ -137,7 +147,7 @@ export function buildTranscriptBlocks(options: BuildTurnsOptions): TranscriptBlo
         if (chunk.type === "toolCall") {
           const result = results.get(chunk.id);
           const state: ToolRowTense = result
-            ? (reportsStop(decodeToolDetails(result.details)) ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
+            ? (isStoppedResult(result) ? "stopped" : isFailedToolResult(result) ? "failed" : "done")
             : assistant.stopReason === "error" ? "failed"
             : assistant.stopReason === "aborted" ? "stopped"
             : active && (streaming || pendingToolCalls.has(chunk.id) || assistant.stopReason === "toolUse") ? "live"

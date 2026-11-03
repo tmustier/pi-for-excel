@@ -464,7 +464,11 @@ void test("Stop tells the agent whether a mutation ran", async () => {
   stopped.abort();
   const [beforeRun] = withWorkbookCoordinator([makeTool("format_cells")], new FakeCoordinator(), createContextProvider("wb-1"));
   if (!beforeRun) throw new Error("Wrapped tool missing");
-  await assert.rejects(beforeRun.execute("s1", {}, stopped.signal), /Stopped before running; nothing changed in the workbook\./u);
+  assert.deepEqual(await beforeRun.execute("s1", {}, stopped.signal), {
+    content: [{ type: "text", text: "Stopped before running; nothing changed in the workbook." }],
+    details: { kind: "stopped" },
+    isError: true,
+  });
 
   const during = new AbortController();
   const [whileRunning] = withWorkbookCoordinator(

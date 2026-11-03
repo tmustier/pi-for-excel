@@ -1,10 +1,4 @@
-import type {
-  AfterToolCallContext,
-  AfterToolCallResult,
-  AgentTool,
-  AgentToolResult,
-  AgentToolUpdateCallback,
-} from "@earendil-works/pi-agent-core";
+import type { AgentTool, AgentToolResult, AgentToolUpdateCallback } from "@earendil-works/pi-agent-core";
 import type { Static, TSchema } from "typebox";
 import { Value } from "typebox/value";
 
@@ -12,7 +6,8 @@ import type { ExecutionMode } from "../execution/mode.js";
 import type { WorkbookCoordinator, WorkbookOperationContext } from "../workbook/coordinator.js";
 import { cancelCellEditWaits } from "../excel/helpers.js";
 import { getErrorMessage } from "../utils/errors.js";
-import { decodeToolDetails, reportsStop } from "./tool-details.js";
+import type { StoppedToolDetails } from "./tool-details.js";
+import { isStop, ToolStoppedError } from "./tool-stopped.js";
 import {
   getToolApprovalRequirement,
   getToolContextImpact,
@@ -98,7 +93,7 @@ function makeContext(args: {
 function throwIfAborted(signal: AbortSignal | undefined, mutation = false): void {
   if (!signal?.aborted) return;
 
-  throw new Error(mutation ? "Stopped before running; nothing changed in the workbook." : "Aborted");
+  throw new ToolStoppedError(mutation ? "Stopped before running; nothing changed in the workbook." : undefined);
 }
 
 export interface StopReporting {
@@ -116,17 +111,6 @@ function appendStopNote<TDetails>(result: AgentToolResult<TDetails>): AgentToolR
 
 export const STOP_GRACE_MS: Readonly<Record<"read" | "write", number>> = { read: 500, write: 10_000 };
 
-const STOPPED_WITH_UNKNOWN_OUTCOME = "Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it.";
-
-export function markStoppedToolResult(
-  { result, isError }: AfterToolCallContext,
-  signal?: AbortSignal,
-): Promise<AfterToolCallResult | undefined> {
-  const [first] = result.content;
-  const stopped = signal?.aborted === true && isError && !reportsStop(decodeToolDetails(result.details))
-    && !(first?.type === "text" && first.text === STOPPED_WITH_UNKNOWN_OUTCOME);
-  return Promise.resolve(stopped ? { details: { kind: "stopped" } } : undefined);
-}
 
 function settleOnStop<T>(
   work: Promise<T>,
@@ -141,8 +125,8 @@ function settleOnStop<T>(
       timer = setTimeout(() => {
         work.catch(() => {});
         reject(mode === "write"
-          ? Object.assign(new Error(STOPPED_WITH_UNKNOWN_OUTCOME), { outcomeUnknown: true })
-          : new Error("Stopped by the user before Excel answered."));
+          ? Object.assign(new Error("Stopped by the user while Excel was still working on this change. The outcome is unknown: the change may still be applied. Read the affected range back before relying on it."), { outcomeUnknown: true })
+          : new ToolStoppedError("Stopped by the user before Excel answered."));
       }, STOP_GRACE_MS[mode]);
     };
     if (signal.aborted) onAbort();
@@ -163,24 +147,39 @@ function wrapTool<TParameters extends TSchema, TDetails>(
   mutationObserver: WorkbookMutationObserver | undefined,
   executionPolicy: WorkbookExecutionPolicy,
   pendingMutations: PendingMutations,
-): AgentTool<TParameters, TDetails> {
+): AgentTool<TParameters, TDetails | StoppedToolDetails> {
   return {
     ...tool,
-    execute: (toolCallId, params, signal, onUpdate) => {
-      const mode = getToolExecutionMode(tool.name, params);
-      if (mode === "read") {
-        const earlierMutations = [...pendingMutations];
-        if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
-        return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      try {
+        return await execute(toolCallId, params, signal, onUpdate);
+      } catch (error) {
+        if (!isStop(error, signal)) throw error;
+        const text = error instanceof ToolStoppedError ? error.message : new ToolStoppedError().message;
+        return { content: [{ type: "text", text }], details: { kind: "stopped" }, isError: true };
       }
-
-      const running = run(mode, toolCallId, params, signal, onUpdate);
-      const settled = running.then(() => undefined, () => undefined);
-      pendingMutations.add(settled);
-      void settled.then(() => pendingMutations.delete(settled));
-      return running;
     },
   };
+
+  function execute(
+    toolCallId: string,
+    params: Static<TParameters>,
+    signal: AbortSignal | undefined,
+    onUpdate: AgentToolUpdateCallback<TDetails> | undefined,
+  ): Promise<AgentToolResult<TDetails>> {
+    const mode = getToolExecutionMode(tool.name, params);
+    if (mode === "read") {
+      const earlierMutations = [...pendingMutations];
+      if (earlierMutations.length === 0) return run(mode, toolCallId, params, signal, onUpdate);
+      return Promise.all(earlierMutations).then(() => run(mode, toolCallId, params, signal, onUpdate));
+    }
+
+    const running = run(mode, toolCallId, params, signal, onUpdate);
+    const settled = running.then(() => undefined, () => undefined);
+    pendingMutations.add(settled);
+    void settled.then(() => pendingMutations.delete(settled));
+    return running;
+  }
 
   async function run(
     mode: ReturnType<typeof getToolExecutionMode>,

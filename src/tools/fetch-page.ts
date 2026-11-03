@@ -10,6 +10,7 @@ import {
   isLikelyProxyConnectionError,
   resolveOutboundRequestUrl,
 } from "./external-fetch.js";
+import { isStop } from "./tool-stopped.js";
 
 const FETCH_PAGE_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_CHARS = 12_000;
@@ -449,6 +450,7 @@ export function createFetchPageTool(
           }),
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         const message = getErrorMessage(error);
         const proxyDown = isLikelyProxyConnectionError(message, usedProxyBaseUrl);
         const displayMessage = proxyDown

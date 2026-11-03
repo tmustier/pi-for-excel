@@ -5,6 +5,7 @@ import {
   isPyodideLoaded,
   terminatePyodide,
 } from "../src/python/pyodide-runtime.ts";
+import { ToolStoppedError } from "../src/tools/tool-stopped.ts";
 import type { PyodideWorkerRequest, PyodideWorkerMessage } from "../src/python/pyodide-worker.ts";
 
 class WorkerHost {
@@ -84,7 +85,7 @@ void test("Pyodide abort terminates running Python and settles its queued reques
   const first = callPyodideRuntime({ code: "running" }, controller.signal);
   const second = callPyodideRuntime({ code: "queued" });
   controller.abort();
-  assert.equal((await first).error, "Aborted");
+  await assert.rejects(first, ToolStoppedError);
   assert.equal(WorkerHost.instances[0]?.terminated, true);
   assert.equal((await second).error, "Aborted");
 });
@@ -95,7 +96,7 @@ void test("Pyodide abort of queued work does not interrupt running Python", asyn
   const controller = new AbortController();
   const second = callPyodideRuntime({ code: "queued" }, controller.signal);
   controller.abort();
-  assert.equal((await second).error, "Aborted");
+  await assert.rejects(second, ToolStoppedError);
   const host = WorkerHost.instances[0];
   assert.ok(host);
   assert.equal(host.requests.length, 1);

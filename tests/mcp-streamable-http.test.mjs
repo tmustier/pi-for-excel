@@ -89,9 +89,7 @@ void test("aborting one handshake waiter does not abort another or dispatch its 
   await started.promise;
   const second = call(tool, "survivor");
   controller.abort();
-  const cancelled = await first;
-  assert.equal(cancelled.details.ok, false);
-  assert.match(cancelled.details.error, /abort/i);
+  await assert.rejects(first, { name: "ToolStoppedError" });
   release.resolve();
   assertOk(await second);
   assert.equal(server.sessions.size, 1);

@@ -18,6 +18,7 @@ import {
   DEFAULT_TMUX_BRIDGE_URL,
   TMUX_BRIDGE_URL_SETTING_KEY,
 } from "./experimental-tool-gates.js";
+import { isStop, ToolStoppedError } from "./tool-stopped.js";
 
 const TMUX_BRIDGE_API_PATH = "/v1/tmux";
 const DEFAULT_TMUX_BRIDGE_TIMEOUT_MS = 15_000;
@@ -459,7 +460,7 @@ async function defaultCallBridge(
   } catch (error) {
     if (isAbortError(error)) {
       if (signal?.aborted) {
-        throw new Error("Aborted");
+        throw new ToolStoppedError();
       }
       throw new Error(`Tmux bridge request timed out after ${timeoutMs}ms.`);
     }
@@ -641,6 +642,7 @@ export function createTmuxTool(
           },
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         const message = getErrorMessage(error);
         const fallbackAction =
           params?.action ??

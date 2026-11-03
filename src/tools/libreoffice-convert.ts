@@ -15,6 +15,7 @@ import {
   tryParseBridgeJson,
 } from "./bridge-http-utils.js";
 import { getDefaultPythonBridgeConfig } from "./python-run.js";
+import { isStop, ToolStoppedError } from "./tool-stopped.js";
 
 const LIBREOFFICE_BRIDGE_API_PATH = "/v1/libreoffice-convert";
 const DEFAULT_BRIDGE_TIMEOUT_MS = 45_000;
@@ -309,7 +310,7 @@ async function defaultCallBridge(
   } catch (error) {
     if (isAbortError(error)) {
       if (signal?.aborted) {
-        throw new Error("Aborted");
+        throw new ToolStoppedError();
       }
       throw new Error(`LibreOffice bridge request timed out after ${timeoutMs}ms.`);
     }
@@ -438,6 +439,7 @@ export function createLibreOfficeConvertTool(
           },
         };
       } catch (error) {
+        if (isStop(error, signal)) throw error;
         const message = getErrorMessage(error);
         const skillHint = shouldAttachPythonBridgeSkillHint(message)
           ? "python-bridge"

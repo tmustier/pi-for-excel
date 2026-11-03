@@ -287,7 +287,7 @@ void test("MCP consent is per server/tool, once or remembered in Auto, and per c
   const controller = new AbortController();
   dependencies.requestToolApproval = () => { controller.abort(); return Promise.resolve(true); };
   tool = createMcpTool(dependencies);
-  assert.equal((await run("send", "local", controller.signal)).details.ok, false);
+  await assert.rejects(run("send", "local", controller.signal), { name: "AbortError" });
   assert.equal(sent.length, before, "Stop prevents dispatch even if approval resolves true");
   delete dependencies.requestToolApproval;
   tool = createMcpTool(dependencies);

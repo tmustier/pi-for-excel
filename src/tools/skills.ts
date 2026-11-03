@@ -14,6 +14,7 @@ import type {
   SkillsToolDetails,
   SkillsUninstallDetails,
 } from "./tool-details.js";
+import { isStop } from "./tool-stopped.js";
 
 const schema = Type.Object({
   action: Type.Union([
@@ -390,6 +391,7 @@ export function createSkillsTool(
             }),
           };
         } catch (error) {
+          if (isStop(error, signal)) throw error;
           const reason = error instanceof Error ? error.message : String(error);
           const message = `Failed to install skill \`${requestedName}\`: ${reason}`;
           return {
@@ -437,6 +439,7 @@ export function createSkillsTool(
             }),
           };
         } catch (error) {
+          if (isStop(error, signal)) throw error;
           const reason = error instanceof Error ? error.message : String(error);
           const message = `Failed to uninstall skill \`${requestedName}\`: ${reason}`;
           return {

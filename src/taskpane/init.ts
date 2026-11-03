@@ -60,7 +60,6 @@ import {
   buildPythonBridgeApprovalMessage,
 } from "../tools/experimental-tool-gates.js";
 import {
-  markStoppedToolResult,
   withWorkbookCoordinator,
 } from "../tools/with-workbook-coordinator.js";
 import { registerBuiltins } from "../commands/builtins.js";
@@ -1255,7 +1254,6 @@ export async function initTaskpane(opts: {
       }),
       prepareRequest: autoContext.prepareRequest,
       transformContext: autoContext.transformContext,
-      afterToolCall: markStoppedToolResult,
       streamFn,
     });
 

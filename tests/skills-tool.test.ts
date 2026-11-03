@@ -409,8 +409,7 @@ void test("Confirm skill changes show the proposed text and refuse denial, Stop,
   assert.equal(decodeToolDetailsOfKind(result.details, "skills_error")?.action, "install");
   assert.equal(installed, "original");
   stop = true;
-  result = await createSkillsTool(dependencies).execute("stopped", params, controller.signal);
-  assert.equal(decodeToolDetailsOfKind(result.details, "skills_error")?.action, "install");
+  await assert.rejects(createSkillsTool(dependencies).execute("stopped", params, controller.signal), { name: "AbortError" });
   assert.equal(installed, "original");
   const { requestLocalChangeApproval: _approval, ...withoutApproval } = dependencies;
   result = await createSkillsTool(withoutApproval).execute("unavailable", params);
