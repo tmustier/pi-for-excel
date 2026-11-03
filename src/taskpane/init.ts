@@ -387,6 +387,16 @@ export async function initTaskpane(opts: {
   appEl.replaceChildren();
   appEl.appendChild(sidebar);
 
+  const wireTextarea = () => {
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
+    } else {
+      requestAnimationFrame(wireTextarea);
+    }
+  };
+  requestAnimationFrame(wireTextarea);
+
   let rulesActive = false;
 
   const setRulesActive = (next: boolean) => {
@@ -2344,16 +2354,6 @@ export async function initTaskpane(opts: {
   });
 
   startProxyPolling(settings);
-
-  const wireTextarea = () => {
-    const composer = sidebar.getInput();
-    if (composer) {
-      wireCommandMenu(composer);
-    } else {
-      requestAnimationFrame(wireTextarea);
-    }
-  };
-  requestAnimationFrame(wireTextarea);
 
   const runSlashCommand = (name: string, args = ""): void => {
     document.dispatchEvent(new CustomEvent("pi:command-run", { detail: { name, args } }));

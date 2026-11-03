@@ -15,7 +15,13 @@ await test("recorder preserves idle duration, child failure and the existing bro
     args: ["--remote-debugging-port=0"],
   });
   try {
-    const [port] = (await fs.readFile(path.join(profile, "DevToolsActivePort"), "utf8")).split("\n");
+    const portFile = path.join(profile, "DevToolsActivePort");
+    const deadline = Date.now() + 10_000;
+    while (!await fs.access(portFile).then(() => true, () => false)) {
+      assert.ok(Date.now() < deadline, "Chrome never wrote DevToolsActivePort");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    const [port] = (await fs.readFile(portFile, "utf8")).split("\n");
     const page = await context.newPage();
     await page.route("http://127.0.0.1/**", (route) => route.fulfill({
       contentType: "text/html",

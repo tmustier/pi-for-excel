@@ -189,6 +189,21 @@ void test("toasts never cover the open slash-command menu", async () => {
   });
 });
 
+void test("the slash-command menu opens while startup is still loading", async () => {
+  const opened = await openTaskpane(env, { clientId: "ui-status-slow-start", prepareContext: async (context) => {
+    await context.route("**/src/ui/disclosure-bar.ts*", async (route) => {
+      await new Promise((resolve) => setTimeout(resolve, 6_000));
+      await route.continue();
+    });
+  } });
+  try {
+    await opened.page.locator("pi-input textarea").fill("/");
+    await opened.page.locator("#pi-command-menu .pi-cmd-item").first().waitFor({ state: "visible", timeout: 3_000 });
+  } finally {
+    await opened.finish();
+  }
+});
+
 void test("a toast with the same id replaces a long progress toast", async () => {
   await withTaskpane({ width: 380, height: 622 }, async (page) => {
     const messages = await page.evaluate(async () => {
