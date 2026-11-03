@@ -1,3 +1,5 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
+
 declare const self: {
   addEventListener(type: "message", listener: (event: MessageEvent) => void): void;
   postMessage(message: unknown): void;
@@ -21,6 +23,8 @@ export interface PyodideWorkerResponse {
   loadTimeMs?: number;
   runTimeMs?: number;
 }
+
+export type PyodideWorkerMessage = PyodideWorkerResponse | { type: "loaded" };
 
 interface PyodideInterface {
   runPythonAsync(code: string): Promise<unknown>;
@@ -47,14 +51,18 @@ declare function _loadPyodide(options?: {
 
 const PYODIDE_CDN_URL = "https://cdn.jsdelivr.net/pyodide/v0.27.7/full/";
 
-let pyodide: PyodideInterface | null = null;
-let loadingPromise: Promise<PyodideInterface> | null = null;
+type PyodideState =
+  | { kind: "unloaded" }
+  | { kind: "loading"; promise: Promise<PyodideInterface> }
+  | { kind: "loaded"; instance: PyodideInterface };
+
+let pyodideState: PyodideState = { kind: "unloaded" };
 
 async function ensurePyodide(): Promise<PyodideInterface> {
-  if (pyodide) return pyodide;
-  if (loadingPromise) return loadingPromise;
+  if (pyodideState.kind === "loaded") return pyodideState.instance;
+  if (pyodideState.kind === "loading") return pyodideState.promise;
 
-  loadingPromise = (async () => {
+  const promise = (async () => {
     try {
       const mod = await import(/* @vite-ignore */ `${PYODIDE_CDN_URL}pyodide.mjs`) as {
         loadPyodide: typeof _loadPyodide;
@@ -64,23 +72,22 @@ async function ensurePyodide(): Promise<PyodideInterface> {
         indexURL: PYODIDE_CDN_URL,
       });
 
-      pyodide = instance;
+      pyodideState = { kind: "loaded", instance };
+      self.postMessage({ type: "loaded" });
       return instance;
     } catch (error) {
+      pyodideState = { kind: "unloaded" };
       const reason = error instanceof Error ? error.message : String(error);
       throw new Error(
         "Failed to load Pyodide from jsDelivr. " +
         "Check internet access and Content-Security-Policy allowlists for https://cdn.jsdelivr.net. " +
         `Original error: ${reason}`,
       );
-    } finally {
-      if (!pyodide) {
-        loadingPromise = null;
-      }
     }
   })();
 
-  return loadingPromise;
+  pyodideState = { kind: "loading", promise };
+  return promise;
 }
 
 function detectImports(code: string): string[] {
@@ -281,10 +288,12 @@ __sys__.stderr = __sys__.__stderr__
   return response;
 }
 
+const runSerially = createConcurrencyLimit(1);
+
 self.addEventListener("message", (event: MessageEvent<PyodideWorkerRequest>) => {
   const request = event.data;
 
-  void handleRun(request).then(
+  void runSerially(() => handleRun(request)).then(
     (response) => self.postMessage(response),
     (error: unknown) => {
       const message = error instanceof Error ? error.message : String(error);

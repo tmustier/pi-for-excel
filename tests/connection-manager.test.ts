@@ -429,3 +429,17 @@ void test("clearSecretsFromHost throws for unregistered connection", async () =>
     /not registered/,
   );
 });
+
+void test("concurrent connection updates from managers sharing settings preserve sibling credentials", async () => {
+  const settings = createMemorySettings();
+  const first = new ConnectionManager({ settings });
+  const second = new ConnectionManager({ settings });
+  first.registerDefinition("ext.apollo", APOLLO_DEFINITION);
+  second.registerDefinition("ext.vendor", MULTI_FIELD_DEFINITION);
+  await Promise.all([
+    first.setSecrets("ext.apollo", APOLLO_DEFINITION.id, { apiKey: "apollo-key" }),
+    second.setSecrets("ext.vendor", MULTI_FIELD_DEFINITION.id, { clientId: "vendor-id", clientSecret: "vendor-secret" }),
+  ]);
+  assert.deepEqual(await first.getSecretsForOwner("ext.apollo", APOLLO_DEFINITION.id), { apiKey: "apollo-key" });
+  assert.deepEqual(await second.getSecretsForOwner("ext.vendor", MULTI_FIELD_DEFINITION.id), { clientId: "vendor-id", clientSecret: "vendor-secret" });
+});

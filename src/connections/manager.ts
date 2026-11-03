@@ -1,3 +1,5 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
+
 import {
   loadConnectionStoreDocument,
   loadConnectionStoreDocumentForUpdate,
@@ -308,34 +310,41 @@ function toPublicConnectionDefinition(
   return publicDefinition;
 }
 
+const mutateDocumentSerially = createConcurrencyLimit(1);
+
 async function mutateConnectionRecord(args: {
   settings: SettingsWriter;
   connectionId: string;
   mutator: (record: StoredConnectionRecord | undefined) => StoredConnectionRecord | null;
 }): Promise<boolean> {
-  const items = await loadConnectionStoreDocumentForUpdate(args.settings);
-  const previous = items[args.connectionId];
-  const next = args.mutator(previous);
+  return mutateDocumentSerially(async () => {
+    const items = await loadConnectionStoreDocumentForUpdate(args.settings);
+    const previous = items[args.connectionId];
+    const next = args.mutator(previous);
 
-  if (!next) {
-    if (!(args.connectionId in items)) {
+    if (!next) {
+      if (!(args.connectionId in items)) {
+        return false;
+      }
+
+      delete items[args.connectionId];
+      await saveConnectionStoreDocument(args.settings, items);
+      return true;
+    }
+
+    next.credentialRevision = JSON.stringify(previous?.secrets ?? {}) === JSON.stringify(next.secrets ?? {})
+      ? previous?.credentialRevision ?? crypto.randomUUID()
+      : crypto.randomUUID();
+    const previousSerialized = JSON.stringify(previous ?? null);
+    const nextSerialized = JSON.stringify(next);
+    if (previousSerialized === nextSerialized) {
       return false;
     }
 
-    delete items[args.connectionId];
+    items[args.connectionId] = next;
     await saveConnectionStoreDocument(args.settings, items);
     return true;
-  }
-
-  const previousSerialized = JSON.stringify(previous ?? null);
-  const nextSerialized = JSON.stringify(next);
-  if (previousSerialized === nextSerialized) {
-    return false;
-  }
-
-  items[args.connectionId] = next;
-  await saveConnectionStoreDocument(args.settings, items);
-  return true;
+  });
 }
 
 export class ConnectionManager {
@@ -417,15 +426,18 @@ export class ConnectionManager {
   }
 
   async deleteStoredRecords(shouldDelete: (connectionId: string) => boolean): Promise<void> {
-    const items = await loadConnectionStoreDocumentForUpdate(this.settings);
-    const doomed = Object.keys(items).filter(shouldDelete);
-    if (doomed.length === 0) return;
+    const changed = await mutateDocumentSerially(async () => {
+      const items = await loadConnectionStoreDocumentForUpdate(this.settings);
+      const doomed = Object.keys(items).filter(shouldDelete);
+      if (doomed.length === 0) return false;
 
-    for (const connectionId of doomed) {
-      delete items[connectionId];
-    }
-    await saveConnectionStoreDocument(this.settings, items);
-    this.notify();
+      for (const connectionId of doomed) {
+        delete items[connectionId];
+      }
+      await saveConnectionStoreDocument(this.settings, items);
+      return true;
+    });
+    if (changed) this.notify();
   }
 
   hasDefinition(connectionId: string): boolean {
@@ -692,7 +704,7 @@ export class ConnectionManager {
     }
   }
 
-  async markRuntimeAuthFailure(connectionId: string, failure: ConnectionRuntimeAuthFailure): Promise<void> {
+  async markRuntimeAuthFailure(connectionId: string, failure: ConnectionRuntimeAuthFailure, credentialRevision?: string): Promise<void> {
     const definition = this.getRequiredDefinition(connectionId);
     const message = normalizeNonEmpty(failure.message, "failure message");
 
@@ -700,6 +712,7 @@ export class ConnectionManager {
       settings: this.settings,
       connectionId: definition.id,
       mutator: (record) => {
+        if (credentialRevision !== undefined && credentialRevision !== (record?.credentialRevision ?? "")) return record ?? null;
         const previousStatus = record?.status ?? "missing";
         assertStatusTransition(previousStatus, "error");
 
@@ -736,6 +749,7 @@ export class ConnectionManager {
       const lastError = status === "invalid" || status === "error" ? record?.lastError : undefined;
       return {
         connectionId: definition.id,
+        credentialRevision: record?.credentialRevision ?? "",
         title: definition.title,
         capability: definition.capability,
         status,

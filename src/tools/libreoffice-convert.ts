@@ -1,3 +1,5 @@
+import { defaultGetApprovedPythonBridgeUrl } from "./experimental-tool-gates/evaluation.js";
+
 function isToolsLibreofficeConvertPayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -103,6 +105,7 @@ export interface LibreOfficeConvertToolDetails {
 }
 
 export interface LibreOfficeConvertToolDependencies {
+  getApprovedBridgeUrl?: () => Promise<string | undefined>;
   getBridgeConfig?: () => Promise<LibreOfficeBridgeConfig | null>;
   callBridge?: (
     request: LibreOfficeConvertRequest,
@@ -373,6 +376,7 @@ export function createLibreOfficeConvertTool(
   dependencies: LibreOfficeConvertToolDependencies = {},
 ): AgentTool<TSchema, LibreOfficeConvertToolDetails> {
   const getBridgeConfig = dependencies.getBridgeConfig ?? defaultGetBridgeConfig;
+  const getApprovedBridgeUrl = dependencies.getApprovedBridgeUrl ?? defaultGetApprovedPythonBridgeUrl;
   const callBridge = dependencies.callBridge ?? defaultCallBridge;
 
   return {
@@ -409,6 +413,9 @@ export function createLibreOfficeConvertTool(
           };
         }
 
+        if (await getApprovedBridgeUrl() !== bridgeConfig.url) {
+          throw new Error("Python bridge URL requires user approval before execution.");
+        }
         const request = toBridgeRequest(params);
         const response = await callBridge(request, bridgeConfig, signal);
 

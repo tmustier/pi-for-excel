@@ -242,7 +242,7 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
           try {
             await connectionManager.markRuntimeAuthFailure(authFailureSnapshot.connectionId, {
               message: errorMessage,
-            });
+            }, authFailureSnapshot.credentialRevision);
           } catch {
           }
 

@@ -1,3 +1,5 @@
+import { defaultGetApprovedPythonBridgeUrl } from "./experimental-tool-gates/evaluation.js";
+
 function isToolsPythonTransformRangePayloadShape(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -135,6 +137,7 @@ type WriteOutputResult =
   };
 
 export interface PythonTransformRangeToolDependencies {
+  getApprovedBridgeUrl?: () => Promise<string | undefined>;
   getBridgeConfig?: () => Promise<PythonBridgeConfig | null>;
   callBridge?: (
     request: PythonBridgeRequest,
@@ -675,6 +678,7 @@ export function createPythonTransformRangeTool(
   attribution: RecoveryAttribution = {},
 ): AgentTool<TSchema, PythonTransformRangeDetails> & StopReporting {
   const getBridgeConfig = dependencies.getBridgeConfig ?? getDefaultPythonBridgeConfig;
+  const getApprovedBridgeUrl = dependencies.getApprovedBridgeUrl ?? defaultGetApprovedPythonBridgeUrl;
   const callBridge = dependencies.callBridge ?? callDefaultPythonBridge;
   const excelRunOptions = dependencies.excelRunOptions ?? {};
   const readInputRange = dependencies.readInputRange
@@ -701,7 +705,7 @@ export function createPythonTransformRangeTool(
       rawParams: unknown,
       signal: AbortSignal | undefined,
     ): Promise<AgentToolResult<PythonTransformRangeDetails>> => {
-      let writeStarted = false;
+      let writeCompleted = false;
       let stoppedTarget: string | undefined;
       try {
         const params = parseParams(rawParams);
@@ -715,7 +719,11 @@ export function createPythonTransformRangeTool(
           : qualifiedAddress(input.sheetName, requestedOutputStartCell);
         stoppedTarget = outputStartCell;
 
-        const bridgeConfig = await getBridgeConfig();
+        let bridgeConfig = await getBridgeConfig();
+        if (bridgeConfig && await getApprovedBridgeUrl() !== bridgeConfig.url) {
+          if (bridgeConfig.configured) throw new Error("Python bridge URL requires user approval before execution.");
+          bridgeConfig = null;
+        }
         const bridgeRequest = buildBridgeRequest(params.code, sourceAddress, input.values, input.text, params.timeout_ms);
 
         let bridgeResponse: PythonBridgeResponse | null = null;
@@ -812,7 +820,7 @@ export function createPythonTransformRangeTool(
           allowOverwrite: params.allow_overwrite === true,
           ...(signal ? { signal } : {}),
         });
-        writeStarted = true;
+        writeCompleted = true;
 
         if (writeResult.blocked) {
           const blockedResult: AgentToolResult<PythonTransformRangeDetails> = {
@@ -925,7 +933,7 @@ export function createPythonTransformRangeTool(
 
         return successResult;
       } catch (error) {
-        if (signal?.aborted && !writeStarted) {
+        if (signal?.aborted && !writeCompleted) {
           const target = stoppedTarget ?? "the destination";
           return {
             content: [{

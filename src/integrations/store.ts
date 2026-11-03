@@ -1,3 +1,5 @@
+import { createConcurrencyLimit } from "../utils/concurrency.js";
+
 import { getDefaultEnabledIntegrationIds } from "./catalog.js";
 import type { SettingsWriter } from "../storage/local/settings-store.js";
 
@@ -84,6 +86,8 @@ async function readScopeIntegrationIds(
   return normalizeIntegrationIds(raw, knownIntegrationIds);
 }
 
+const mutateIntegrationsSerially = createConcurrencyLimit(1);
+
 async function setScopeIntegrationIds(
   settings: SettingsWriter,
   scope: IntegrationScope,
@@ -120,7 +124,7 @@ export async function setSessionIntegrationIds(
   integrationIds: readonly string[],
   knownIntegrationIds: readonly string[],
 ): Promise<void> {
-  await setScopeIntegrationIds(settings, "session", sessionId, integrationIds, knownIntegrationIds);
+  await mutateIntegrationsSerially(() => setScopeIntegrationIds(settings, "session", sessionId, integrationIds, knownIntegrationIds));
 }
 
 export async function getWorkbookIntegrationIds(
@@ -137,7 +141,7 @@ export async function setWorkbookIntegrationIds(
   integrationIds: readonly string[],
   knownIntegrationIds: readonly string[],
 ): Promise<void> {
-  await setScopeIntegrationIds(settings, "workbook", workbookId, integrationIds, knownIntegrationIds);
+  await mutateIntegrationsSerially(() => setScopeIntegrationIds(settings, "workbook", workbookId, integrationIds, knownIntegrationIds));
 }
 
 export async function setIntegrationEnabledInScope(args: {
@@ -149,20 +153,22 @@ export async function setIntegrationEnabledInScope(args: {
   knownIntegrationIds: readonly string[];
   applyDefaultsWhenUnconfigured?: boolean;
 }): Promise<void> {
-  const { settings, scope, identifier, integrationId, enabled, knownIntegrationIds } = args;
-  const existing = await readScopeIntegrationIds(
-    settings, scope, identifier, knownIntegrationIds, args.applyDefaultsWhenUnconfigured === true,
-  );
+  await mutateIntegrationsSerially(async () => {
+    const { settings, scope, identifier, integrationId, enabled, knownIntegrationIds } = args;
+    const existing = await readScopeIntegrationIds(
+      settings, scope, identifier, knownIntegrationIds, args.applyDefaultsWhenUnconfigured === true,
+    );
 
-  const nextSet = new Set<string>(existing);
-  if (enabled) {
-    nextSet.add(integrationId);
-  } else {
-    nextSet.delete(integrationId);
-  }
+    const nextSet = new Set<string>(existing);
+    if (enabled) {
+      nextSet.add(integrationId);
+    } else {
+      nextSet.delete(integrationId);
+    }
 
-  const nextIds = Array.from(nextSet);
-  await setScopeIntegrationIds(settings, scope, identifier, nextIds, knownIntegrationIds);
+    const nextIds = Array.from(nextSet);
+    await setScopeIntegrationIds(settings, scope, identifier, nextIds, knownIntegrationIds);
+  });
 }
 
 export async function resolveConfiguredIntegrationIds(args: {

@@ -9,6 +9,7 @@ export const CONNECTION_STORE_KEY = "connections.store.v1";
 const CONNECTION_STORE_VERSION = 1;
 
 export interface StoredConnectionRecord {
+  credentialRevision?: string;
   status?: ConnectionStatus;
   lastValidatedAt?: string;
   lastError?: string;
@@ -48,11 +49,13 @@ function normalizeConnectionRecord(value: unknown): StoredConnectionRecord | nul
   if (!isConnectionsStorePayloadShape(value)) return null;
 
   const record: StoredConnectionRecord = {};
+  const credentialRevision = normalizeOptionalString(value.credentialRevision);
   const status = normalizeConnectionStatus(value.status);
   const lastValidatedAt = normalizeOptionalString(value.lastValidatedAt);
   const lastError = normalizeOptionalString(value.lastError);
   const secrets = normalizeSecrets(value.secrets);
 
+  if (credentialRevision !== undefined) record.credentialRevision = credentialRevision;
   if (status !== undefined) record.status = status;
   if (lastValidatedAt !== undefined) record.lastValidatedAt = lastValidatedAt;
   if (lastError !== undefined) record.lastError = lastError;

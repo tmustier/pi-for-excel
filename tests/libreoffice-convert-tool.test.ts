@@ -21,6 +21,7 @@ function firstText(result: AgentToolResult<LibreOfficeConvertToolDetails>): stri
 
 void test("libreoffice_convert returns guidance when bridge URL is missing", async () => {
   const tool = createLibreOfficeConvertTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve(null),
   });
 
@@ -40,6 +41,7 @@ void test("libreoffice_convert returns guidance when bridge URL is missing", asy
 
 void test("libreoffice_convert validates absolute input_path", async () => {
   const tool = createLibreOfficeConvertTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
     callBridge: () => Promise.resolve({ ok: true, action: "convert" }),
   });
@@ -58,6 +60,7 @@ void test("libreoffice_convert sends bridge payload and renders conversion summa
   let capturedConfig: LibreOfficeBridgeConfig | null = null;
 
   const tool = createLibreOfficeConvertTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({
       url: "https://localhost:3340",
       token: "secret-token",
@@ -113,6 +116,7 @@ void test("libreoffice_convert sends bridge payload and renders conversion summa
 
 void test("libreoffice_convert bridge errors are surfaced", async () => {
   const tool = createLibreOfficeConvertTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
     callBridge: () => Promise.reject(new Error("bridge unavailable")),
   });
@@ -131,6 +135,7 @@ void test("libreoffice_convert bridge errors are surfaced", async () => {
 
 void test("libreoffice_convert handles explicit bridge rejection payloads", async () => {
   const tool = createLibreOfficeConvertTool({
+    getApprovedBridgeUrl: () => Promise.resolve("https://localhost:3340"),
     getBridgeConfig: () => Promise.resolve({ url: "https://localhost:3340" }),
     callBridge: () => Promise.resolve({
       ok: false,
