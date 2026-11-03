@@ -1,4 +1,4 @@
-import { mapWithConcurrency } from "../utils/concurrency.js";
+import { createConcurrencyLimit, mapWithConcurrency } from "../utils/concurrency.js";
 import { t } from "../language/index.js";
 import { formatWorkbookLabel, getWorkbookContext } from "../workbook/context.js";
 import { base64ToBytes, bytesToBase64, encodeTextUtf8, truncateBase64, truncateText } from "./encoding.js";
@@ -439,13 +439,20 @@ export interface FilesWorkspaceOptions {
   settings?: WorkspaceSettings | null;
 }
 
-export class FilesWorkspace {
-  private backend: WorkspaceBackend | null = null;
-  private backendPromise: Promise<WorkspaceBackend> | null = null;
-  private nativeHandle: FileSystemDirectoryHandle | null = null;
+type WorkspaceBackendState =
+  | { kind: "uninitialized"; workspaceBackend: WorkspaceBackend | null }
+  | {
+    kind: "ready";
+    backend: WorkspaceBackend;
+    nativeDirectoryName?: string;
+    workspaceBackend: WorkspaceBackend | null;
+  };
 
-  private workspaceStorageBackend: WorkspaceBackend | null = null;
-  private workspaceStorageBackendPromise: Promise<WorkspaceBackend> | null = null;
+type ReadyWorkspaceBackendState = Extract<WorkspaceBackendState, { kind: "ready" }>;
+
+export class FilesWorkspace {
+  private backendState: WorkspaceBackendState;
+  private readonly backendOperations = createConcurrencyLimit(1);
 
   private readonly metadataByPath = new Map<string, WorkspaceFileWorkbookTag>();
   private auditEntries: FilesWorkspaceAuditEntry[] = [];
@@ -455,63 +462,42 @@ export class FilesWorkspace {
 
   constructor(options: FilesWorkspaceOptions = {}) {
     this.settings = options.settings;
-    if (options.initialBackend) {
-      this.backend = options.initialBackend;
-      if (options.initialBackend.kind !== "native-directory") {
-        this.workspaceStorageBackend = options.initialBackend;
-      }
-    }
-
-    if (options.initialWorkspaceBackend) {
-      this.workspaceStorageBackend = options.initialWorkspaceBackend;
-    }
+    const workspaceBackend = options.initialWorkspaceBackend
+      ?? (options.initialBackend?.kind !== "native-directory" ? options.initialBackend : null)
+      ?? null;
+    this.backendState = options.initialBackend
+      ? { kind: "ready", backend: options.initialBackend, workspaceBackend }
+      : { kind: "uninitialized", workspaceBackend };
   }
 
-  private async initializeBackend(): Promise<WorkspaceBackend> {
-    const persistedNative = await readPersistedNativeHandle();
-    if (persistedNative) {
-      const permission = await queryReadWritePermission(persistedNative);
-      if (permission === "granted") {
-        this.nativeHandle = persistedNative;
-        return new NativeDirectoryBackend(persistedNative);
-      }
-    }
+  private async initializeBackend(): Promise<ReadyWorkspaceBackendState> {
+    if (this.backendState.kind === "ready") return this.backendState;
 
+    const persistedNative = await readPersistedNativeHandle();
+    const permission = persistedNative ? await queryReadWritePermission(persistedNative) : null;
+    const backend = persistedNative && permission === "granted"
+      ? new NativeDirectoryBackend(persistedNative)
+      : this.initializeWorkspaceStorageBackend();
+    const state: ReadyWorkspaceBackendState = {
+      kind: "ready",
+      backend,
+      ...(persistedNative && permission === "granted" ? { nativeDirectoryName: persistedNative.name } : {}),
+      workspaceBackend: this.backendState.workspaceBackend ?? (backend.kind !== "native-directory" ? backend : null),
+    };
+    this.backendState = state;
+    return state;
+  }
+
+  private initializeWorkspaceStorageBackend(): WorkspaceBackend {
     if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.getDirectory === "function") {
       return new OpfsBackend();
     }
-
     return new MemoryBackend();
   }
 
-  private initializeWorkspaceStorageBackend(): Promise<WorkspaceBackend> {
-    if (typeof navigator !== "undefined" && navigator.storage && typeof navigator.storage.getDirectory === "function") {
-      return Promise.resolve(new OpfsBackend());
-    }
-
-    return Promise.resolve(new MemoryBackend());
-  }
-
-  private async getWorkspaceStorageBackend(activeBackend?: WorkspaceBackend): Promise<WorkspaceBackend> {
-    if (this.workspaceStorageBackend) {
-      await this.ensureScratchCleanupAttempted(this.workspaceStorageBackend);
-      return this.workspaceStorageBackend;
-    }
-
-    const backend = activeBackend ?? await this.getBackend();
-    if (backend.kind !== "native-directory") {
-      this.workspaceStorageBackend = backend;
-      await this.ensureScratchCleanupAttempted(backend);
-      return backend;
-    }
-
-    if (!this.workspaceStorageBackendPromise) {
-      this.workspaceStorageBackendPromise = this.initializeWorkspaceStorageBackend();
-    }
-
-    const workspaceBackend = await this.workspaceStorageBackendPromise;
-    this.workspaceStorageBackendPromise = null;
-    this.workspaceStorageBackend = workspaceBackend;
+  private async getWorkspaceStorageBackend(state: ReadyWorkspaceBackendState): Promise<WorkspaceBackend> {
+    const workspaceBackend = state.workspaceBackend ?? this.initializeWorkspaceStorageBackend();
+    this.backendState = { ...state, workspaceBackend };
     await this.ensureScratchCleanupAttempted(workspaceBackend);
     return workspaceBackend;
   }
@@ -551,40 +537,6 @@ export class FilesWorkspace {
     }
 
     await cleanupPromise;
-  }
-
-  private async getBackend(): Promise<WorkspaceBackend> {
-    if (this.backend) {
-      await this.ensureScratchCleanupAttempted(this.backend);
-      if (this.backend.kind !== "native-directory" && !this.workspaceStorageBackend) {
-        this.workspaceStorageBackend = this.backend;
-      }
-      return this.backend;
-    }
-
-    if (!this.backendPromise) {
-      this.backendPromise = this.initializeBackend();
-    }
-
-    const backend = await this.backendPromise;
-    this.backend = backend;
-    this.backendPromise = null;
-
-    await this.ensureScratchCleanupAttempted(backend);
-    if (backend.kind !== "native-directory") {
-      this.workspaceStorageBackend = backend;
-    }
-    return backend;
-  }
-
-  private replaceBackend(nextBackend: WorkspaceBackend): void {
-    this.backend = nextBackend;
-    this.backendPromise = null;
-    if (nextBackend.kind !== "native-directory") {
-      this.workspaceStorageBackend = nextBackend;
-      this.workspaceStorageBackendPromise = null;
-    }
-    dispatchWorkspaceChanged({ reason: "backend" });
   }
 
   private resolveSettings(): Promise<WorkspaceSettings | null> {
@@ -791,14 +743,16 @@ export class FilesWorkspace {
     workspaceBackend: WorkspaceBackend;
     nativeBackend: WorkspaceBackend | null;
   }> {
-    const activeBackend = await this.getBackend();
-    const workspaceBackend = await this.getWorkspaceStorageBackend(activeBackend);
-
-    return {
-      activeBackend,
-      workspaceBackend,
-      nativeBackend: activeBackend.kind === "native-directory" ? activeBackend : null,
-    };
+    return this.backendOperations(async () => {
+      const state = await this.initializeBackend();
+      const workspaceBackend = await this.getWorkspaceStorageBackend(state);
+      await this.ensureScratchCleanupAttempted(state.backend);
+      return {
+        activeBackend: state.backend,
+        workspaceBackend,
+        nativeBackend: state.backend.kind === "native-directory" ? state.backend : null,
+      };
+    });
   }
 
   private async resolveMutationTarget(args: {
@@ -975,62 +929,63 @@ export class FilesWorkspace {
       throw new Error("Native directory picker is not supported in this environment.");
     }
 
-    const handle = await window.showDirectoryPicker();
-    const permission = await requestReadWritePermission(handle);
-    if (permission !== "granted") {
-      throw new Error("Permission to the selected folder was not granted.");
-    }
+    const selectedHandle = window.showDirectoryPicker();
+    void selectedHandle.catch(() => {});
+    await this.backendOperations(async () => {
+      const handle = await selectedHandle;
+      const permission = await requestReadWritePermission(handle);
+      if (permission !== "granted") {
+        throw new Error("Permission to the selected folder was not granted.");
+      }
 
-    const currentBackend = await this.getBackend();
-    if (currentBackend.kind !== "native-directory") {
-      this.workspaceStorageBackend = currentBackend;
-      this.workspaceStorageBackendPromise = null;
-    }
+      const state = await this.initializeBackend();
+      await persistNativeHandle(handle);
+      this.backendState = {
+        kind: "ready",
+        backend: new NativeDirectoryBackend(handle),
+        nativeDirectoryName: handle.name,
+        workspaceBackend: state.workspaceBackend,
+      };
+      dispatchWorkspaceChanged({ reason: "backend" });
 
-    this.nativeHandle = handle;
-    await persistNativeHandle(handle);
-
-    this.replaceBackend(new NativeDirectoryBackend(handle));
-
-    await this.appendAuditEntry({
-      action: "connect_native",
-      backend: "native-directory",
-      context: options.audit ?? DEFAULT_UI_AUDIT_CONTEXT,
+      await this.appendAuditEntry({
+        action: "connect_native",
+        backend: "native-directory",
+        context: options.audit ?? DEFAULT_UI_AUDIT_CONTEXT,
+      });
     });
   }
 
   async disconnectNativeDirectory(options: WorkspaceMutationOptions = {}): Promise<void> {
-    this.nativeHandle = null;
-    await persistNativeHandle(null);
+    await this.backendOperations(async () => {
+      const state = await this.initializeBackend();
+      const fallback = await this.getWorkspaceStorageBackend(state);
+      await persistNativeHandle(null);
+      this.backendState = { kind: "ready", backend: fallback, workspaceBackend: fallback };
+      dispatchWorkspaceChanged({ reason: "backend" });
 
-    const fallback = await this.getWorkspaceStorageBackend();
-
-    this.replaceBackend(fallback);
-
-    await this.appendAuditEntry({
-      action: "disconnect_native",
-      backend: fallback.kind,
-      context: options.audit ?? DEFAULT_UI_AUDIT_CONTEXT,
+      await this.appendAuditEntry({
+        action: "disconnect_native",
+        backend: fallback.kind,
+        context: options.audit ?? DEFAULT_UI_AUDIT_CONTEXT,
+      });
     });
   }
 
-  async getBackendStatus(): Promise<WorkspaceBackendStatus> {
-    const backend = await this.getBackend();
-    const unavailableReason = this.getNativeDirectoryUnavailableReason();
-
-    const status: WorkspaceBackendStatus = {
-      kind: backend.kind,
-      label: backendLabel(backend.kind),
-      nativeSupported: unavailableReason === null,
-      nativeConnected: backend.kind === "native-directory",
-      ...(unavailableReason === "cross-origin-frame" ? { nativeBlockedByFrame: true } : {}),
-    };
-
-    if (this.nativeHandle?.name !== undefined) {
-      status.nativeDirectoryName = this.nativeHandle.name;
-    }
-
-    return status;
+  getBackendStatus(): Promise<WorkspaceBackendStatus> {
+    return this.backendOperations(async () => {
+      const state = await this.initializeBackend();
+      await this.ensureScratchCleanupAttempted(state.backend);
+      const unavailableReason = this.getNativeDirectoryUnavailableReason();
+      return {
+        kind: state.backend.kind,
+        label: backendLabel(state.backend.kind),
+        nativeSupported: unavailableReason === null,
+        nativeConnected: state.backend.kind === "native-directory",
+        ...(unavailableReason === "cross-origin-frame" ? { nativeBlockedByFrame: true } : {}),
+        ...(state.nativeDirectoryName !== undefined ? { nativeDirectoryName: state.nativeDirectoryName } : {}),
+      };
+    });
   }
 
   async listFiles(options: WorkspaceListOptions = {}): Promise<WorkspaceFileEntry[]> {
