@@ -50,32 +50,30 @@ export function createOfficeDocumentInstanceIdentity(
     return isDocumentInstanceToken(stored) ? stored : null;
   };
 
-  const persistNewToken = async (): Promise<string | null> => {
-    const settings = getSettings();
-    if (!settings) return null;
-
-    const token = createToken();
-    if (!isDocumentInstanceToken(token)) return null;
-
-    settings.set(OFFICE_DOCUMENT_INSTANCE_SETTING, token);
-    let saved = false;
-    try {
-      saved = await new Promise<boolean>((resolve) => {
-        settings.saveAsync((result) => resolve(result.succeeded));
-      });
-      return saved ? token : null;
-    } finally {
-      if (!saved) settings.remove(OFFICE_DOCUMENT_INSTANCE_SETTING);
-    }
-  };
-
   return {
     read,
     ensure(): Promise<string | null> {
       if (state.kind === "saving") return state.promise;
       const existing = read();
       if (existing) return Promise.resolve(existing);
-      const promise = persistNewToken().finally(() => {
+      const promise = (async () => {
+        const settings = getSettings();
+        if (!settings) return null;
+
+        const token = createToken();
+        if (!isDocumentInstanceToken(token)) return null;
+
+        settings.set(OFFICE_DOCUMENT_INSTANCE_SETTING, token);
+        let saved = false;
+        try {
+          saved = await new Promise<boolean>((resolve) => {
+            settings.saveAsync((result) => resolve(result.succeeded));
+          });
+          return saved ? token : null;
+        } finally {
+          if (!saved) settings.remove(OFFICE_DOCUMENT_INSTANCE_SETTING);
+        }
+      })().finally(() => {
         state = { kind: "idle" };
       });
       state = { kind: "saving", promise };

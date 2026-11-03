@@ -20,15 +20,13 @@ export interface CreateExecutionModeControllerOptions {
 
 const EXECUTION_MODE_CHANNEL = "pi-execution-mode";
 
-function defaultChannel(): Pick<BroadcastChannel, "postMessage" | "addEventListener"> | null {
-  return typeof BroadcastChannel === "undefined" ? null : new BroadcastChannel(EXECUTION_MODE_CHANNEL);
-}
-
 export async function createExecutionModeController(
   options: CreateExecutionModeControllerOptions,
 ): Promise<ExecutionModeController> {
   let mode = await getStoredExecutionMode(options.settings);
-  const channel = options.channel === undefined ? defaultChannel() : options.channel;
+  const channel = options.channel === undefined && typeof BroadcastChannel !== "undefined"
+    ? new BroadcastChannel(EXECUTION_MODE_CHANNEL)
+    : options.channel;
 
   const serialize = createConcurrencyLimit(1);
   let generation = 0;
@@ -49,23 +47,16 @@ export async function createExecutionModeController(
     void readMode().catch(() => {});
   });
 
-  const applyMode = (nextMode: ExecutionMode): Promise<void> => {
-    const currentGeneration = ++generation;
-    return serialize(async () => {
-      const stored = await setStoredExecutionMode(options.settings, nextMode);
-      if (currentGeneration === generation) {
-        mode = stored;
-        dispatchExecutionModeChanged(mode);
-      }
-      channel?.postMessage(stored);
-    });
-  };
-
   return {
     getMode: () => mode,
     readMode,
-    setMode: async (nextMode: ExecutionMode) => {
-      await applyMode(nextMode);
+    setMode: (nextMode) => {
+      generation += 1;
+      return serialize(async () => {
+        mode = await setStoredExecutionMode(options.settings, nextMode);
+        dispatchExecutionModeChanged(mode);
+        channel?.postMessage(mode);
+      });
     },
   };
 }

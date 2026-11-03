@@ -103,6 +103,31 @@ void test("overlapping mode writes persist in invocation order", async () => {
   assert.equal(pane.getMode(), "yolo");
 });
 
+void test("a failed queued mode read does not hide a committed write", async () => {
+  const writeStarted = deferred<void>();
+  const finishWrite = deferred<void>();
+  let stored = "yolo";
+  let reads = 0;
+  const pane = await createExecutionModeController({
+    settings: {
+      get: () => ++reads === 1 ? Promise.resolve(stored) : Promise.reject(new Error("read failed")),
+      set: async (_key, value) => {
+        writeStarted.resolve();
+        await finishWrite.promise;
+        stored = String(value);
+      },
+    },
+    channel: null,
+  });
+  const write = pane.setMode("safe");
+  await writeStarted.promise;
+  const read = assert.rejects(pane.readMode(), /read failed/u);
+  finishWrite.resolve();
+  await Promise.all([write, read]);
+  assert.equal(stored, "safe");
+  assert.equal(pane.getMode(), "safe", "a later failure must not suppress a committed mode");
+});
+
 void test("a queued mode read does not suppress notification of a committed write", async () => {
   const settings = sharedStore();
   const [channelA, channelB] = channelPair();

@@ -142,59 +142,54 @@ export class ChangeTracker {
   start(): Promise<void> {
     if (this.registration.kind === "started") return Promise.resolve();
     if (this.registration.kind === "starting") return this.registration.promise;
-    const cleanup = this.registration.kind === "failed" ? this.registration.cleanup : undefined;
-    const promise = this.registerListeners(cleanup).then((registration) => {
-      this.registration = registration;
+    const previousCleanup = this.registration.kind === "failed" ? this.registration.cleanup : undefined;
+    const promise = Promise.resolve().then(async () => {
+      let cleanup = previousCleanup ?? (() => Promise.resolve());
+      const controller = new AbortController();
+      try {
+        await previousCleanup?.();
+        await excelRun(async (context) => {
+          const sheets = context.workbook.worksheets;
+          sheets.load("items/id,items/name");
+          await context.sync();
+          if (controller.signal.aborted) return;
+          for (const sheet of sheets.items) this.sheetNames.set(sheet.id, sheet.name);
+
+          const registrations: Array<{ remove: () => void }> = [];
+          cleanup = () => Excel.run(context, async (cleanupContext) => {
+            for (const registration of registrations) registration.remove();
+            await cleanupContext.sync();
+          });
+          registrations.push(sheets.onChanged.add((event) => this.handleChanged(event)));
+          registrations.push(sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId)));
+          registrations.push(sheets.onDeleted.add(() => this.structureChanged()));
+          await context.sync();
+        });
+      } catch (error) {
+        controller.abort();
+        console.warn("[change-tracker] Failed to register workbook listeners:", getErrorMessage(error));
+        this.registration = { kind: "failed", cleanup };
+        return;
+      }
+
+      try {
+        await excelRun(async (context) => {
+          const sheets = context.workbook.worksheets;
+          sheets.onNameChanged.add((event) => {
+            this.sheetNames.set(event.worksheetId, event.nameAfter);
+            return this.structureChanged();
+          });
+          sheets.onMoved.add(() => this.structureChanged());
+          sheets.onVisibilityChanged.add(() => this.structureChanged());
+          await context.sync();
+        });
+      } catch (error) {
+        console.warn("[change-tracker] Sheet rename/move/visibility events unavailable:", getErrorMessage(error));
+      }
+      this.registration = { kind: "started" };
     });
     this.registration = { kind: "starting", promise };
     return promise;
-  }
-
-  private async registerListeners(
-    previousCleanup?: () => Promise<void>,
-  ): Promise<Exclude<ChangeTrackerRegistrationState, { kind: "starting" } | { kind: "not-started" }>> {
-    let cleanup = previousCleanup ?? (() => Promise.resolve());
-    const controller = new AbortController();
-    try {
-      await previousCleanup?.();
-      await excelRun(async (context) => {
-        const sheets = context.workbook.worksheets;
-        sheets.load("items/id,items/name");
-        await context.sync();
-        if (controller.signal.aborted) return;
-        for (const sheet of sheets.items) this.sheetNames.set(sheet.id, sheet.name);
-
-        const registrations: Array<{ remove: () => void }> = [];
-        cleanup = () => Excel.run(context, async (cleanupContext) => {
-          for (const registration of registrations) registration.remove();
-          await cleanupContext.sync();
-        });
-        registrations.push(sheets.onChanged.add((event) => this.handleChanged(event)));
-        registrations.push(sheets.onAdded.add((event) => this.handleSheetAdded(event.worksheetId)));
-        registrations.push(sheets.onDeleted.add(() => this.structureChanged()));
-        await context.sync();
-      });
-    } catch (error) {
-      controller.abort();
-      console.warn("[change-tracker] Failed to register workbook listeners:", getErrorMessage(error));
-      return { kind: "failed", cleanup };
-    }
-
-    try {
-      await excelRun(async (context) => {
-        const sheets = context.workbook.worksheets;
-        sheets.onNameChanged.add((event) => {
-          this.sheetNames.set(event.worksheetId, event.nameAfter);
-          return this.structureChanged();
-        });
-        sheets.onMoved.add(() => this.structureChanged());
-        sheets.onVisibilityChanged.add(() => this.structureChanged());
-        await context.sync();
-      });
-    } catch (error) {
-      console.warn("[change-tracker] Sheet rename/move/visibility events unavailable:", getErrorMessage(error));
-    }
-    return { kind: "started" };
   }
 
   notePiWrite(window: PiWriteWindow, origin: PiWriteOrigin): void {

@@ -28,31 +28,29 @@ export class BackupIdentityMonitor {
   checkOnce(signal?: AbortSignal): Promise<void> {
     if (signal?.aborted) return Promise.resolve();
     if (this.checkInFlight) return this.checkInFlight;
-    this.checkInFlight = this.check(signal).finally(() => {
+    this.checkInFlight = (async () => {
+      const scope = await this.dependencies.resolveScope();
+      if (!scope || signal?.aborted) return;
+
+      const previous = this.lastObservedWorkbookId;
+
+      const firstSaveOfNewWorkbook =
+        previous !== null
+        && previous !== scope.workbookId
+        && previous.startsWith(UNSAVED_WORKBOOK_ID_PREFIX)
+        && !scope.unsaved;
+      if (firstSaveOfNewWorkbook) {
+        await this.dependencies.rescopeBackups({
+          fromWorkbookId: previous,
+          toWorkbookId: scope.workbookId,
+          workbookLabel: scope.workbookLabel,
+        });
+      }
+      if (!signal?.aborted) this.lastObservedWorkbookId = scope.workbookId;
+    })().finally(() => {
       this.checkInFlight = null;
     });
     return this.checkInFlight;
-  }
-
-  private async check(signal?: AbortSignal): Promise<void> {
-    const scope = await this.dependencies.resolveScope();
-    if (!scope || signal?.aborted) return;
-
-    const previous = this.lastObservedWorkbookId;
-
-    const firstSaveOfNewWorkbook =
-      previous !== null
-      && previous !== scope.workbookId
-      && previous.startsWith(UNSAVED_WORKBOOK_ID_PREFIX)
-      && !scope.unsaved;
-    if (firstSaveOfNewWorkbook) {
-      await this.dependencies.rescopeBackups({
-        fromWorkbookId: previous,
-        toWorkbookId: scope.workbookId,
-        workbookLabel: scope.workbookLabel,
-      });
-    }
-    if (!signal?.aborted) this.lastObservedWorkbookId = scope.workbookId;
   }
 }
 
@@ -74,7 +72,6 @@ export function startBackupIdentityPolling(args: {
   const interval = setInterval(tick, intervalMs);
 
   return () => {
-    if (controller.signal.aborted) return;
     controller.abort();
     clearInterval(interval);
   };

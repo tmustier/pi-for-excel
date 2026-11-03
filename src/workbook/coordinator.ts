@@ -84,11 +84,6 @@ interface WorkbookQueueState {
 
 const UNKNOWN_WORKBOOK = "workbook:unknown";
 
-function toError(error: unknown): Error {
-  if (error instanceof Error) return error;
-  return new Error(getErrorMessage(error));
-}
-
 function normalizeWorkbookId(workbookId: string): string {
   const trimmed = workbookId.trim();
   return trimmed.length > 0 ? trimmed : UNKNOWN_WORKBOOK;
@@ -162,21 +157,17 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
 
     state.phase = { kind: "running", activeWrite: next.context };
 
-    void (async () => {
-      try {
-        emit({
-          type: "started",
-          operationType: "write",
-          context: next.context,
-          queuedWrites: state.queue.length,
-          revision: state.revision,
-        });
-        await next.execute();
-      } finally {
-        state.phase = { kind: "idle" };
-        processQueue(workbookId);
-      }
-    })();
+    emit({
+      type: "started",
+      operationType: "write",
+      context: next.context,
+      queuedWrites: state.queue.length,
+      revision: state.revision,
+    });
+    void next.execute().finally(() => {
+      state.phase = { kind: "idle" };
+      processQueue(workbookId);
+    });
   }
 
   async function runWrite<T>(ctx: WorkbookOperationContext, fn: () => Promise<T>): Promise<{ result: T; revision: number }> {
@@ -206,14 +197,13 @@ export function createWorkbookCoordinator(): WorkbookCoordinator {
               revision: state.revision,
               errorMessage: getErrorMessage(error),
             });
-            reject(toError(error));
+            reject(error instanceof Error ? error : new Error(getErrorMessage(error)));
           }
         },
       };
 
-      const mustWait = state.phase.kind === "running" || state.queue.length > 0;
       state.queue.push(operation);
-      if (mustWait) {
+      if (state.phase.kind === "running") {
         emit({
           type: "queued",
           operationType: "write",
