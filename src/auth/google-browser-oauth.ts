@@ -131,9 +131,18 @@ function isVpcScAffectedUser(payload: unknown): boolean {
   return false;
 }
 
-async function wait(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => {
-    setTimeout(resolve, ms);
+function wait(ms: number, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  return new Promise((resolve, reject) => {
+    const onAbort = (): void => {
+      clearTimeout(timer);
+      reject(signal.reason instanceof Error ? signal.reason : new Error("Google project provisioning aborted"));
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
   });
 }
 
@@ -158,6 +167,7 @@ async function promptForProjectId(callbacks: OAuthLoginCallbacks): Promise<strin
     placeholder: "my-google-cloud-project-id",
   });
 
+  callbacks.signal?.throwIfAborted();
   const projectId = raw.trim();
   if (!projectId) {
     throw new Error("Google login failed: project ID is required");
@@ -169,35 +179,45 @@ async function promptForProjectId(callbacks: OAuthLoginCallbacks): Promise<strin
 async function pollOnboardingOperation(
   operationName: string,
   headers: CodeAssistHeaders,
-  onProgress?: (message: string) => void,
+  callbacks: OAuthLoginCallbacks,
 ): Promise<unknown> {
   let attempt = 0;
+  const timeout = new AbortController();
+  const timer = setTimeout(() => timeout.abort(new Error("Google project provisioning timed out")), 2 * 60_000);
+  const signal = callbacks.signal ? AbortSignal.any([callbacks.signal, timeout.signal]) : timeout.signal;
 
-  while (true) {
-    if (attempt > 0) {
-      onProgress?.(`Waiting for project provisioning (attempt ${attempt + 1})…`);
-      await wait(5000);
+  try {
+    while (true) {
+      signal.throwIfAborted();
+      if (attempt > 0) {
+        callbacks.onProgress?.(`Waiting for project provisioning (attempt ${attempt + 1})…`);
+        await wait(5000, signal);
+      }
+
+      const response = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal/${operationName}`, {
+        method: "GET",
+        signal,
+        headers,
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to poll Google onboarding operation: ${response.status} ${response.statusText}`);
+      }
+
+      const payload: unknown = await response.json();
+      signal.throwIfAborted();
+      if (!isAuthGoogleBrowserOauthPayloadShape(payload)) {
+        throw new Error("Google onboarding returned an invalid response payload");
+      }
+
+      if (payload.done === true) {
+        return payload;
+      }
+
+      attempt += 1;
     }
-
-    const response = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal/${operationName}`, {
-      method: "GET",
-      headers,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Failed to poll Google onboarding operation: ${response.status} ${response.statusText}`);
-    }
-
-    const payload: unknown = await response.json();
-    if (!isAuthGoogleBrowserOauthPayloadShape(payload)) {
-      throw new Error("Google onboarding returned an invalid response payload");
-    }
-
-    if (payload.done === true) {
-      return payload;
-    }
-
-    attempt += 1;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -211,6 +231,7 @@ async function discoverGeminiCliProject(
 
   const loadResponse = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal:loadCodeAssist`, {
     method: "POST",
+    signal: callbacks.signal ?? null,
     headers,
     body: JSON.stringify({
       metadata: {
@@ -242,6 +263,7 @@ async function discoverGeminiCliProject(
     loadData = await loadResponse.json();
   }
 
+  callbacks.signal?.throwIfAborted();
   const existingProjectId = getProjectId(loadData);
   if (existingProjectId) {
     return existingProjectId;
@@ -255,6 +277,7 @@ async function discoverGeminiCliProject(
   const requiresProjectId = tierId !== TIER_FREE;
   const projectId = requiresProjectId ? await promptForProjectId(callbacks) : undefined;
 
+  callbacks.signal?.throwIfAborted();
   callbacks.onProgress?.("Provisioning Cloud Code Assist project…");
 
   const onboardBody: Record<string, unknown> = {
@@ -276,6 +299,7 @@ async function discoverGeminiCliProject(
 
   const onboardResponse = await fetch(`${CODE_ASSIST_ENDPOINT}/v1internal:onboardUser`, {
     method: "POST",
+    signal: callbacks.signal ?? null,
     headers,
     body: JSON.stringify(onboardBody),
   });
@@ -288,10 +312,11 @@ async function discoverGeminiCliProject(
   }
 
   let onboardingData: unknown = await onboardResponse.json();
+  callbacks.signal?.throwIfAborted();
   if (isAuthGoogleBrowserOauthPayloadShape(onboardingData) && onboardingData.done !== true) {
     const operationName = onboardingData.name;
     if (typeof operationName === "string" && operationName.trim().length > 0) {
-      onboardingData = await pollOnboardingOperation(operationName, headers, callbacks.onProgress);
+      onboardingData = await pollOnboardingOperation(operationName, headers, callbacks);
     }
   }
 
@@ -320,9 +345,11 @@ async function discoverAntigravityProject(
   callbacks.onProgress?.("Checking for existing Antigravity project…");
 
   for (const endpoint of ANTIGRAVITY_ENDPOINTS) {
+    callbacks.signal?.throwIfAborted();
     try {
       const response = await fetch(`${endpoint}/v1internal:loadCodeAssist`, {
         method: "POST",
+        signal: callbacks.signal ?? null,
         headers,
         body: JSON.stringify({
           metadata: {
@@ -338,11 +365,13 @@ async function discoverAntigravityProject(
       }
 
       const payload: unknown = await response.json();
+      callbacks.signal?.throwIfAborted();
       const projectId = getProjectId(payload);
       if (projectId) {
         return projectId;
       }
     } catch {
+      callbacks.signal?.throwIfAborted();
     }
   }
 

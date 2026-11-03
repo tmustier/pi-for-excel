@@ -95,9 +95,10 @@ function parseTokenPayload(payload: unknown): TokenPayload | null {
   };
 }
 
-async function postTokenRequest(body: Record<string, string>, failurePrefix: string): Promise<TokenPayload> {
+async function postTokenRequest(body: Record<string, string>, failurePrefix: string, signal?: AbortSignal): Promise<TokenPayload> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
+    signal: signal ?? null,
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",
@@ -118,7 +119,7 @@ async function postTokenRequest(body: Record<string, string>, failurePrefix: str
   return payload;
 }
 
-async function exchangeAuthorizationCode(code: string, state: string, verifier: string): Promise<TokenPayload> {
+async function exchangeAuthorizationCode(code: string, state: string, verifier: string, signal?: AbortSignal): Promise<TokenPayload> {
   return postTokenRequest(
     {
       grant_type: "authorization_code",
@@ -129,6 +130,7 @@ async function exchangeAuthorizationCode(code: string, state: string, verifier: 
       code_verifier: verifier,
     },
     "Anthropic token exchange failed",
+    signal,
   );
 }
 
@@ -162,6 +164,7 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
   callbacks.onProgress?.("Preparing Anthropic login…");
   const flow = await createAuthorizationFlow();
 
+  callbacks.signal?.throwIfAborted();
   callbacks.onAuth({
     url: flow.url,
     instructions:
@@ -179,6 +182,7 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
     placeholder: REDIRECT_URI,
   });
 
+  callbacks.signal?.throwIfAborted();
   const parsed = parseAuthorizationInput(input);
   if (parsed.state && parsed.state !== flow.verifier) {
     throw new Error("Anthropic login failed: OAuth state mismatch");
@@ -188,7 +192,9 @@ export async function loginAnthropicInBrowser(callbacks: OAuthLoginCallbacks): P
   }
 
   callbacks.onProgress?.("Exchanging code for tokens…");
-  const tokens = await exchangeAuthorizationCode(parsed.code, parsed.state ?? flow.verifier, flow.verifier);
+  callbacks.signal?.throwIfAborted();
+  const tokens = await exchangeAuthorizationCode(parsed.code, parsed.state ?? flow.verifier, flow.verifier, callbacks.signal);
+  callbacks.signal?.throwIfAborted();
 
   return {
     access: tokens.accessToken,

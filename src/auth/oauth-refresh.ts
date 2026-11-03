@@ -6,6 +6,7 @@ import type { BrowserOAuthProvider } from "./browser-oauth-types.js";
 import { clearOAuthCredentials, loadOAuthCredentials, saveOAuthCredentials } from "./oauth-storage.js";
 import { isOpenAICodexCredentialRefreshRequired } from "./openai-codex-browser-oauth.js";
 import { BROWSER_OAUTH_PROVIDERS, mapToApiProvider } from "./provider-map.js";
+import { createConcurrencyLimit, type ConcurrencyLimit } from "../utils/concurrency.js";
 import { getErrorMessage } from "../utils/errors.js";
 
 export const OAUTH_REFRESH_MARGIN_MS = 2 * 60_000;
@@ -24,12 +25,18 @@ export interface OAuthRefresher {
   ensureFresh(apiProvider: string): Promise<OAuthRefreshOutcome>;
 }
 
-function defaultLock(): OAuthRefreshLock {
-  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
-  if (!locks) {
-    return (_name, run) => run();
+const providerLocks = new Map<string, ConcurrencyLimit>();
+
+export function withOAuthProviderLock<T>(providerId: string, run: () => Promise<T>): Promise<T> {
+  let limit = providerLocks.get(providerId);
+  if (!limit) {
+    limit = createConcurrencyLimit(1);
+    providerLocks.set(providerId, limit);
   }
-  return (name, run) => locks.request(name, run);
+  return limit(() => {
+    const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+    return locks ? locks.request(`pi-oauth-refresh:${providerId}`, run) : run();
+  });
 }
 
 export function createOAuthRefresher(options: {
@@ -40,7 +47,10 @@ export function createOAuthRefresher(options: {
   now?: () => number;
   warn?: (message: string) => void;
 }): OAuthRefresher {
-  const lock = options.lock ?? defaultLock();
+  const injectedLock = options.lock;
+  const lock: OAuthRefreshLock = injectedLock
+    ? (id, run) => injectedLock(`pi-oauth-refresh:${id}`, run)
+    : withOAuthProviderLock;
   const now = options.now ?? (() => Date.now());
   const warn = options.warn ?? ((message: string) => console.warn(message));
   const inFlight = new Map<string, Promise<OAuthRefreshOutcome>>();
@@ -52,7 +62,7 @@ export function createOAuthRefresher(options: {
     const provider = options.getOAuthProvider(oauthProviderId);
     if (!provider) return "not_oauth";
 
-    return lock(`pi-oauth-refresh:${oauthProviderId}`, async () => {
+    return lock(oauthProviderId, async () => {
       const credentials = await loadOAuthCredentials(options.settings, oauthProviderId);
       if (!credentials) return "not_oauth";
       if (!needsRefresh(credentials)) {
@@ -65,8 +75,13 @@ export function createOAuthRefresher(options: {
         refreshed = await provider.refreshToken(credentials);
       } catch (error) {
         if (oauthProviderId === "openai-codex" && isOpenAICodexCredentialRefreshRequired(error)) {
-          await clearOAuthCredentials(options.settings, oauthProviderId).catch(() => {});
-          await options.providerKeys.delete(apiProvider).catch(() => {});
+          try {
+            await clearOAuthCredentials(options.settings, oauthProviderId);
+            await options.providerKeys.delete(apiProvider);
+          } catch (clearError) {
+            warn(`[auth] ${provider.name}: failed to clear stale credentials (${getErrorMessage(clearError)})`);
+            return "failed";
+          }
           warn(`[auth] ${provider.name}: stored OAuth grant is stale; cleared credentials, please login again`);
           return "logged_out";
         }

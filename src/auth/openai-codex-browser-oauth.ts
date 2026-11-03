@@ -129,9 +129,10 @@ function parseTokenPayload(payload: unknown): TokenPayload | null {
   return tokenPayload;
 }
 
-async function exchangeAuthorizationCode(code: string, verifier: string): Promise<TokenPayload> {
+async function exchangeAuthorizationCode(code: string, verifier: string, signal?: AbortSignal): Promise<TokenPayload> {
   const response = await fetch(TOKEN_URL, {
     method: "POST",
+    signal: signal ?? null,
     headers: {
       "Content-Type": "application/x-www-form-urlencoded",
     },
@@ -316,6 +317,7 @@ export async function loginOpenAICodexInBrowser(
   callbacks.onProgress?.("Preparing OpenAI login…");
   const flow = await createAuthorizationFlow();
 
+  callbacks.signal?.throwIfAborted();
   callbacks.onAuth({
     url: flow.url,
     instructions:
@@ -333,6 +335,7 @@ export async function loginOpenAICodexInBrowser(
     placeholder: "http://localhost:1455/auth/callback?code=...&state=...",
   });
 
+  callbacks.signal?.throwIfAborted();
   const parsed = parseAuthorizationInput(input);
   if (parsed.state && parsed.state !== flow.state) {
     throw new Error("OpenAI login failed: OAuth state mismatch");
@@ -343,7 +346,9 @@ export async function loginOpenAICodexInBrowser(
   }
 
   callbacks.onProgress?.("Exchanging code for tokens…");
-  const tokens = await exchangeAuthorizationCode(parsed.code, flow.verifier);
+  callbacks.signal?.throwIfAborted();
+  const tokens = await exchangeAuthorizationCode(parsed.code, flow.verifier, callbacks.signal);
+  callbacks.signal?.throwIfAborted();
 
   const accountId = getAccountId(tokens.accessToken);
   if (!accountId) {

@@ -118,43 +118,55 @@ export async function pollOAuthCallbackCapture(
   const deadline = Date.now() + timeoutMs;
   const pollUrl = buildCallbackPollUrl(proxyUrl, options.providerId, options.state);
 
-  while (Date.now() <= deadline) {
-    throwIfAborted(options.signal);
+  const timeout = new AbortController();
+  const timeoutId = setTimeout(() => timeout.abort(), timeoutMs);
+  const signal = options.signal ? AbortSignal.any([options.signal, timeout.signal]) : timeout.signal;
 
-    try {
-      const requestInit: RequestInit = {
-        method: "GET",
-        headers: { Accept: "application/json" },
-      };
-      if (options.signal !== undefined) {
-        requestInit.signal = options.signal;
-      }
-      const response = await fetch(pollUrl, requestInit);
+  try {
+    while (Date.now() <= deadline) {
+      throwIfAborted(options.signal);
+      if (timeout.signal.aborted) return null;
 
-      if (response.status >= 400 && response.status < 500) {
-        return null;
-      }
+      try {
+        const requestInit: RequestInit = {
+          method: "GET",
+          headers: { Accept: "application/json" },
+        };
+        requestInit.signal = signal;
+        const response = await fetch(pollUrl, requestInit);
+        throwIfAborted(signal);
 
-      if (response.ok) {
-        const payload: unknown = await response.json();
-        if (isOAuthCallbackCapture(payload)) {
-          return payload.providerId === options.providerId && payload.state === options.state
-            ? payload
-            : null;
-        }
-
-        if (!isAuthOauthCallbackCapturePayloadShape(payload) || payload.status !== "pending") {
+        if (response.status >= 400 && response.status < 500) {
           return null;
         }
+
+        if (response.ok) {
+          const payload: unknown = await response.json();
+          throwIfAborted(signal);
+          if (isOAuthCallbackCapture(payload)) {
+            return payload.providerId === options.providerId && payload.state === options.state
+              ? payload
+              : null;
+          }
+
+          if (!isAuthOauthCallbackCapturePayloadShape(payload) || payload.status !== "pending") {
+            return null;
+          }
+        }
+      } catch {
+        if (options.signal?.aborted) {
+          throw createAbortError();
+        }
       }
-    } catch {
-      if (options.signal?.aborted) {
-        throw createAbortError();
-      }
+
+      if (timeout.signal.aborted) return null;
+      await wait(Math.min(intervalMs, Math.max(0, deadline - Date.now())), signal).catch(() => {
+        throwIfAborted(options.signal);
+      });
     }
 
-    await wait(intervalMs, options.signal);
+    return null;
+  } finally {
+    clearTimeout(timeoutId);
   }
-
-  return null;
 }

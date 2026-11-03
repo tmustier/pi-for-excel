@@ -34,7 +34,9 @@ export function promptForProviderConnection(provider: string): Promise<boolean> 
       restoreFocusOnClose: true,
     });
 
+    const lifetime = new AbortController();
     dialog.addCleanup(() => {
+      lifetime.abort();
       settle(false);
     });
 
@@ -48,6 +50,7 @@ export function promptForProviderConnection(provider: string): Promise<boolean> 
     const expandedRef: { current: HTMLElement | null } = { current: null };
     const row = buildProviderRow(def, {
       isActive: false,
+      signal: lifetime.signal,
       expandedRef,
       onConnected: (_row, _id, label) => {
         settle(true);

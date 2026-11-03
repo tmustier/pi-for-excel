@@ -63,6 +63,8 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
       cardClassName: "pi-welcome-card",
     });
 
+    const lifetime = new AbortController();
+    dialog.addCleanup(() => lifetime.abort());
     let settled = false;
     dialog.addCleanup(() => {
       if (settled) {
@@ -283,6 +285,7 @@ export async function showWelcomeLogin(modelRefreshOwner: ModelRefreshOwner): Pr
     for (const provider of VISIBLE_PROVIDERS) {
       const row = buildProviderRow(provider, {
         isActive: false,
+        signal: lifetime.signal,
         expandedRef,
         onConnected: (_row, _id, label) => {
           document.dispatchEvent(new CustomEvent("pi:providers-changed"));

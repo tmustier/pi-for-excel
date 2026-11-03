@@ -12,6 +12,7 @@ import { isCorsError, isModuleLoadError } from "../auth/cors-error.js";
 import { checkProxyOnce, isProxyBlockedByBrowser } from "../taskpane/proxy-status.js";
 import { pollOAuthCallbackCapture } from "../auth/oauth-callback-capture.js";
 import { getOAuthProvider } from "../auth/oauth-provider-registry.js";
+import { withOAuthProviderLock } from "../auth/oauth-refresh.js";
 import { clearOAuthCredentials, saveOAuthCredentials } from "../auth/oauth-storage.js";
 import {
   DEFAULT_PROXY_IS_REMOTE,
@@ -42,7 +43,7 @@ async function isProxyReachable(): Promise<boolean> {
   }
 }
 
-function showProxyGateDialog(): Promise<boolean> {
+function showProxyGateDialog(signal: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
     closeOverlayById(PROXY_GATE_OVERLAY_ID);
 
@@ -117,17 +118,19 @@ function showProxyGateDialog(): Promise<boolean> {
     actions.append(cancelBtn, retryBtn);
     dialog.card.append(title, message, codeRow, hint, actions);
 
-    let settled = false;
+    let phase: "idle" | "probing" | "committing" | "settled" = "idle";
 
     const doCancel = (): void => {
-      if (settled) return;
-      settled = true;
+      if (phase === "settled") return;
+      phase = "settled";
       dialog.close();
       resolve(false);
     };
 
     const doRetry = (): void => {
-      if (settled) return;
+      if (phase !== "idle") return;
+      phase = "probing";
+      retryBtn.disabled = true;
       retryBtn.textContent = t("provider.proxy_gate.checking");
       retryBtn.style.opacity = "0.7";
 
@@ -135,12 +138,16 @@ function showProxyGateDialog(): Promise<boolean> {
         try {
           const storage = getAppStorage();
           const url = await storage.settings.get("proxy.url");
+          if (signal.aborted || phase !== "probing") return;
           const proxyUrl = resolveConfiguredProxyUrl(url);
           const ok = await probeProxyReachability(proxyUrl, 1500);
 
+          if (signal.aborted || phase !== "probing") return;
           if (ok) {
+            phase = "committing";
             await storage.settings.set("proxy.enabled", true);
-            settled = true;
+            if (signal.aborted) return;
+            phase = "settled";
             dialog.close();
             resolve(true);
             return;
@@ -148,6 +155,9 @@ function showProxyGateDialog(): Promise<boolean> {
         } catch {
         }
 
+        if (signal.aborted || phase === "settled") return;
+        phase = "idle";
+        retryBtn.disabled = false;
         retryBtn.textContent = t("provider.proxy_gate.retry");
         retryBtn.style.opacity = "1";
         if (DEFAULT_PROXY_IS_REMOTE) {
@@ -169,10 +179,13 @@ function showProxyGateDialog(): Promise<boolean> {
     dialog.addCleanup(() => {
       cancelBtn.removeEventListener("click", doCancel);
       retryBtn.removeEventListener("click", doRetry);
-      if (!settled) { settled = true; resolve(false); }
+      signal.removeEventListener("abort", doCancel);
+      if (phase !== "settled") { phase = "settled"; resolve(false); }
     });
 
+    signal.addEventListener("abort", doCancel, { once: true });
     dialog.mount();
+    if (signal.aborted) doCancel();
   });
 }
 
@@ -375,13 +388,18 @@ function showDeviceCodeDialog(
   helper.textContent = t("provider.device_code.helper", { uri: info.verificationUri });
 
   dialog.card.append(title, message, codeRow, helper);
-  dialog.addCleanup(onClose);
+  let completed = false;
+  dialog.addCleanup(() => { if (!completed) onClose(); });
   dialog.mount();
 
-  return () => dialog.close();
+  return () => {
+    completed = true;
+    dialog.close();
+  };
 }
 
 function promptForSelect(opts: {
+  signal: AbortSignal;
   title: string;
   message: string;
   options: { id: string; label: string }[];
@@ -436,7 +454,10 @@ function promptForSelect(opts: {
 
     dialog.card.append(titleEl, messageEl, optionList, actions);
 
+    const onAbort = (): void => settle(undefined);
+    opts.signal.addEventListener("abort", onAbort, { once: true });
     dialog.addCleanup(() => {
+      opts.signal.removeEventListener("abort", onAbort);
       if (!settled) {
         settled = true;
         resolve(undefined);
@@ -444,6 +465,7 @@ function promptForSelect(opts: {
     });
 
     dialog.mount();
+    if (opts.signal.aborted) onAbort();
   });
 }
 
@@ -474,6 +496,7 @@ async function copyTextToClipboard(text: string): Promise<void> {
 }
 
 function promptForText(opts: {
+  signal: AbortSignal;
   title: string;
   message: string;
   placeholder?: string;
@@ -645,11 +668,13 @@ function promptForText(opts: {
       submit();
     };
 
+    opts.signal.addEventListener("abort", cancel, { once: true });
     cancelBtn.addEventListener("click", cancel);
     okBtn.addEventListener("click", submit);
     input.addEventListener("keydown", onInputKeyDown);
 
     dialog.addCleanup(() => {
+      opts.signal.removeEventListener("abort", cancel);
       cancelBtn.removeEventListener("click", cancel);
       okBtn.removeEventListener("click", submit);
       input.removeEventListener("keydown", onInputKeyDown);
@@ -662,6 +687,10 @@ function promptForText(opts: {
     });
 
     dialog.mount();
+    if (opts.signal.aborted) {
+      cancel();
+      return;
+    }
 
     if (opts.autoCapture) {
       captureStatusEl.textContent = t("provider.oauth.capture_waiting");
@@ -700,6 +729,7 @@ export function buildProviderRow(
   provider: ProviderDef,
   opts: {
     isActive: boolean;
+    signal: AbortSignal;
     expandedRef: { current: HTMLElement | null };
   } & ProviderRowCallbacks,
 ): HTMLElement {
@@ -780,6 +810,53 @@ export function buildProviderRow(
     }
   };
 
+  type Operation = { kind: "logging-in" | "saving-key" | "disconnecting"; controller: AbortController };
+  type RowState = { kind: "idle" } | Operation | { kind: "disposed" };
+  let state: RowState = { kind: "idle" };
+
+  const transition = (next: RowState): void => {
+    state = next;
+    const busy = next.kind !== "idle";
+    saveBtn.disabled = busy;
+    saveBtn.textContent = t(next.kind === "saving-key" ? "provider.testing" : "provider.save");
+    saveBtn.style.opacity = next.kind === "saving-key" ? "0.7" : "1";
+    keyInput.disabled = busy;
+    if (oauthBtn) {
+      oauthBtn.disabled = busy;
+      oauthBtn.textContent = next.kind === "logging-in" ? t("provider.opening_login") : t("provider.login_with", { label });
+      oauthBtn.style.opacity = next.kind === "logging-in" ? "0.7" : "1";
+    }
+    if (disconnectBtn) {
+      disconnectBtn.disabled = next.kind === "disconnecting" || next.kind === "disposed";
+      disconnectBtn.textContent = next.kind === "disconnecting" ? t("provider.disconnecting") : t("provider.disconnect", { label });
+      disconnectBtn.style.opacity = next.kind === "disconnecting" ? "0.7" : "1";
+    }
+    headerBtn.disabled = next.kind === "disposed";
+  };
+  const begin = (kind: Operation["kind"]): Operation | undefined => {
+    if (state.kind === "disposed" || state.kind === "disconnecting") return undefined;
+    if (state.kind !== "idle") {
+      if (kind !== "disconnecting") return undefined;
+      state.controller.abort();
+    }
+    const operation = { kind, controller: new AbortController() };
+    transition(operation);
+    return operation;
+  };
+  const finish = (operation: Operation): void => {
+    if (state === operation) transition({ kind: "idle" });
+  };
+  const collapseOwnDetail = (): void => {
+    detail.hidden = true;
+    if (expandedRef.current === detail) expandedRef.current = null;
+  };
+  const dispose = (): void => {
+    if (state.kind !== "idle" && state.kind !== "disposed") state.controller.abort();
+    transition({ kind: "disposed" });
+    if (expandedRef.current === detail) expandedRef.current = null;
+  };
+  opts.signal.addEventListener("abort", dispose, { once: true });
+  if (opts.signal.aborted) dispose();
   setConnectedState(isActive);
 
   headerBtn.addEventListener("click", () => {
@@ -797,8 +874,9 @@ export function buildProviderRow(
   if (oauthBtn) {
     oauthBtn.addEventListener("click", (e) => {
       e.stopPropagation();
-      oauthBtn.textContent = t("provider.opening_login");
-      oauthBtn.style.opacity = "0.7";
+      const operation = begin("logging-in");
+      if (!operation) return;
+      const loginAbort = operation.controller;
       void (async () => {
         errorEl.hidden = true;
         try {
@@ -814,47 +892,50 @@ export function buildProviderRow(
           if (!import.meta.env.DEV && OAUTH_IDS_NEEDING_PROXY.has(id)) {
             const reachable = await isProxyReachable();
             if (!reachable) {
+              loginAbort.signal.throwIfAborted();
               await checkProxyOnce(getAppStorage().settings);
+              loginAbort.signal.throwIfAborted();
               if (isProxyBlockedByBrowser()) {
                 errorEl.textContent = t("proxy.blocked_by_browser");
                 errorEl.hidden = false;
-                oauthBtn.textContent = t("provider.login_with", { label });
-                oauthBtn.style.opacity = "1";
                 return;
               }
-              const userRetried = await showProxyGateDialog();
+              const userRetried = await showProxyGateDialog(loginAbort.signal);
               if (!userRetried) {
-                oauthBtn.textContent = t("provider.login_with", { label });
-                oauthBtn.style.opacity = "1";
                 return;
               }
             }
           }
 
           const deviceCodeDialogRef: { close: (() => void) | null } = { close: null };
-          const loginAbort = new AbortController();
           const authUrlRef: { current: string | null } = { current: null };
 
+          loginAbort.signal.throwIfAborted();
           let cred;
           try {
             cred = await oauthProvider.login({
               onAuth: (info) => {
+                loginAbort.signal.throwIfAborted();
                 authUrlRef.current = info.url;
                 const w = window.open(info.url, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
               },
               onDeviceCode: (info) => {
+                loginAbort.signal.throwIfAborted();
                 const w = window.open(info.verificationUri, "_blank", "noopener,noreferrer");
                 if (w) w.opener = null;
                 deviceCodeDialogRef.close = showDeviceCodeDialog(info, () => loginAbort.abort());
+                loginAbort.signal.addEventListener("abort", () => deviceCodeDialogRef.close?.(), { once: true });
               },
               onSelect: (prompt) =>
                 promptForSelect({
+                  signal: loginAbort.signal,
                   title: t("provider.login_with", { label }),
                   message: prompt.message,
                   options: prompt.options,
                 }),
               onPrompt: async (prompt) => {
+                loginAbort.signal.throwIfAborted();
                 const helperText = id === "anthropic"
                   ? t("provider.oauth.helper.anthropic")
                   : id === "openai-codex"
@@ -871,6 +952,7 @@ export function buildProviderRow(
                   : undefined;
 
                 const value = await promptForText({
+                  signal: loginAbort.signal,
                   title: t("provider.login_with", { label }),
                   message: prompt.message,
                   placeholder: prompt.placeholder || "",
@@ -888,13 +970,11 @@ export function buildProviderRow(
 
                 return value;
               },
-              onProgress: (msg) => { oauthBtn.textContent = msg; },
+              onProgress: (msg) => { if (!loginAbort.signal.aborted) oauthBtn.textContent = msg; },
               signal: loginAbort.signal,
             });
           } catch (error) {
             if (loginAbort.signal.aborted) {
-              oauthBtn.textContent = t("provider.login_with", { label });
-              oauthBtn.style.opacity = "1";
               return;
             }
             throw error;
@@ -902,15 +982,19 @@ export function buildProviderRow(
             deviceCodeDialogRef.close?.();
           }
 
+          loginAbort.signal.throwIfAborted();
           const apiKey = oauthProvider.getApiKey(cred);
-          await storage.providerKeys.set(id, apiKey);
-          await saveOAuthCredentials(storage.settings, id, cred);
+          await withOAuthProviderLock(oauth, async () => {
+            loginAbort.signal.throwIfAborted();
+            await saveOAuthCredentials(storage.settings, oauth, cred);
+            await storage.providerKeys.set(id, apiKey);
+          });
+          loginAbort.signal.throwIfAborted();
           setConnectedState(true);
           onConnected(row, id, label);
-          detail.hidden = true;
-          expandedRef.current = null;
+          collapseOwnDetail();
         } catch (err) {
-          if (err instanceof PromptCancelledError) {
+          if (loginAbort.signal.aborted || err instanceof PromptCancelledError) {
             return;
           }
 
@@ -942,8 +1026,7 @@ export function buildProviderRow(
           }
           errorEl.hidden = false;
         } finally {
-          oauthBtn.textContent = t("provider.login_with", { label });
-          oauthBtn.style.opacity = "1";
+          finish(operation);
         }
       })();
     });
@@ -952,27 +1035,28 @@ export function buildProviderRow(
   if (disconnectBtn) {
     disconnectBtn.addEventListener("click", (e) => {
       e.stopPropagation();
+      const operation = begin("disconnecting");
+      if (!operation) return;
       void (async () => {
-        disconnectBtn.textContent = t("provider.disconnecting");
-        disconnectBtn.disabled = true;
-        disconnectBtn.style.opacity = "0.7";
         errorEl.hidden = true;
 
         try {
-          await storage.providerKeys.delete(id);
-          await clearOAuthCredentials(storage.settings, id);
-
+          await withOAuthProviderLock(oauth ?? id, async () => {
+            operation.controller.signal.throwIfAborted();
+            await clearOAuthCredentials(storage.settings, oauth ?? id);
+            await storage.providerKeys.delete(id);
+          });
+          operation.controller.signal.throwIfAborted();
           setConnectedState(false);
           keyInput.value = "";
           onDisconnected?.(row, id, label);
         } catch (err) {
+          if (operation.controller.signal.aborted) return;
           const msg = getErrorMessage(err);
           errorEl.textContent = msg ? t("provider.disconnect_failed_msg", { msg }) : t("provider.disconnect_failed");
           errorEl.hidden = false;
         } finally {
-          disconnectBtn.textContent = t("provider.disconnect", { label });
-          disconnectBtn.disabled = false;
-          disconnectBtn.style.opacity = "1";
+          finish(operation);
         }
       })();
     });
@@ -989,35 +1073,38 @@ export function buildProviderRow(
       return;
     }
 
+    const operation = begin("saving-key");
+    if (!operation) return;
     const key = normalized.key;
-    saveBtn.textContent = t("provider.testing");
-    saveBtn.style.opacity = "0.7";
-    saveBtn.disabled = true;
     errorEl.hidden = true;
     try {
-      const check = await checkProviderApiKey(id, key);
+      const check = await checkProviderApiKey(id, key, fetch, operation.controller.signal);
+      operation.controller.signal.throwIfAborted();
       if (check.status === "rejected") {
         errorEl.textContent = t("provider.key_rejected", { label, status: String(check.httpStatus) });
         errorEl.hidden = false;
         return;
       }
 
-      await storage.providerKeys.set(id, key);
+      await withOAuthProviderLock(oauth ?? id, async () => {
+        operation.controller.signal.throwIfAborted();
+        await clearOAuthCredentials(storage.settings, oauth ?? id);
+        await storage.providerKeys.set(id, key);
+      });
+      operation.controller.signal.throwIfAborted();
       setConnectedState(true);
       onConnected(row, id, label);
       if (check.status === "unverified") {
         showToast(t("provider.key_unverified", { label }), 4000);
       }
-      detail.hidden = true;
-      expandedRef.current = null;
+      collapseOwnDetail();
     } catch (err) {
+      if (operation.controller.signal.aborted) return;
       const msg = getErrorMessage(err);
       errorEl.textContent = msg ? t("provider.save_failed_msg", { msg }) : t("provider.save_failed");
       errorEl.hidden = false;
     } finally {
-      saveBtn.textContent = t("provider.save");
-      saveBtn.style.opacity = "1";
-      saveBtn.disabled = false;
+      finish(operation);
     }
   })(); });
 

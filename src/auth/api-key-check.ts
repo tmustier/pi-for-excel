@@ -19,6 +19,7 @@ export async function checkProviderApiKey(
   providerId: string,
   key: string,
   fetchFn: typeof globalThis.fetch = globalThis.fetch,
+  signal?: AbortSignal,
 ): Promise<ApiKeyCheckResult> {
   const url = API_KEY_CHECK_URLS.get(providerId);
   if (!url) return { status: "unverified" };
@@ -39,7 +40,7 @@ export async function checkProviderApiKey(
 
     const response = await fetchFn(url, {
       headers,
-      signal: controller.signal,
+      signal: signal ? AbortSignal.any([signal, controller.signal]) : controller.signal,
       cache: "no-store",
     });
     if (response.ok) return { status: "valid" };
