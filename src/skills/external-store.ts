@@ -114,9 +114,7 @@ async function loadSkillDefinitionsFromFiles(args: {
   tooLargeWarningLabel: string;
   invalidWarningLabel: string;
 }): Promise<AgentSkillDefinition[]> {
-  const loaded: AgentSkillDefinition[] = [];
-
-  for (const file of args.files) {
+  const loaded = await Promise.all(args.files.map(async (file): Promise<AgentSkillDefinition | null> => {
     let readResult: Awaited<ReturnType<ExternalSkillWorkspace["readFile"]>>;
 
     try {
@@ -126,17 +124,17 @@ async function loadSkillDefinitionsFromFiles(args: {
       });
     } catch (error) {
       console.warn(`[skills] Failed reading ${args.invalidWarningLabel}: ${file.path}`, error);
-      continue;
+      return null;
     }
 
     if (typeof readResult.text !== "string") {
       console.warn(`[skills] ${args.invalidWarningLabel} is not readable text: ${file.path}`);
-      continue;
+      return null;
     }
 
     if (readResult.truncated) {
       console.warn(`[skills] ${args.tooLargeWarningLabel} is too large to load fully: ${file.path}`);
-      continue;
+      return null;
     }
 
     const skill = buildExternalSkillDefinition({
@@ -147,13 +145,11 @@ async function loadSkillDefinitionsFromFiles(args: {
 
     if (!skill) {
       console.warn(`[skills] Invalid SKILL.md frontmatter (${args.invalidWarningLabel}): ${file.path}`);
-      continue;
     }
+    return skill;
+  }));
 
-    loaded.push(skill);
-  }
-
-  return loaded;
+  return loaded.filter((skill) => skill !== null);
 }
 
 function sortSkillFiles(files: readonly WorkspaceFileEntry[]): WorkspaceFileEntry[] {

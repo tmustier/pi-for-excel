@@ -778,13 +778,8 @@ export class ConnectionManager {
       ? Array.from(new Set(connectionIds.map((id) => normalizeConnectionId(id))))
       : this.listRegisteredConnectionIds();
 
-    const snapshots: ConnectionSnapshot[] = [];
-
-    for (const connectionId of ids) {
-      const snapshot = await this.getSnapshot(connectionId);
-      if (!snapshot) continue;
-      snapshots.push(snapshot);
-    }
+    const snapshots = (await Promise.all(ids.map((connectionId) => this.getSnapshot(connectionId))))
+      .filter((snapshot) => snapshot !== null);
 
     snapshots.sort((left, right) => left.title.localeCompare(right.title));
     return snapshots;

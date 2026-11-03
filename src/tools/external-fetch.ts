@@ -24,10 +24,9 @@ export async function getEnabledProxyBaseUrl(
   settings: SettingsReader,
 ): Promise<string | undefined> {
   try {
-    const enabledRaw = await settings.get("proxy.enabled");
+    const [enabledRaw, proxyUrlRaw] = await Promise.all([settings.get("proxy.enabled"), settings.get("proxy.url")]);
     if (!parseEnabledFlag(enabledRaw)) return undefined;
 
-    const proxyUrlRaw = await settings.get("proxy.url");
     const trimmed = typeof proxyUrlRaw === "string" ? proxyUrlRaw.trim() : "";
     const candidateUrl = trimmed.length > 0 ? trimmed : DEFAULT_PROXY_URL;
     return validateOfficeProxyUrl(candidateUrl);

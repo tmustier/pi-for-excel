@@ -70,7 +70,7 @@ async function restoreFromPiAuth(
 
     console.log(`[auth] Found pi auth.json with ${Object.keys(authData).length} provider(s)`);
 
-    for (const [providerId, cred] of Object.entries(authData)) {
+    await Promise.all(Object.entries(authData).map(async ([providerId, cred]) => {
       try {
         const apiProvider = mapToApiProvider(providerId);
 
@@ -78,17 +78,17 @@ async function restoreFromPiAuth(
           await providerKeys.set(apiProvider, cred.key);
           restoredProviders.add(apiProvider);
           console.log(`[auth] ${providerId}: API key loaded`);
-          continue;
+          return;
         }
 
         if (!isOAuthCredential(cred)) {
-          continue;
+          return;
         }
 
         const provider = getOAuthProvider(providerId);
         if (!provider) {
           console.log(`[auth] ${providerId}: no OAuth provider registered, skipping`);
-          continue;
+          return;
         }
 
         if (Date.now() >= cred.expires) {
@@ -109,7 +109,7 @@ async function restoreFromPiAuth(
       } catch (e) {
         console.warn(`[auth] ${providerId}: failed (${getErrorMessage(e)})`);
       }
-    }
+    }));
 
     return restoredProviders;
   } catch {
@@ -125,16 +125,16 @@ async function restoreFromBrowserOAuthStorage(
 ): Promise<void> {
   const refresher = createOAuthRefresher({ settings, providerKeys, getOAuthProvider });
 
-  for (const providerId of BROWSER_OAUTH_PROVIDERS) {
+  await Promise.all(BROWSER_OAUTH_PROVIDERS.map(async (providerId) => {
     const apiProvider = mapToApiProvider(providerId);
-    if (restoredProviders.has(apiProvider)) continue;
+    if (restoredProviders.has(apiProvider)) return;
 
     const credentials = await loadOAuthCredentials(settings, providerId);
-    if (!credentials) continue;
+    if (!credentials) return;
 
     try {
       const provider = getOAuthProvider(providerId);
-      if (!provider) continue;
+      if (!provider) return;
 
       const outcome = await refresher.ensureFresh(apiProvider);
       if (outcome === "refreshed") {
@@ -156,5 +156,5 @@ async function restoreFromBrowserOAuthStorage(
     } catch (e) {
       console.warn(`[auth] ${providerId}: failed to restore (${getErrorMessage(e)})`);
     }
-  }
+  }));
 }

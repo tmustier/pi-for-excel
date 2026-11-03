@@ -192,9 +192,12 @@ function wrapTool(tool: AgentTool, connectionManager: ConnectionManager): AgentT
     ...tool,
     execute: async (toolCallId, params, signal, onUpdate) => {
       const snapshots: ConnectionSnapshot[] = [];
+      const fetchedSnapshots = await Promise.all(requiredConnectionIds.map(async (connectionId) => ({
+        connectionId,
+        snapshot: await connectionManager.getSnapshot(connectionId),
+      })));
 
-      for (const connectionId of requiredConnectionIds) {
-        const snapshot = await connectionManager.getSnapshot(connectionId);
+      for (const { connectionId, snapshot } of fetchedSnapshots) {
         if (!snapshot) {
           return buildUnregisteredConnectionResult(connectionId);
         }

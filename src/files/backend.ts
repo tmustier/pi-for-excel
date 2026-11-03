@@ -115,28 +115,19 @@ async function removeFileHandle(root: FileSystemDirectoryHandle, path: string): 
   await parent.removeEntry(fileName, { recursive: false });
 }
 
-async function listDirectoryRecursively(args: {
-  root: FileSystemDirectoryHandle;
-  pathPrefix: string;
-  out: WorkspaceFileEntry[];
-}): Promise<void> {
-  for await (const [name, handle] of args.root.entries()) {
-    const path = args.pathPrefix.length > 0 ? `${args.pathPrefix}/${name}` : name;
-
-    if (handle.kind === "file") {
-      const file = await handle.getFile();
-      args.out.push(mapFileToEntry(path, file));
-      continue;
-    }
-
-    if (handle.kind === "directory") {
-      await listDirectoryRecursively({
-        root: handle,
-        pathPrefix: path,
-        out: args.out,
-      });
-    }
+async function listDirectoryRecursively(
+  root: FileSystemDirectoryHandle,
+  pathPrefix = "",
+): Promise<WorkspaceFileEntry[]> {
+  const children: { path: string; handle: FileSystemFileHandle | FileSystemDirectoryHandle }[] = [];
+  for await (const [name, handle] of root.entries()) {
+    children.push({ path: pathPrefix.length > 0 ? `${pathPrefix}/${name}` : name, handle });
   }
+
+  const listed = await Promise.all(children.map(async ({ path, handle }) => handle.kind === "file"
+    ? [mapFileToEntry(path, await handle.getFile())]
+    : listDirectoryRecursively(handle, path)));
+  return listed.flat();
 }
 
 function sortEntries(entries: WorkspaceFileEntry[]): WorkspaceFileEntry[] {
@@ -154,14 +145,7 @@ export class NativeDirectoryBackend implements WorkspaceBackend {
   }
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
-    const out: WorkspaceFileEntry[] = [];
-    await listDirectoryRecursively({
-      root: this.root,
-      pathPrefix: "",
-      out,
-    });
-
-    return sortEntries(out);
+    return sortEntries(await listDirectoryRecursively(this.root));
   }
 
   async readFile(path: string): Promise<WorkspaceFileReadResult> {
@@ -231,16 +215,7 @@ export class OpfsBackend implements WorkspaceBackend {
   readonly label = t("files-backend.sandboxedWorkspace");
 
   async listFiles(): Promise<WorkspaceFileEntry[]> {
-    const root = await getOpfsRoot();
-    const out: WorkspaceFileEntry[] = [];
-
-    await listDirectoryRecursively({
-      root,
-      pathPrefix: "",
-      out,
-    });
-
-    return sortEntries(out);
+    return sortEntries(await listDirectoryRecursively(await getOpfsRoot()));
   }
 
   async readFile(path: string): Promise<WorkspaceFileReadResult> {

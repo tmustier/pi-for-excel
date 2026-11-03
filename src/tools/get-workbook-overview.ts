@@ -57,7 +57,7 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
       try {
         const text = params.sheet
           ? await buildSheetDetail(params.sheet)
-          : `${await buildOverview()}${await buildWorkbookStateNotes()}`;
+          : (await Promise.all([buildOverview(), buildWorkbookStateNotes()])).join("");
         return {
           content: [{ type: "text", text }],
           details: undefined,
@@ -74,15 +74,15 @@ export function createGetWorkbookOverviewTool(): AgentTool<typeof schema> {
 
 const MAX_HEADER_COLUMNS = 200;
 
-async function loadHeaderRow(
-  context: Excel.RequestContext,
-  sheet: Excel.Worksheet,
-  used: Excel.Range,
-): Promise<{ labels: string[]; rowNote: string }> {
-  if (used.isNullObject) return { labels: [], rowNote: "" };
+function queueHeaderRow(sheet: Excel.Worksheet, used: Excel.Range): Excel.Range | null {
+  if (used.isNullObject) return null;
   const row = sheet.getRangeByIndexes(used.rowIndex, used.columnIndex, 1, Math.min(used.columnCount, MAX_HEADER_COLUMNS));
   row.load("values");
-  await context.sync();
+  return row;
+}
+
+function headerRow(row: Excel.Range | null, used: Excel.Range): { labels: string[]; rowNote: string } {
+  if (!row) return { labels: [], rowNote: "" };
   const values = Value.Parse(cellValueGridSchema, row.values)[0] ?? [];
   const labels = values.filter((v) => v !== null && v !== undefined && v !== "").map((v) => String(v));
   return { labels, rowNote: used.rowIndex === 0 ? "" : ` (row ${used.rowIndex + 1})` };
@@ -131,7 +131,7 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
     lines.push("");
     lines.push(`### Sheets (${sheets.items.length})`);
 
-    for (const sheet of sheets.items) {
+    const sheetObjects = sheets.items.map((sheet) => {
       const used = sheet.getUsedRangeOrNullObject();
       used.load("rowCount,columnCount,rowIndex,columnIndex,address");
 
@@ -141,8 +141,7 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
       const charts = sheet.charts;
       charts.load("count");
 
-      const pivotTables = sheet.pivotTables;
-      const pivotCount = pivotTables.getCount();
+      const pivotCount = sheet.pivotTables.getCount();
 
       let shapes: Excel.ShapeCollection | null = null;
       try {
@@ -151,16 +150,21 @@ export async function buildOverview(runOptions?: ExcelRunOptions): Promise<strin
       } catch {
         shapes = null;
       }
+      return { sheet, used, tables, charts, pivotCount, shapes };
+    });
+    await context.sync();
 
-      await context.sync();
+    const sheetDetails = sheetObjects.map((objects) => ({ ...objects, headerRange: queueHeaderRow(objects.sheet, objects.used) }));
+    await context.sync();
 
+    for (const { sheet, used, tables, charts, pivotCount, shapes, headerRange } of sheetDetails) {
       const dims = used.isNullObject
         ? "empty"
         : `${used.rowCount} rows × ${used.columnCount} cols`;
 
       const visibility = sheet.visibility === "Visible" ? "" : ` (${sheet.visibility})`;
 
-      const header = await loadHeaderRow(context, sheet, used);
+      const header = headerRow(headerRange, used);
 
       lines.push(
         `${sheet.position + 1}. **${sheet.name}**${visibility} — ${dims}`,
@@ -256,7 +260,9 @@ async function buildSheetDetail(sheetName: string): Promise<string> {
     lines.push(`## Sheet: ${sheet.name}${visibility}`);
     lines.push(`Dimensions: ${dims}`);
 
-    const header = await loadHeaderRow(context, sheet, used);
+    const headerRange = queueHeaderRow(sheet, used);
+    await context.sync();
+    const header = headerRow(headerRange, used);
     if (header.labels.length > 0) {
       lines.push(`Headers${header.rowNote}: ${header.labels.join(", ")}`);
     }

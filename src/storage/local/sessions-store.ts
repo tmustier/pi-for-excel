@@ -31,8 +31,10 @@ export class SessionsStore extends Store {
       ["sessions", "sessions-metadata"],
       "readwrite",
       async (tx) => {
-        await tx.set("sessions", data.id, data);
-        await tx.set("sessions-metadata", metadata.id, metadata);
+        await Promise.all([
+          tx.set("sessions", data.id, data),
+          tx.set("sessions-metadata", metadata.id, metadata),
+        ]);
       },
     );
   }
@@ -48,8 +50,10 @@ export class SessionsStore extends Store {
       async (tx) => {
         const stored = await tx.get<SessionMetadata>("sessions-metadata", metadata.id);
         if (stored && stored.revision !== baseRevision) return false;
-        await tx.set("sessions", data.id, data);
-        await tx.set("sessions-metadata", metadata.id, metadata);
+        await Promise.all([
+          tx.set("sessions", data.id, data),
+          tx.set("sessions-metadata", metadata.id, metadata),
+        ]);
         return true;
       },
     );
@@ -76,8 +80,7 @@ export class SessionsStore extends Store {
       ["sessions", "sessions-metadata"],
       "readwrite",
       async (tx) => {
-        await tx.delete("sessions", id);
-        await tx.delete("sessions-metadata", id);
+        await Promise.all([tx.delete("sessions", id), tx.delete("sessions-metadata", id)]);
       },
     );
   }

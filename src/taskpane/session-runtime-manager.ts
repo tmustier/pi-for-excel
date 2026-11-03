@@ -376,13 +376,9 @@ export class SessionRuntimeManager {
         this.refreshRequested = false;
         const runtimes = this.listRuntimes();
 
-        for (const runtime of runtimes) {
-          try {
-            await runtime.refreshCapabilities();
-          } catch (error) {
-            this.warnCapabilityRefresh(error);
-          }
-        }
+        await Promise.all(runtimes.map((runtime) => runtime.refreshCapabilities().catch((error: unknown) => {
+          this.warnCapabilityRefresh(error);
+        })));
       }
     } finally {
       this.refreshPromise = null;

@@ -185,6 +185,16 @@ function processWithModel(
   });
 }
 
+function processContentImages(
+  content: readonly (TextContent | ImageContent)[],
+  model: ImageLimitModel,
+  options: ImageNormalizationOptions,
+): Promise<({ block: TextContent; processed: null } | { block: ImageContent; processed: ProcessedImageInput })[]> {
+  return Promise.all(content.map(async (block) => block.type === "image"
+    ? { block, processed: await processWithModel(block, model, options) }
+    : { block, processed: null }));
+}
+
 async function normalizePromptContent(
   content: string | (TextContent | ImageContent)[],
   model: ImageLimitModel,
@@ -195,13 +205,12 @@ async function normalizePromptContent(
   }
 
   const normalized: (TextContent | ImageContent)[] = [];
-  for (const block of content) {
-    if (block.type !== "image") {
+  for (const { block, processed } of await processContentImages(content, model, options)) {
+    if (!processed) {
       normalized.push(block);
       continue;
     }
 
-    const processed = await processWithModel(block, model, options);
     if (!processed.ok) {
       normalized.push({ type: "text", text: processed.message });
       continue;
@@ -229,17 +238,18 @@ async function normalizePromptMessage(
   const hints: string[] = [];
   if (message.attachments?.some((attachment) => attachment.type === "image")) {
     const attachments: Attachment[] = [];
-    for (const attachment of message.attachments) {
-      if (attachment.type !== "image") {
+    const processedAttachments = await Promise.all(message.attachments.map(async (attachment) => ({
+      attachment,
+      processed: attachment.type === "image"
+        ? await processWithModel({ type: "image", data: attachment.content, mimeType: attachment.mimeType }, model, options)
+        : null,
+    })));
+    for (const { attachment, processed } of processedAttachments) {
+      if (!processed) {
         attachments.push(attachment);
         continue;
       }
 
-      const processed = await processWithModel({
-        type: "image",
-        data: attachment.content,
-        mimeType: attachment.mimeType,
-      }, model, options);
       if (!processed.ok) {
         hints.push(processed.message);
         continue;
@@ -274,13 +284,12 @@ export async function normalizeToolResultImages(
 
   const normalized: (TextContent | ImageContent)[] = [];
   let changed = false;
-  for (const block of content) {
-    if (block.type !== "image") {
+  for (const { block, processed } of await processContentImages(content, model, options)) {
+    if (!processed) {
       normalized.push(block);
       continue;
     }
 
-    const processed = await processWithModel(block, model, options);
     if (!processed.ok) {
       normalized.push(block);
       continue;

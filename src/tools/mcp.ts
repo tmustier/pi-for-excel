@@ -486,21 +486,13 @@ export function createMcpTool(
     servers: readonly McpServerConfig[];
     proxyBaseUrl?: string;
     signal: AbortSignal | undefined;
-  }): Promise<ServerToolList[]> => {
-    const out: ServerToolList[] = [];
-
-    for (const server of args.servers) {
-      if (!server.enabled) continue;
-      const list = await ensureServerTools({
-        server,
-        ...proxyBaseUrlArg(args.proxyBaseUrl),
-        signal: args.signal,
-      });
-      out.push(list);
-    }
-
-    return out;
-  };
+  }): Promise<ServerToolList[]> => Promise.all(args.servers
+    .filter((server) => server.enabled)
+    .map((server) => ensureServerTools({
+      server,
+      ...proxyBaseUrlArg(args.proxyBaseUrl),
+      signal: args.signal,
+    })));
 
   return {
     name: "mcp",

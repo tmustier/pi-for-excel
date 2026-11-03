@@ -72,8 +72,12 @@ export async function partitionSessionIdsByWorkbook(
   const unlinkedSessionIds: string[] = [];
   const foreignSessionIds: string[] = [];
 
-  for (const sessionId of sessionIds) {
-    const linkedWorkbookId = await getSessionWorkbookId(settings, sessionId);
+  const linkedWorkbookIds = await Promise.all(sessionIds.map(async (sessionId) => ({
+    sessionId,
+    linkedWorkbookId: await getSessionWorkbookId(settings, sessionId),
+  })));
+
+  for (const { sessionId, linkedWorkbookId } of linkedWorkbookIds) {
     if (!linkedWorkbookId) {
       unlinkedSessionIds.push(sessionId);
       continue;
