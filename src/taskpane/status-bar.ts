@@ -346,12 +346,13 @@ export function injectStatusBar(opts: {
   };
 
   document.addEventListener("pi:status-update", onStatusUpdate);
-  document.addEventListener("pi:active-runtime-changed", bindActiveAgent);
+  const bindActiveAgentAfterRender = (): void => { requestAnimationFrame(bindActiveAgent); };
+  document.addEventListener("pi:active-runtime-changed", bindActiveAgentAfterRender);
   document.addEventListener("pointerover", onPointerOver, true);
   document.addEventListener("pointerout", onPointerOut, true);
   document.addEventListener("focusout", onFocusOut, true);
 
-  requestAnimationFrame(bindActiveAgent);
+  bindActiveAgentAfterRender();
 
   return () => {
     clearInteractionLeaveTimer();
@@ -359,7 +360,7 @@ export function injectStatusBar(opts: {
     hasDeferredRender = false;
     unsubscribeActiveAgent?.();
     document.removeEventListener("pi:status-update", onStatusUpdate);
-    document.removeEventListener("pi:active-runtime-changed", bindActiveAgent);
+    document.removeEventListener("pi:active-runtime-changed", bindActiveAgentAfterRender);
     document.removeEventListener("pointerover", onPointerOver, true);
     document.removeEventListener("pointerout", onPointerOut, true);
     document.removeEventListener("focusout", onFocusOut, true);

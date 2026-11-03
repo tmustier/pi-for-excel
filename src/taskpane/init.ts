@@ -2204,6 +2204,177 @@ export async function initTaskpane(opts: {
   };
 
 
+  const wireTextarea = () => {
+    const composer = sidebar.getInput();
+    if (composer) {
+      wireCommandMenu(composer);
+    } else {
+      requestAnimationFrame(wireTextarea);
+    }
+  };
+  requestAnimationFrame(wireTextarea);
+
+  installKeyboardShortcuts({
+    getActiveAgent,
+    isActiveTabBusy: () => {
+      const runtime = getActiveRuntime();
+      return runtime !== null && runtime.actionQueue.isBusy();
+    },
+    sidebar,
+    stopActiveTab,
+    editLastQueued: () => {
+      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
+      if (edited) focusChatInputSoon();
+      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
+      return edited;
+    },
+    onCreateTab: () => {
+      void createRuntimeFromUi();
+    },
+    onCloseActiveTab: () => {
+      const activeRuntime = getActiveRuntime();
+      if (!activeRuntime) {
+        showToast(t("init.noActiveSession"));
+        return;
+      }
+
+      void closeRuntimeWithRecovery(activeRuntime.runtimeId);
+    },
+    onReopenLastClosed: () => {
+      void reopenLastClosed();
+    },
+    onSwitchAdjacentTab: (direction: -1 | 1) => {
+      const tabs = runtimeManager.snapshotTabs();
+      if (tabs.length <= 1) {
+        return;
+      }
+
+      const activeIndex = tabs.findIndex((tab) => tab.isActive);
+      if (activeIndex < 0) {
+        return;
+      }
+
+      const nextIndex = (activeIndex + direction + tabs.length) % tabs.length;
+
+      suppressNextInputAutofocus = true;
+      const nextTab = tabs[nextIndex];
+      if (!nextTab) {
+        return;
+      }
+
+      focusSoon(() => sidebar.focusTabNavigationAnchor());
+      runtimeManager.switchRuntime(nextTab.runtimeId);
+    },
+  });
+
+  injectStatusBar({
+    getActiveAgent,
+    getLockState: getActiveLockState,
+    getExecutionMode,
+    autoCompactionEnabled: autoCompactEnabled,
+  });
+
+  const runSlashCommand = (name: string, args = ""): void => {
+    document.dispatchEvent(new CustomEvent("pi:command-run", { detail: { name, args } }));
+  };
+
+  const openThinkingPopoverFrom = (target: Element): void => {
+    const trigger = target.closest(".pi-status-thinking");
+    if (!trigger) return;
+
+    const activeAgent = getActiveAgent();
+    if (!activeAgent) {
+      showToast(t("init.noActiveSession"));
+      return;
+    }
+
+    const description = trigger.getAttribute("data-tooltip") ?? "Choose how deeply Pi reasons before responding.";
+
+    toggleThinkingPopover({
+      anchor: trigger,
+      description,
+      levels: getThinkingLevels(activeAgent),
+      activeLevel: activeAgent.state.thinkingLevel,
+      onSelectLevel: (level) => {
+        if (activeAgent.state.thinkingLevel === level) return;
+        activeAgent.state.thinkingLevel = level;
+        document.dispatchEvent(new CustomEvent("pi:status-update"));
+      },
+    });
+  };
+
+  const openContextPopoverFrom = (target: Element): void => {
+    const trigger = target.closest(".pi-status-ctx--trigger");
+    if (!trigger) return;
+
+    const description = trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR)
+      ?? getStatusContextPopoverFallbackDescription();
+
+    const tokenDetail = trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
+
+    const warnText = trigger.getAttribute(STATUS_CONTEXT_WARNING_ATTR) ?? "";
+    const warnSeverity = trigger.getAttribute(STATUS_CONTEXT_WARNING_SEVERITY_ATTR);
+    let warning: { text: string; severity: "yellow" | "red" } | undefined;
+    if (warnText.length > 0) {
+      warning = {
+        text: warnText,
+        severity: parseStatusContextWarningSeverity(warnSeverity),
+      };
+    }
+
+    toggleContextPopover({
+      anchor: trigger,
+      description,
+      ...(tokenDetail !== undefined ? { tokenDetail } : {}),
+      ...(warning !== undefined ? { warning } : {}),
+      onRunCommand: (command) => {
+        runSlashCommand(command);
+      },
+    });
+  };
+
+  document.addEventListener("click", (e) => {
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+
+    const el = target;
+
+    if (el.closest(".pi-status-popover")) {
+      return;
+    }
+
+    if (el.closest(".pi-status-model")) {
+      openModelSelector();
+      return;
+    }
+
+    const modeTrigger = el.closest(".pi-status-mode");
+    if (modeTrigger) {
+      toggleModePopover({
+        anchor: modeTrigger,
+        activeMode: getExecutionMode(),
+        onSelectMode: (mode) => {
+          void setExecutionMode(mode).catch(() => {
+            showToast(t("status.mode.saveFailed"));
+          });
+        },
+      });
+      return;
+    }
+
+    if (el.closest(".pi-status-ctx--trigger")) {
+      openContextPopoverFrom(el);
+      return;
+    }
+
+    if (el.closest(".pi-status-thinking")) {
+      openThinkingPopoverFrom(el);
+      return;
+    }
+
+    closeStatusPopover();
+  });
+
   const restoredRuntime = await restorePersistedTabLayout();
   if (!restoredRuntime) {
     const autoRestoreLatest = usesSharedUnidentifiedState || (await resolveWorkbookId()) !== null;
@@ -2283,136 +2454,7 @@ export async function initTaskpane(opts: {
     console.warn("[pi] Extension initialization did not complete during startup:", error);
   }
 
-  installKeyboardShortcuts({
-    getActiveAgent,
-    isActiveTabBusy: () => {
-      const runtime = getActiveRuntime();
-      return runtime !== null && runtime.actionQueue.isBusy();
-    },
-    sidebar,
-    stopActiveTab,
-    editLastQueued: () => {
-      const edited = getActiveRuntime()?.actionQueue.editLast() ?? false;
-      if (edited) focusChatInputSoon();
-      else showToast(t("keyboard-shortcuts.toast.noQueuedMessages"));
-      return edited;
-    },
-    onCreateTab: () => {
-      void createRuntimeFromUi();
-    },
-    onCloseActiveTab: () => {
-      const activeRuntime = getActiveRuntime();
-      if (!activeRuntime) {
-        showToast(t("init.noActiveSession"));
-        return;
-      }
-
-      void closeRuntimeWithRecovery(activeRuntime.runtimeId);
-    },
-    onReopenLastClosed: () => {
-      void reopenLastClosed();
-    },
-    onSwitchAdjacentTab: (direction: -1 | 1) => {
-      const tabs = runtimeManager.snapshotTabs();
-      if (tabs.length <= 1) {
-        return;
-      }
-
-      const activeIndex = tabs.findIndex((tab) => tab.isActive);
-      if (activeIndex < 0) {
-        return;
-      }
-
-      const nextIndex = (activeIndex + direction + tabs.length) % tabs.length;
-
-      suppressNextInputAutofocus = true;
-      const nextTab = tabs[nextIndex];
-      if (!nextTab) {
-        return;
-      }
-
-      focusSoon(() => sidebar.focusTabNavigationAnchor());
-      runtimeManager.switchRuntime(nextTab.runtimeId);
-    },
-  });
-
-  injectStatusBar({
-    getActiveAgent,
-    getLockState: getActiveLockState,
-    getExecutionMode,
-    autoCompactionEnabled: autoCompactEnabled,
-  });
-
   startProxyPolling(settings);
-
-  const wireTextarea = () => {
-    const composer = sidebar.getInput();
-    if (composer) {
-      wireCommandMenu(composer);
-    } else {
-      requestAnimationFrame(wireTextarea);
-    }
-  };
-  requestAnimationFrame(wireTextarea);
-
-  const runSlashCommand = (name: string, args = ""): void => {
-    document.dispatchEvent(new CustomEvent("pi:command-run", { detail: { name, args } }));
-  };
-
-  const openThinkingPopoverFrom = (target: Element): void => {
-    const trigger = target.closest(".pi-status-thinking");
-    if (!trigger) return;
-
-    const activeAgent = getActiveAgent();
-    if (!activeAgent) {
-      showToast(t("init.noActiveSession"));
-      return;
-    }
-
-    const description = trigger.getAttribute("data-tooltip") ?? "Choose how deeply Pi reasons before responding.";
-
-    toggleThinkingPopover({
-      anchor: trigger,
-      description,
-      levels: getThinkingLevels(activeAgent),
-      activeLevel: activeAgent.state.thinkingLevel,
-      onSelectLevel: (level) => {
-        if (activeAgent.state.thinkingLevel === level) return;
-        activeAgent.state.thinkingLevel = level;
-        document.dispatchEvent(new CustomEvent("pi:status-update"));
-      },
-    });
-  };
-
-  const openContextPopoverFrom = (target: Element): void => {
-    const trigger = target.closest(".pi-status-ctx--trigger");
-    if (!trigger) return;
-
-    const description = trigger.getAttribute(STATUS_CONTEXT_DESC_ATTR)
-      ?? getStatusContextPopoverFallbackDescription();
-
-    const tokenDetail = trigger.getAttribute(STATUS_CONTEXT_TOKENS_ATTR) ?? undefined;
-
-    const warnText = trigger.getAttribute(STATUS_CONTEXT_WARNING_ATTR) ?? "";
-    const warnSeverity = trigger.getAttribute(STATUS_CONTEXT_WARNING_SEVERITY_ATTR);
-    let warning: { text: string; severity: "yellow" | "red" } | undefined;
-    if (warnText.length > 0) {
-      warning = {
-        text: warnText,
-        severity: parseStatusContextWarningSeverity(warnSeverity),
-      };
-    }
-
-    toggleContextPopover({
-      anchor: trigger,
-      description,
-      ...(tokenDetail !== undefined ? { tokenDetail } : {}),
-      ...(warning !== undefined ? { warning } : {}),
-      onRunCommand: (command) => {
-        runSlashCommand(command);
-      },
-    });
-  };
 
   const backgroundVerificationBridge = maybeStartBackgroundVerificationBridge({
     sidebar,
@@ -2429,48 +2471,6 @@ export async function initTaskpane(opts: {
   if (backgroundVerificationBridge) {
     window.addEventListener("pagehide", () => backgroundVerificationBridge.stop(), { once: true });
   }
-
-  document.addEventListener("click", (e) => {
-    const target = e.target;
-    if (!(target instanceof Element)) return;
-
-    const el = target;
-
-    if (el.closest(".pi-status-popover")) {
-      return;
-    }
-
-    if (el.closest(".pi-status-model")) {
-      openModelSelector();
-      return;
-    }
-
-    const modeTrigger = el.closest(".pi-status-mode");
-    if (modeTrigger) {
-      toggleModePopover({
-        anchor: modeTrigger,
-        activeMode: getExecutionMode(),
-        onSelectMode: (mode) => {
-          void setExecutionMode(mode).catch(() => {
-            showToast(t("status.mode.saveFailed"));
-          });
-        },
-      });
-      return;
-    }
-
-    if (el.closest(".pi-status-ctx--trigger")) {
-      openContextPopoverFrom(el);
-      return;
-    }
-
-    if (el.closest(".pi-status-thinking")) {
-      openThinkingPopoverFrom(el);
-      return;
-    }
-
-    closeStatusPopover();
-  });
 
   console.log("[pi] PiSidebar mounted");
 }
