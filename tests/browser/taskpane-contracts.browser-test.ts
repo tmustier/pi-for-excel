@@ -10,6 +10,7 @@ import {
   openTaskpane,
   startTaskpaneServer,
   type TaskpaneServer,
+  waitForBrowserSignal,
 } from "./harness.ts";
 
 let env: TaskpaneServer;
@@ -49,21 +50,6 @@ async function withTaskpane(run: (page: Page) => Promise<void>): Promise<void> {
 
 async function openUtilitiesMenu(page: Page): Promise<void> {
   await page.getByRole("button", { name: "Settings and tools" }).click();
-}
-
-async function waitForBrowserSignal(signal: Promise<void>, timeoutMessage: string): Promise<void> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<void>((_resolve, reject) => {
-    timeoutId = setTimeout(() => reject(new Error(timeoutMessage)), 10_000);
-  });
-
-  try {
-    await Promise.race([signal, timeout]);
-  } finally {
-    if (timeoutId !== undefined) {
-      clearTimeout(timeoutId);
-    }
-  }
 }
 
 void test("/files opens the Files view", async () => {

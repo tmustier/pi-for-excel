@@ -3,7 +3,7 @@ import { after, before, test } from "node:test";
 
 import type { Page } from "playwright";
 
-import { openTaskpane, startTaskpaneServer, type TaskpaneServer } from "./harness.ts";
+import { openTaskpane, startTaskpaneServer, type TaskpaneServer, waitForBrowserSignal } from "./harness.ts";
 
 let env: TaskpaneServer;
 
@@ -82,12 +82,7 @@ async function openConnectionsWithExtension(code?: string, grantConnections = fa
   const { page } = opened;
   const input = page.locator("pi-input textarea");
 
-  await Promise.race([
-    installed,
-    new Promise<void>((_resolve, reject) => {
-      setTimeout(() => reject(new Error("extension setup did not complete")), 10_000);
-    }),
-  ]);
+  await waitForBrowserSignal(installed, "extension setup did not complete");
 
   await input.fill("/plugins");
   await input.press("Enter");

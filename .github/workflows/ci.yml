@@ -48,6 +48,11 @@ jobs:
   browser-contracts:
     runs-on: ubuntu-latest
 
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -67,5 +72,7 @@ jobs:
       - name: Install Chromium
         run: npx playwright install chromium --with-deps
 
-      - name: Browser contracts
+      - name: Browser contracts (shard ${{ matrix.shard }} of 4)
+        env:
+          NODE_OPTIONS: --test-shard=${{ matrix.shard }}/4
         run: npm run test:browser
