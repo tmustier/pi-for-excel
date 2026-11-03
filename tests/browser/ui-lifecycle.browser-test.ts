@@ -789,3 +789,98 @@ void test("sidebar agent replacement clears the previous tool label", async () =
     assert.notEqual(await page.locator(".pi-working__label").innerText(), "fixture_old_tool");
   });
 });
+
+void test("Proxy uses the latest shared health result while its older probe is pending", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      const settings = getAppStorage().settings;
+      await settings.set("proxy.url", "https://localhost:4199");
+      await settings.set("proxy.enabled", false);
+      const fetch = window.fetch.bind(window);
+      let probes = 0;
+      window.fetch = async (...args) => {
+        const url = args[0] instanceof Request ? args[0].url : String(args[0]);
+        if (url !== "https://localhost:4199/healthz") return fetch(...args);
+        if (++probes !== 1) return new Response("ok");
+        document.body.dataset.oldProbePending = "true";
+        await new Promise<void>((resolve) => document.addEventListener("fixture-release", () => resolve(), { once: true }));
+        document.body.dataset.oldProbeReturned = "true";
+        return new Response("unavailable", { status: 503 });
+      };
+    });
+    await enterCommand(page, "/settings");
+    await page.getByRole("button", { name: /^Proxy/ }).click();
+    await page.locator(".pi-settings-proxy-toggle label").click();
+    await page.waitForFunction(() => document.body.dataset.oldProbePending === "true");
+    await page.evaluate(async () => {
+      const { getAppStorage } = await import("/src/storage/local/app-storage.ts") as typeof import("../../src/storage/local/app-storage.ts");
+      const { checkProxyOnce } = await import("/src/taskpane/proxy-status.ts") as typeof import("../../src/taskpane/proxy-status.ts");
+      await checkProxyOnce(getAppStorage().settings, { force: true });
+    });
+    const status = page.locator(".pi-settings-proxy-status");
+    assert.match(await status.innerText(), /Proxy connected/);
+    await release(page);
+    await page.waitForFunction(() => document.body.dataset.oldProbeReturned === "true");
+    assert.match(await status.innerText(), /Proxy connected/);
+  });
+});
+
+void test("closing Files during a workspace refresh does not restart the image preview", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
+      await getFilesWorkspace().importFiles([new File([new Uint8Array([1, 2, 3])], "refresh.png", { type: "image/png" })]);
+    });
+    await enterCommand(page, "/files");
+    await page.getByText("refresh.png", { exact: true }).click();
+    await page.locator(".pi-files-detail-preview img").waitFor({ state: "attached" });
+    await page.evaluate(async () => {
+      const { getFilesWorkspace } = await import("/src/files/workspace.ts") as typeof import("../../src/files/workspace.ts");
+      const workspace = getFilesWorkspace();
+      const list = workspace.listFiles.bind(workspace);
+      workspace.listFiles = async (...args) => {
+        const files = await list(...args);
+        document.body.dataset.refreshPending = "true";
+        await new Promise<void>((resolve) => document.addEventListener("fixture-release", () => resolve(), { once: true }));
+        document.body.dataset.refreshReturned = "true";
+        return files;
+      };
+      const read = workspace.readFile.bind(workspace);
+      workspace.readFile = (...args) => {
+        document.body.dataset.previewRestarted = "true";
+        return read(...args);
+      };
+      await workspace.writeTextFile("refresh.txt", "fixture", "text/plain");
+    });
+    await page.waitForFunction(() => document.body.dataset.refreshPending === "true");
+    await page.locator("#pi-files-workspace-overlay .pi-overlay-header:not([hidden]) .pi-overlay-close").click();
+    await release(page);
+    await page.waitForFunction(() => document.body.dataset.refreshReturned === "true");
+    assert.equal(await page.locator("body").getAttribute("data-preview-restarted"), null);
+  });
+});
+
+void test("a pending code copy cannot publish feedback after the block reconnects", async () => {
+  await withTaskpane(async (page) => {
+    await page.evaluate(async () => {
+      const { CodeBlock } = await import("/src/ui/messages/code-block.ts") as typeof import("../../src/ui/messages/code-block.ts");
+      Object.defineProperty(navigator, "clipboard", { configurable: true, value: {
+        writeText: () => new Promise<void>((resolve) => document.addEventListener("fixture-release", () => resolve(), { once: true })),
+      } });
+      const block = new CodeBlock();
+      block.id = "pending-copy-fixture";
+      block.code = "fixture";
+      document.body.append(block);
+    });
+    await page.locator("#pending-copy-fixture button").click();
+    await page.evaluate(() => {
+      const block = document.getElementById("pending-copy-fixture");
+      if (!block) throw new Error("block missing");
+      block.remove();
+      document.body.append(block);
+    });
+    await release(page);
+    assert.equal(await page.locator("#pending-copy-fixture button").innerText(), "Copy");
+  });
+});

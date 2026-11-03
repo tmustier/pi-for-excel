@@ -122,18 +122,10 @@ export function createProxyPage(): SettingsShellPage {
       const statusHost = document.createElement("div");
       statusHost.className = "pi-settings-proxy-status";
 
-      let recheckToken = 0;
-      let recheckState: { kind: "idle" } | { kind: "checking"; token: number } = { kind: "idle" };
-      const recheckProxy = async (): Promise<void> => {
-        const token = ++recheckToken;
-        recheckState = { kind: "checking", token };
+      const recheckProxy = (): void => {
         proxyState = "unknown";
         updateStatus();
-        const state = await checkProxyOnce(settingsStore, { force: true });
-        if (recheckState.kind !== "checking" || recheckState.token !== token || disposed) return;
-        recheckState = { kind: "idle" };
-        proxyState = state;
-        updateStatus();
+        void checkProxyOnce(settingsStore, { force: true });
       };
 
       const warnIfRemote = (): void => {
@@ -175,7 +167,7 @@ export function createProxyPage(): SettingsShellPage {
           if (disposed || revision !== enabledRevision) return;
           showToast(enabled ? t("settings.toast.proxy_enabled") : t("settings.toast.proxy_disabled"));
           warnIfRemote();
-          if (enabled) void recheckProxy();
+          if (enabled) recheckProxy();
           else void checkProxyOnce(settingsStore, { force: true });
         });
       };
@@ -221,7 +213,7 @@ export function createProxyPage(): SettingsShellPage {
           updateStatus();
           showToast(t("settings.toast.proxy_url_saved"));
           warnIfRemote();
-          void recheckProxy();
+          recheckProxy();
         });
       };
 
@@ -246,7 +238,7 @@ export function createProxyPage(): SettingsShellPage {
         void saveProxyUrl();
       };
 
-      proxyUrlInput.addEventListener("input", () => { urlRevision += 1; recheckToken += 1; recheckState = { kind: "idle" }; });
+      proxyUrlInput.addEventListener("input", () => { urlRevision += 1; });
       proxyUrlInput.addEventListener("blur", scheduleProxyUrlSave);
       proxyUrlInput.addEventListener("keydown", (event) => {
         if (event.key !== "Enter") {
@@ -259,8 +251,8 @@ export function createProxyPage(): SettingsShellPage {
       });
 
       const onProxyStateChanged = (): void => {
-        if (disposed || recheckState.kind === "checking") return;
-        void recheckProxy();
+        proxyState = getProxyState();
+        updateStatus();
       };
 
       document.addEventListener("pi:proxy-state-changed", onProxyStateChanged);
@@ -270,7 +262,6 @@ export function createProxyPage(): SettingsShellPage {
       ctx.addCleanup(() => {
         flushPendingProxyUrlSave();
         disposed = true;
-        recheckToken += 1;
       });
 
       const helper = document.createElement("p");

@@ -252,7 +252,6 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   renameButton.className = "pi-overlay-btn pi-overlay-btn--ghost pi-overlay-btn--compact";
   renameButton.textContent = t("files-dialog-actions.rename");
   renameButton.addEventListener("click", () => {
-    let mutationStarted = false;
     void (async () => {
       const nextPathInput = await requestTextInputDialog({
         title: t("files-dialog-actions.renameFileTitle"),
@@ -273,20 +272,20 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
-      mutationStarted = true;
       options.onMutationStateChange(true);
-      await options.workspace.renameFile(options.file.path, nextPath, {
-        audit: options.auditContext,
-        locationKind: options.fileRef.locationKind,
-      });
+      try {
+        await options.workspace.renameFile(options.file.path, nextPath, {
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
 
-      showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
-
-      await options.onAfterRename(nextPath, options.fileRef.locationKind);
+        showToast(t("files-dialog-actions.toast.renamed", { path: nextPath }));
+        await options.onAfterRename(nextPath, options.fileRef.locationKind);
+      } finally {
+        options.onMutationStateChange(false);
+      }
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.renameFailed", { error: getErrorMessage(error) }));
-    }).finally(() => {
-      if (mutationStarted) options.onMutationStateChange(false);
     });
   });
 
@@ -298,7 +297,6 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
   deleteButton.className = "pi-overlay-btn pi-overlay-btn--danger pi-overlay-btn--compact";
   deleteButton.textContent = t("files-dialog-actions.delete");
   deleteButton.addEventListener("click", () => {
-    let mutationStarted = false;
     void (async () => {
       const confirmed = await requestConfirmationDialog({
         title: t("files-dialog-actions.deleteFileTitle"),
@@ -313,20 +311,20 @@ export function createFilesDialogDetailActions(options: CreateFilesDialogDetailA
         return;
       }
 
-      mutationStarted = true;
       options.onMutationStateChange(true);
-      await options.workspace.deleteFile(options.file.path, {
-        audit: options.auditContext,
-        locationKind: options.fileRef.locationKind,
-      });
+      try {
+        await options.workspace.deleteFile(options.file.path, {
+          audit: options.auditContext,
+          locationKind: options.fileRef.locationKind,
+        });
 
-      showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
-
-      await options.onAfterDelete();
+        showToast(t("files-dialog-actions.toast.deleted", { name: options.file.name }));
+        await options.onAfterDelete();
+      } finally {
+        options.onMutationStateChange(false);
+      }
     })().catch((error: unknown) => {
       showToast(t("files-dialog-actions.toast.deleteFailed", { error: getErrorMessage(error) }));
-    }).finally(() => {
-      if (mutationStarted) options.onMutationStateChange(false);
     });
   });
 

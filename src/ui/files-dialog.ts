@@ -565,34 +565,6 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
     setView("list");
   };
 
-  const createDetailActions = (file: WorkspaceFileEntry): HTMLDivElement => {
-    const fileRef = toFileRef(file);
-    const version = detailRenderVersion;
-    const isCurrentDetail = (): boolean => !disposed && version === detailRenderVersion && currentView === "detail";
-
-    return createFilesDialogDetailActions({
-      file,
-      fileRef,
-      workspace,
-      auditContext: DIALOG_AUDIT_CONTEXT,
-      onMutationStateChange: (pending) => { ownMutationsPending += pending ? 1 : -1; },
-      onAfterRename: async (nextPath, locationKind) => {
-        await refreshWorkspaceState();
-        renderListView();
-        if (!isCurrentDetail()) return;
-        await showDetailView({
-          path: nextPath,
-          locationKind,
-        });
-      },
-      onAfterDelete: async () => {
-        await refreshWorkspaceState();
-        renderListView();
-        if (isCurrentDetail()) showListView();
-      },
-    });
-  };
-
   const buildDetailPreview = async (file: WorkspaceFileEntry): Promise<DetailPreviewResult> => {
     const fileRef = toFileRef(file);
 
@@ -678,6 +650,7 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
   };
 
   const renderDetailView = async (fileRef: FilesDialogFileRef): Promise<void> => {
+    if (disposed) return;
     const file = findFileByRef(fileRef);
     if (!file) {
       showListView();
@@ -745,7 +718,28 @@ export async function showFilesWorkspaceDialog(): Promise<void> {
       previewTruncated: previewResult.previewTruncated,
     });
 
-    nodes.push(previewResult.element, createDetailActions(file));
+    const isCurrentDetail = (): boolean => !disposed && renderVersion === detailRenderVersion && currentView === "detail";
+    nodes.push(previewResult.element, createFilesDialogDetailActions({
+      file,
+      fileRef,
+      workspace,
+      auditContext: DIALOG_AUDIT_CONTEXT,
+      onMutationStateChange: (pending) => { ownMutationsPending += pending ? 1 : -1; },
+      onAfterRename: async (nextPath, locationKind) => {
+        await refreshWorkspaceState();
+        renderListView();
+        if (!isCurrentDetail()) return;
+        await showDetailView({
+          path: nextPath,
+          locationKind,
+        });
+      },
+      onAfterDelete: async () => {
+        await refreshWorkspaceState();
+        renderListView();
+        if (isCurrentDetail()) showListView();
+      },
+    }));
     detailBody.replaceChildren(...nodes);
   };
 

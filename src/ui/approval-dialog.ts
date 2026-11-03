@@ -27,21 +27,19 @@ export interface ApprovalRequest {
 }
 
 type ApprovalPhase =
-  | { kind: "inline" }
-  | { kind: "preparing"; migrate: boolean }
-  | { kind: "queued" }
-  | { kind: "settled" };
+  | { kind: "inline" | "queued" | "settled" }
+  | { kind: "preparing"; location: "inline" | "dialog" };
 
-interface QueuedApproval {
+interface ApprovalEntry {
   phase: ApprovalPhase;
   request: ApprovalRequest;
   resolve: (approved: boolean) => void;
   onAbort: (() => void) | null;
 }
 
-const queue: QueuedApproval[] = [];
+const queue: ApprovalEntry[] = [];
 const allowedTurns = new WeakSet<AbortSignal>();
-let current: { entry: QueuedApproval; answer: (approved: boolean) => void; setWaiting: (count: number) => void } | null = null;
+let current: { entry: ApprovalEntry; answer: (approved: boolean) => void; setWaiting: (count: number) => void } | null = null;
 
 export interface InlineApproval {
   toolCallId: string;
@@ -58,11 +56,11 @@ export interface InlineApprovalHost {
 }
 
 const inlineHosts = new Set<InlineApprovalHost>();
-const inline = new Map<InlineApproval, { entry: QueuedApproval; release(): void; finish(approved: boolean): void }>();
+const inline = new Map<InlineApproval, { entry: ApprovalEntry; release(): void; finish(approved: boolean): void }>();
 
 export function getInlineApprovals(): readonly InlineApproval[] {
   return [...inline].filter(([, { entry }]) => entry.phase.kind === "inline"
-    || (entry.phase.kind === "preparing" && !entry.phase.migrate)).map(([approval]) => approval);
+    || (entry.phase.kind === "preparing" && entry.phase.location === "inline")).map(([approval]) => approval);
 }
 
 function notifyInlineHosts(): void {
@@ -92,7 +90,7 @@ export function registerInlineApprovalHost(host: InlineApprovalHost): { refresh(
   };
 }
 
-function settle(entry: QueuedApproval, approved: boolean): void {
+function settle(entry: ApprovalEntry, approved: boolean): void {
   if (entry.phase.kind === "settled") return;
   entry.phase = { kind: "settled" };
   if (entry.onAbort && entry.request.signal) {
@@ -230,7 +228,7 @@ function showNext(): void {
     const secondaryButton = createOverlayButton({ text: secondary.label });
     secondaryButton.addEventListener("click", () => {
       if (request.signal?.aborted || secondaryButton.disabled) return;
-      entry.phase = { kind: "preparing", migrate: true };
+      entry.phase = { kind: "preparing", location: "dialog" };
       secondaryButton.disabled = true;
       confirmButton.disabled = true;
       void Promise.resolve().then(() => {
@@ -298,7 +296,7 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
   if (request.allowForTurn && request.signal && allowedTurns.has(request.signal)) return Promise.resolve(true);
 
   return new Promise<boolean>((resolve) => {
-    const entry: QueuedApproval = { request, resolve, onAbort: null, phase: { kind: "inline" } };
+    const entry: ApprovalEntry = { request, resolve, onAbort: null, phase: { kind: "inline" } };
     if (request.toolCallId !== undefined && claimedInline(request.toolCallId)) {
       const toolCallId = request.toolCallId;
       const finish = (approved: boolean): void => {
@@ -311,25 +309,25 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
         toolCallId,
         request: entry.request,
         answer(approved) {
-          if (entry.phase.kind === "inline" || (entry.phase.kind === "preparing" && !entry.phase.migrate)) finish(approved);
+          if (entry.phase.kind === "inline" || (entry.phase.kind === "preparing" && entry.phase.location === "inline")) finish(approved);
         },
         allowForTurn() {
           const { signal } = entry.request;
-          if ((entry.phase.kind !== "inline" && (entry.phase.kind !== "preparing" || entry.phase.migrate)) || !entry.request.allowForTurn || !signal || signal.aborted) return;
+          if ((entry.phase.kind !== "inline" && (entry.phase.kind !== "preparing" || entry.phase.location === "dialog")) || !entry.request.allowForTurn || !signal || signal.aborted) return;
           allowTurn(signal);
         },
         get preparing() { return entry.phase.kind === "preparing"; },
         async prepareAndApprove() {
           const secondary = entry.request.secondaryApproval;
           if (!secondary || entry.phase.kind !== "inline" || entry.request.signal?.aborted) return;
-          entry.phase = { kind: "preparing", migrate: false };
+          entry.phase = { kind: "preparing", location: "inline" };
           notifyInlineHosts();
           try {
             await secondary.onApprove();
             if (!entry.request.signal?.aborted) finish(true);
           } catch (error) {
             if (entry.phase.kind === "preparing") {
-              if (entry.phase.migrate) {
+              if (entry.phase.location === "dialog") {
                 inline.delete(approval);
                 enqueue(entry);
               } else entry.phase = { kind: "inline" };
@@ -343,9 +341,8 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
       entry.onAbort = () => finish(false);
       entry.request.signal?.addEventListener("abort", entry.onAbort, { once: true });
       inline.set(approval, { entry, finish, release: () => {
-        if (entry.phase.kind === "settled") return;
         if (entry.phase.kind === "preparing") {
-          entry.phase = { kind: "preparing", migrate: true };
+          entry.phase = { kind: "preparing", location: "dialog" };
           return;
         }
         inline.delete(approval);
@@ -358,7 +355,7 @@ export function requestApproval(request: ApprovalRequest): Promise<boolean> {
   });
 }
 
-function enqueue(entry: QueuedApproval): void {
+function enqueue(entry: ApprovalEntry): void {
   const { request } = entry;
   if (entry.onAbort) request.signal?.removeEventListener("abort", entry.onAbort);
   entry.onAbort = null;
