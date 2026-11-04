@@ -47,9 +47,9 @@ open -g -a "Microsoft Excel" "$SCRATCH"      # launch straight into the workbook
 sleep 12; curl --fail https://localhost:3157/health   # expect one client
 ```
 
-Excel opens the pane on document open and the `Open Pi` ribbon button appears for the rest of the process. The auto-open fires once per Excel process: to reload the pane (for example after switching the Vite worktree) press `Close Pi for Excel` and then `Open Pi` through `computer_use`, passing `element_index` as a string. Keep the scratch workbook inside the Excel container so the sandbox never raises a "Grant File Access" sheet; `scratch-workbook.py tag <existing.xlsx>` adds the part to a workbook Excel has saved.
+Excel opens the pane on document open and the `Open Pi` ribbon button appears for the rest of the process. The auto-open fires once per Excel process: to reload the pane (for example after switching the Vite worktree) press `Close Pi for Excel` and then `Open Pi` through `cua_repl`, clicking each button by its accessibility index (for example `await excel.click(63)`). Keep the scratch workbook inside the Excel container so the sandbox never raises a "Grant File Access" sheet; `scratch-workbook.py tag <existing.xlsx>` adds the part to a workbook Excel has saved.
 
-If `clients` is still empty, inspect Excel with `computer_use` / `sky.get_app_state`. Check the workbook, pane, manifest URL and server before changing caches. For a pane showing a network error, use a semantic accessibility `AXPress` on Try Again after starting the server.
+If `clients` is still empty, inspect Excel with `cua_repl`: `let excel = await cua.getApp("Microsoft Excel")` returns an app handle and shows its accessibility tree. The `excel` binding lasts across calls; refresh the tree with `await excel.getAXState()`. Check the workbook, pane, manifest URL and server before changing caches. For a pane showing a network error, use a semantic accessibility `AXPress` on Try Again after starting the server.
 
 Use background semantic accessibility actions only. Record the foreground app and window before and after the test.
 
@@ -61,13 +61,11 @@ Everything below has looked like a foreground-only step and was worked around in
 |---|---|---|
 | No `Open Pi` button on the ribbon after Excel relaunched; manifest is intact | Sideloaded add-ins are absent from the ribbon cache until activated once per Excel process | `scratch-workbook.py create` and `open -g` into it; the pane opens from the document and the button appears |
 | Home-tab *Add-ins* flyout does not open (AXPress toggles the button, no popover window) | It does not render for a background app | Not needed; use the document bootstrap above |
-| `sky.get_app_state` fails with `cgWindowNotFound`, or Excel lists `AXApplication` as its only window | Seen once right after `open -g` with no document | Wait for the launch to settle and query again; otherwise quit Excel and `open -g` straight into the scratch workbook, which exposed a normal `AXStandardWindow` |
-| `computer_use` click does nothing | `element_index` was passed as a number | Pass it as a string, e.g. `"63"` |
-| `setTimeout is not defined` inside `computer_use` | The JS sandbox has no timers | Sequence `sky` calls with `await`; wait in the shell (`sleep`) between calls |
+| `cua.getApp("Microsoft Excel")` fails with `cgWindowNotFound`, or Excel lists `AXApplication` as its only window | Seen once right after `open -g` with no document | Wait for the launch to settle and query again; otherwise quit Excel and `open -g` straight into the scratch workbook, which exposed a normal `AXStandardWindow` |
 | AppleScript `save workbook as` returns `Parameter error (-50)` | Path built from `POSIX path of (path to home folder)` | Pass a literal absolute path string, inside the Excel container |
-| Pane cannot be reloaded after switching the Vite worktree | The document auto-open fires once per process | `Close Pi for Excel` then `Open Pi` through `computer_use` |
+| Pane cannot be reloaded after switching the Vite worktree | The document auto-open fires once per process | `Close Pi for Excel` then `Open Pi` through `cua_repl` |
 | Persisted state cannot be checked without trusting the pane | It can | `read-taskpane-setting.py <key>` decodes the record from WebKit's IndexedDB |
-| `computer_use` returns `codex app-server exited before returning a response` on every call | The tool's own server is down; Excel is fine | Read the tree with `scripts/axdump.swift` (below); pressing buttons waits for the tool to come back |
+| `cua_repl` fails on every call, for example with `Sky Computer Use native pipe startup failed` | The Computer Use service is stuck; Excel is fine | Run the `pkill` command the error gives, then retry. Meanwhile read the tree with `scripts/axdump.swift` (below) |
 
 Opening a workbook does not activate Excel: both `open -g -a "Microsoft Excel" <file>` and `osascript -e 'tell application "Microsoft Excel" to open POSIX file "…"'` leave the frontmost app unchanged.
 
@@ -134,9 +132,9 @@ python3 .agents/skills/excel-background-verification/scripts/read-taskpane-setti
 
 It copies the database and its WAL and decodes one record to JSON, so a before/after diff shows exactly which entries a change dropped, kept or rewrote.
 
-Rendered tool cards are visible in the pane's accessibility tree (`HTML content` under the `Pi for Excel` container), which is how to assert diff tables, trees and images. The dump truncates on long chats; scroll the `HTML content` element with `sky.scroll` or start a fresh chat with `submitInput` `{"text":"/new"}`. Slash commands such as `/new` and `/history` go through the real composer with `submitInput`; `submitPrompt` sends text to the model.
+Rendered tool cards are visible in the pane's accessibility tree (`HTML content` under the `Pi for Excel` container), which is how to assert diff tables, trees and images. The dump truncates on long chats; scroll the `HTML content` element with `excel.scroll` or start a fresh chat with `submitInput` `{"text":"/new"}`. Slash commands such as `/new` and `/history` go through the real composer with `submitInput`; `submitPrompt` sends text to the model.
 
-When `computer_use` is unavailable, the same tree is readable without it. System Events stops at the web area, so use the `AXUIElement` walker:
+When `cua_repl` is unavailable, the same tree is readable without it. System Events stops at the web area, so use the `AXUIElement` walker:
 
 ```bash
 swiftc -O -o /tmp/axdump .agents/skills/excel-background-verification/scripts/axdump.swift
