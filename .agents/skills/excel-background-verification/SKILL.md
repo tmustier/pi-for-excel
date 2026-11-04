@@ -49,7 +49,7 @@ sleep 12; curl --fail https://localhost:3157/health   # expect one client
 
 Excel opens the pane on document open and the `Open Pi` ribbon button appears for the rest of the process. The auto-open fires once per Excel process: to reload the pane (for example after switching the Vite worktree) press `Close Pi for Excel` and then `Open Pi` through `cua_repl`, clicking each button by its accessibility index (for example `await excel.click(63)`). Keep the scratch workbook inside the Excel container so the sandbox never raises a "Grant File Access" sheet; `scratch-workbook.py tag <existing.xlsx>` adds the part to a workbook Excel has saved.
 
-If `clients` is still empty, inspect Excel with `cua_repl`: `let excel = await cua.getApp("Microsoft Excel")` returns its accessibility tree, and the `excel` binding lasts across calls. Check the workbook, pane, manifest URL and server before changing caches. For a pane showing a network error, use a semantic accessibility `AXPress` on Try Again after starting the server.
+If `clients` is still empty, inspect Excel with `cua_repl`: `let excel = await cua.getApp("Microsoft Excel")` returns an app handle and shows its accessibility tree. The `excel` binding lasts across calls; refresh the tree with `await excel.getAXState()`. Check the workbook, pane, manifest URL and server before changing caches. For a pane showing a network error, use a semantic accessibility `AXPress` on Try Again after starting the server.
 
 Use background semantic accessibility actions only. Record the foreground app and window before and after the test.
 
